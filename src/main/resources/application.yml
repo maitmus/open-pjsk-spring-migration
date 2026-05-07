@@ -9,6 +9,15 @@ logging:
     root: INFO
     com.maitmus.sekairouter: DEBUG
     net.dv8tion.jda: WARN
+  # 컨테이너 down/up 사이클에 영속화하기 위해 파일 로깅 활성. /app/logs는 docker-compose에서 호스트 볼륨 마운트.
+  # 호스트 경로가 없으면 비활성 (file appender가 디렉토리 없으면 그냥 stdout만 사용)
+  file:
+    name: /app/logs/sekai-router.log
+  logback:
+    rollingpolicy:
+      max-history: 14
+      max-file-size: 100MB
+      total-size-cap: 1GB
 
 discord:
   router-token: ${DISCORD_ROUTER_TOKEN:}

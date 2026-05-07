@@ -8,4 +8,5 @@ services:
       - PERSONA_DIR=/app/identities
     volumes:
       - /home/maitmus/.openclaw/workspace/identities:/app/identities:ro
+      - /home/maitmus/sekai-router-logs:/app/logs
     # No ports needed — Discord bot with no embedded web server
