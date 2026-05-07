@@ -52,10 +52,13 @@ public class AnthropicClientWrapper {
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
 
+        // web_search responses contain multiple text blocks (intent → search results → final answer).
+        // The final text block holds the JSON routing decision; earlier blocks are search prelude.
+        // Take the last text block.
         String text = response.content().stream()
                 .filter(block -> block.text().isPresent())
                 .map(block -> block.text().get().text())
-                .findFirst()
+                .reduce((first, second) -> second)
                 .orElseThrow(() -> new IllegalStateException("No text content in response"));
         log.debug("Anthropic response: {}", text);
         return text;
