@@ -1,0 +1,27 @@
+# Gradle build artifacts
+.gradle/
+build/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Secrets (never bake into image)
+.env
+.env.*
+
+# Documentation / logs
+HELP.md
+README.md
+docs/
+scenario-log.md
+baseline.md
+
+# OS artifacts
+.DS_Store
+Thumbs.db

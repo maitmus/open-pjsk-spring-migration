@@ -16,3 +16,34 @@ OpenClaw 기반 sekai-router 에이전트의 Spring Boot 마이그레이션. Dis
 ```
 ./gradlew bootRun
 ```
+
+## Docker
+
+### 빌드
+```bash
+# docker 그룹이 활성화된 경우
+docker compose build
+
+# 그룹 미활성화 시 (로그아웃/재로그인 전)
+sudo docker compose build
+```
+
+### 실행
+```bash
+sudo docker compose up -d
+```
+
+### 로그 확인
+```bash
+sudo docker compose logs -f
+```
+
+### 중지
+```bash
+sudo docker compose down
+```
+
+### 비고
+- `.env` 파일에서 시크릿 주입 (이미지에 포함되지 않음)
+- persona 파일은 `/home/maitmus/.openclaw/workspace/identities` → 컨테이너 내 `/app/identities` (읽기 전용 마운트)
+- 웹 서버 없음, 포트 노출 없음

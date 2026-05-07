@@ -1,0 +1,11 @@
+services:
+  sekai-router:
+    build: .
+    container_name: sekai-router
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PERSONA_DIR=/app/identities
+    volumes:
+      - /home/maitmus/.openclaw/workspace/identities:/app/identities:ro
+    # No ports needed — Discord bot with no embedded web server
