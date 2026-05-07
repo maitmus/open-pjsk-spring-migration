@@ -76,4 +76,47 @@ public class AnthropicClientWrapper {
         log.debug("Anthropic response: {}", text);
         return text;
     }
+
+    /**
+     * Generates a plain-text utterance for heartbeat autonomous speech.
+     * Unlike {@link #completeJson}, this does not expect a JSON response — callers receive
+     * the raw character utterance text.
+     *
+     * Uses cache_control on the system prompt (heartbeat prompt is ~17K tokens that
+     * benefits from caching across repeated calls within the same day).
+     * web_search is included so the character can reference current events/weather if needed.
+     */
+    public String generateUtterance(String systemPrompt, String userPrompt) {
+        MessageCreateParams params = MessageCreateParams.builder()
+                .model(Model.of(properties.model()))
+                .maxTokens(properties.maxTokens())
+                .systemOfTextBlockParams(List.of(
+                        TextBlockParam.builder()
+                                .text(systemPrompt)
+                                .cacheControl(CacheControlEphemeral.builder().build())
+                                .build()
+                ))
+                .addUserMessage(userPrompt)
+                .addTool(WEB_SEARCH_TOOL)
+                .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
+                .build();
+
+        Message response = client.messages().create(params);
+        log.debug("Anthropic stop_reason: {}", response.stopReason());
+        log.debug("Anthropic usage: cache_creation={}, cache_read={}, input={}, output={}",
+                response.usage().cacheCreationInputTokens().orElse(null),
+                response.usage().cacheReadInputTokens().orElse(null),
+                response.usage().inputTokens(),
+                response.usage().outputTokens());
+
+        // Heartbeat may also use web_search (e.g. mention today's weather/season).
+        // Take the last text block — same multi-block handling as completeJson.
+        String text = response.content().stream()
+                .filter(block -> block.text().isPresent())
+                .map(block -> block.text().get().text())
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new IllegalStateException("No text content in utterance response"));
+        log.debug("Anthropic utterance: {}", text);
+        return text;
+    }
 }
