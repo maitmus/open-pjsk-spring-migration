@@ -1,5 +1,6 @@
 package com.maitmus.sekairouter.config;
 
+import com.maitmus.sekairouter.discord.RouterEventListener;
 import com.maitmus.sekairouter.persona.CharacterId;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -24,10 +25,11 @@ public class DiscordConfig {
     private Map<CharacterId, JDA> characterJdaRefs;
 
     @Bean(name = "routerJda", destroyMethod = "shutdown")
-    public JDA routerJda() throws InterruptedException {
+    public JDA routerJda(RouterEventListener listener) throws InterruptedException {
         log.info("Starting router bot JDA...");
         return JDABuilder.createDefault(properties.routerToken())
                 .enableIntents(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
+                .addEventListeners(listener)
                 .build()
                 .awaitReady();
     }
