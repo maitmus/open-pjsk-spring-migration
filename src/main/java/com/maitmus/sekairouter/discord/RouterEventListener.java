@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class RouterEventListener extends ListenerAdapter {
 
     private static final long INTER_MESSAGE_DELAY_MS = 1500;
+    private static final long TYPING_BEFORE_SEND_MS = 1500;
 
     private final DiscordProperties properties;
     private final RouterService routerService;
@@ -80,11 +81,16 @@ public class RouterEventListener extends ListenerAdapter {
             return;
         }
 
+        // typing → 1.5초 → send. typing이 message 도착 전에 충분히 표시되도록 분리.
+        // 캐릭터 i: typing at i*INTER_MESSAGE_DELAY_MS, send at i*INTER_MESSAGE_DELAY_MS + TYPING_BEFORE_SEND_MS
         for (int i = 0; i < responses.size(); i++) {
             PersonaResponse r = responses.get(i);
-            long delay = (long) i * INTER_MESSAGE_DELAY_MS;
+            long typingDelay = (long) i * INTER_MESSAGE_DELAY_MS;
+            long sendDelay = typingDelay + TYPING_BEFORE_SEND_MS;
+            scheduler.schedule(
+                    () -> typing.start(r.character(), channelId),
+                    typingDelay, TimeUnit.MILLISECONDS);
             scheduler.schedule(() -> {
-                typing.start(r.character(), channelId);
                 boolean ok = proxy.send(r.character(), channelId, r.message());
                 if (ok) {
                     memory.append(channelId,
@@ -92,7 +98,7 @@ public class RouterEventListener extends ListenerAdapter {
                                     r.message(), Instant.now().getEpochSecond()));
                     lastSpeaker.record(channelId, r.character());
                 }
-            }, delay, TimeUnit.MILLISECONDS);
+            }, sendDelay, TimeUnit.MILLISECONDS);
         }
     }
 
