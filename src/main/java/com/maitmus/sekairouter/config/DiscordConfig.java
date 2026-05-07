@@ -1,6 +1,7 @@
 package com.maitmus.sekairouter.config;
 
 import com.maitmus.sekairouter.persona.CharacterId;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.dv8tion.jda.api.JDA;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class DiscordConfig {
 
     private final DiscordProperties properties;
+    private Map<CharacterId, JDA> characterJdaRefs;
 
     @Bean(name = "routerJda", destroyMethod = "shutdown")
     public JDA routerJda() throws InterruptedException {
@@ -44,6 +46,20 @@ public class DiscordConfig {
                     .awaitReady();
             map.put(entry.getKey(), jda);
         }
+        this.characterJdaRefs = map;
         return map;
+    }
+
+    @PreDestroy
+    public void shutdownCharacterJdas() {
+        if (characterJdaRefs == null) return;
+        characterJdaRefs.forEach((id, jda) -> {
+            log.info("Shutting down character bot {} JDA...", id);
+            try {
+                jda.shutdown();
+            } catch (Exception e) {
+                log.warn("Error shutting down {} JDA: {}", id, e.getMessage());
+            }
+        });
     }
 }
