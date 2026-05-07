@@ -20,9 +20,9 @@ import java.util.Optional;
 public class SystemPromptBuilder {
 
     private static final String GRADES_FILE = "GRADES.md";
-    private static final String QUICK_REF_FILE = "quick-ref.md";
     private static final String EVENTS_FILE = "events.json";
     private static final String USER_FILE = "USER.md";
+    // quick-ref.md는 GRADES.md의 Haiku용 압축본 — Sonnet 4.6 사용 시 GRADES만으로 충분
 
     private final PersonaRegistry registry;
     private final PersonaProperties personaProperties;
@@ -58,10 +58,6 @@ public class SystemPromptBuilder {
         // 호칭·존댓말 매트릭스
         loadFile(baseDir, GRADES_FILE).ifPresent(c ->
                 sb.append("\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\n").append(c).append("\n"));
-
-        // 빠른 참조 (MaiT 대화 어미 등 GRADES.md에 없는 운영 룰 포함)
-        loadFile(baseDir, QUICK_REF_FILE).ifPresent(c ->
-                sb.append("\n## 빠른 참조 (quick-ref.md)\n\n").append(c).append("\n"));
 
         // 이벤트 캘린더 (생일/기념일 — user prompt의 '오늘 날짜'와 매칭해서 자연스럽게 언급)
         loadFile(baseDir, EVENTS_FILE).ifPresent(c ->

@@ -24,8 +24,8 @@ discord:
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
-  model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
-  max-tokens: ${ANTHROPIC_MAX_TOKENS:1000}
+  model: ${ANTHROPIC_MODEL:claude-sonnet-4-6}
+  max-tokens: ${ANTHROPIC_MAX_TOKENS:5000}
 
 persona:
   dir: ${PERSONA_DIR:/home/maitmus/.openclaw/workspace/identities}
