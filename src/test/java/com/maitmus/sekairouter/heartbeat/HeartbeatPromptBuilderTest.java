@@ -61,12 +61,12 @@ class HeartbeatPromptBuilderTest {
         assertThat(prompt).contains("## 호칭·존댓말 매트릭스");
         assertThat(prompt).contains("에무 → 네네: 네네쨩");
 
-        // quick-ref section
-        assertThat(prompt).contains("## 빠른 참조");
-
         // events section
         assertThat(prompt).contains("## 이벤트 캘린더");
         assertThat(prompt).contains("에무 생일");
+
+        // quick-ref는 더 이상 임베드되지 않음 (Sonnet 4.6 + GRADES만으로 충분)
+        assertThat(prompt).doesNotContain("## 빠른 참조");
 
         // CRITICAL: must NOT contain JSON schema (heartbeat is plain text, not JSON)
         assertThat(prompt).doesNotContain("출력 JSON 스키마");
