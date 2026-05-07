@@ -61,6 +61,11 @@ public class RouterEventListener extends ListenerAdapter {
         }
 
         String channelId = event.getChannel().getId();
+        log.info("Received on {} from {} ({}): {}",
+                channelId,
+                event.getAuthor().getName(),
+                event.getAuthor().getId(),
+                content);
         memory.append(channelId, new ConversationTurn("user", content, Instant.now().getEpochSecond()));
 
         CharacterId last = lastSpeaker.get(channelId).orElse(null);
