@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 @Slf4j
 @Configuration
@@ -48,6 +50,11 @@ public class DiscordConfig {
         }
         this.characterJdaRefs = map;
         return map;
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    public ScheduledExecutorService typingScheduler() {
+        return Executors.newScheduledThreadPool(4);
     }
 
     @PreDestroy
