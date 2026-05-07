@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: open-pjsk-spring-migration
+  main:
+    web-application-type: none
+
+logging:
+  level:
+    root: INFO
+    com.maitmus.sekairouter: DEBUG
+    net.dv8tion.jda: WARN
+
+discord:
+  router-token: ${DISCORD_ROUTER_TOKEN:}
+  sekai-channel-id: ${SEKAI_CHANNEL_ID:}
+  character-tokens:
+    AIRI: ${DISCORD_AIRI_TOKEN:}
+    EMU: ${DISCORD_EMU_TOKEN:}
+    HARUKA: ${DISCORD_HARUKA_TOKEN:}
+    MIKU: ${DISCORD_MIKU_TOKEN:}
+    MINORI: ${DISCORD_MINORI_TOKEN:}
+    NENE: ${DISCORD_NENE_TOKEN:}
+    SHIZUKU: ${DISCORD_SHIZUKU_TOKEN:}
+
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY:}
+  model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
+  max-tokens: ${ANTHROPIC_MAX_TOKENS:1000}
+
+persona:
+  dir: ${PERSONA_DIR:/home/maitmus/.openclaw/workspace/identities}
+  watch-interval-ms: 60000

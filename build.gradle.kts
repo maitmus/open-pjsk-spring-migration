@@ -30,9 +30,9 @@ dependencies {
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-parameter-names")
 
-    // Lombok
-    compileOnly("org.projectlombok:lombok")
-    annotationProcessor("org.projectlombok:lombok")
+    // Lombok (1.18.38+ required for Java 24 support — TypeTag.UNKNOWN removed in JDK 24)
+    compileOnly("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
 
     // Spring Config
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
@@ -48,7 +48,13 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-// Skeleton: no main class yet — disable bootJar until Task 3 adds SekaiRouterApplication
-tasks.bootJar {
-    isEnabled = false
+// Lombok + Java 24: open internal javac packages for annotation processing
+tasks.withType<JavaCompile> {
+    options.isFork = true
+    options.forkOptions.jvmArgs = listOf(
+        "--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED",
+        "--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
+    )
 }
