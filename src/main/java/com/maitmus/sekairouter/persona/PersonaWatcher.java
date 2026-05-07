@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -24,34 +25,52 @@ public class PersonaWatcher {
     private final PersonaRegistry registry;
 
     private volatile long lastMaxMtime = -1;
+    private volatile long lastFileCount = -1;
 
     @PostConstruct
-    public void loadInitial() throws IOException {
-        Path dir = Paths.get(properties.dir());
-        Map<CharacterId, Persona> personas = loader.loadAll(dir);
-        registry.replace(personas);
-        lastMaxMtime = currentMaxMtime(dir);
-        log.info("Initial persona load — {} entries", personas.size());
+    public void loadInitial() {
+        try {
+            doReload(true);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to load personas at startup", e);
+        }
     }
 
     @Scheduled(fixedDelayString = "${persona.watch-interval-ms}")
     public void checkAndReload() throws IOException {
         Path dir = Paths.get(properties.dir());
-        long current = currentMaxMtime(dir);
-        if (current > lastMaxMtime) {
-            Map<CharacterId, Persona> personas = loader.loadAll(dir);
-            registry.replace(personas);
-            lastMaxMtime = current;
-            log.info("Persona reload triggered (mtime change detected) — {} entries", personas.size());
+        DirState state = currentDirState(dir);
+        if (state.fileCount != lastFileCount || state.maxMtime > lastMaxMtime) {
+            doReloadFromState(dir, state);
         }
     }
 
-    private long currentMaxMtime(Path dir) throws IOException {
+    private void doReload(boolean isInitial) throws IOException {
+        Path dir = Paths.get(properties.dir());
+        DirState state = currentDirState(dir);
+        doReloadFromState(dir, state);
+        if (isInitial) {
+            log.info("Initial persona load — {} entries", registry.all().size());
+        }
+    }
+
+    private void doReloadFromState(Path dir, DirState state) throws IOException {
+        Map<CharacterId, Persona> personas = loader.loadAll(dir);
+        registry.replace(personas);
+        lastMaxMtime = state.maxMtime;
+        lastFileCount = state.fileCount;
+        log.info("Persona reload — {} entries (mtime={}, count={})",
+                personas.size(), state.maxMtime, state.fileCount);
+    }
+
+    private DirState currentDirState(Path dir) throws IOException {
         try (Stream<Path> stream = Files.list(dir)) {
-            return stream.filter(p -> p.toString().endsWith(".md"))
-                         .mapToLong(this::mtime)
-                         .max()
-                         .orElse(0);
+            long[] result = stream
+                    .filter(p -> p.toString().endsWith(".md"))
+                    .reduce(new long[]{0, 0},
+                            (acc, p) -> new long[]{acc[0] + 1, Math.max(acc[1], mtime(p))},
+                            (a, b) -> new long[]{a[0] + b[0], Math.max(a[1], b[1])});
+            return new DirState(result[0], result[1]);
         }
     }
 
@@ -62,4 +81,6 @@ public class PersonaWatcher {
             return 0;
         }
     }
+
+    private record DirState(long fileCount, long maxMtime) {}
 }

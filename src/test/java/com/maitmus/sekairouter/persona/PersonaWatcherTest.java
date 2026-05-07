@@ -52,4 +52,29 @@ class PersonaWatcherTest {
         assertThat(registry.get(CharacterId.EMU).content()).isNotEqualTo(before);
         assertThat(registry.get(CharacterId.EMU).content()).contains("새 내용 추가");
     }
+
+    @Test
+    void detectsDeletion_reloads(@TempDir Path tmp) throws Exception {
+        Path emuFile = tmp.resolve("emu.md");
+        Path airiFile = tmp.resolve("airi.md");
+        Files.writeString(emuFile, """
+                # IDENTITY - 오오토리 에무
+                - **Name:** 오오토리 에무
+                """);
+        Files.writeString(airiFile, """
+                # IDENTITY - 모모이 아이리
+                - **Name:** 모모이 아이리
+                """);
+        PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
+        PersonaRegistry registry = new PersonaRegistry();
+        PersonaWatcher watcher = new PersonaWatcher(props, new PersonaLoader(), registry);
+        watcher.loadInitial();
+        assertThat(registry.all()).hasSize(2);
+
+        Files.delete(airiFile);
+        watcher.checkAndReload();
+
+        assertThat(registry.all()).hasSize(1);
+        assertThat(registry.all()).containsOnlyKeys(CharacterId.EMU);
+    }
 }
