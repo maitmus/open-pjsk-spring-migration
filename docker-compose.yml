@@ -6,6 +6,9 @@ services:
     env_file: .env
     environment:
       - PERSONA_DIR=/app/identities
+      # 타임존 KST 고정 — logback timestamp, LocalDateTime, ZonedDateTime 등 JVM 기본 시간 모두 KST
+      - TZ=Asia/Seoul
+      - JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Seoul
     volumes:
       - /home/maitmus/.openclaw/workspace/identities:/app/identities:ro
       - /home/maitmus/sekai-router-logs:/app/logs
