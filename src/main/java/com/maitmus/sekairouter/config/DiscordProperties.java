@@ -13,4 +13,8 @@ public record DiscordProperties(
         @NotBlank String routerToken,
         @NotBlank String sekaiChannelId,
         Map<CharacterId, String> characterTokens
-) {}
+) {
+    public DiscordProperties {
+        characterTokens = characterTokens != null ? characterTokens : Map.of();
+    }
+}
