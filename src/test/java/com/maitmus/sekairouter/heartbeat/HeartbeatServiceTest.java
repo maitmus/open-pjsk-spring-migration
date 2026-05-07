@@ -94,21 +94,19 @@ class HeartbeatServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 2. rerollThreshold sets a value 0~59
+    // 2. rerollThreshold sets a value 0~29 (30-min slot)
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    void rerollThreshold_setsRandomValue0to59() {
+    void rerollThreshold_setsRandomValue0to29() {
         HeartbeatService service = buildService(enabledProps(0.0), clockAt(14, 0));
 
         ArgumentCaptor<Integer> captor = ArgumentCaptor.forClass(Integer.class);
-
-        // Run many times to check range — but since it's random we capture once and verify range
         service.rerollThreshold();
 
         verify(state).resetThresholdForHour(captor.capture());
         int n = captor.getValue();
-        assertThat(n).isBetween(0, 59);
+        assertThat(n).isBetween(0, 29);
     }
 
     @Test

@@ -87,13 +87,17 @@ public class AnthropicClientWrapper {
      * web_search is included so the character can reference current events/weather if needed.
      */
     public String generateUtterance(String systemPrompt, String userPrompt) {
+        // 하트비트는 30분 간격 호출이라 5min cache는 매번 만료 → write 비용 누적.
+        // 1h ttl: write 1.25x → 2.0x로 증가하지만 1시간 안 두 번째 호출이 read(0.1x)로 처리되어 평균 비용 절감.
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(Model.of(properties.model()))
                 .maxTokens(properties.maxTokens())
                 .systemOfTextBlockParams(List.of(
                         TextBlockParam.builder()
                                 .text(systemPrompt)
-                                .cacheControl(CacheControlEphemeral.builder().build())
+                                .cacheControl(CacheControlEphemeral.builder()
+                                        .ttl(CacheControlEphemeral.Ttl.TTL_1H)
+                                        .build())
                                 .build()
                 ))
                 .addUserMessage(userPrompt)

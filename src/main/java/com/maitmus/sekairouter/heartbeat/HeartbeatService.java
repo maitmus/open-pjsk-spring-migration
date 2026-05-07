@@ -42,16 +42,22 @@ public class HeartbeatService {
     private final DiscordProperties discordProperties;
     private final Clock clock;
 
-    /** Top of every hour (KST): pick new threshold N (0~59) for this hour. */
-    @Scheduled(cron = "0 0 * * * *", zone = "Asia/Seoul")
+    /**
+     * Top of every 30-min slot (KST :00 / :30): pick new threshold N (0~29) for this slot.
+     * 매 시간에 두 번 발화 (시간당 2 slot).
+     */
+    @Scheduled(cron = "0 0,30 * * * *", zone = "Asia/Seoul")
     public void rerollThreshold() {
         if (!properties.enabled()) return;
-        int n = ThreadLocalRandom.current().nextInt(60);
+        int n = ThreadLocalRandom.current().nextInt(30);
         state.resetThresholdForHour(n);
-        log.info("Heartbeat threshold for this hour: {}", n);
+        int currentMinute = LocalTime.now(clock).getMinute();
+        int slotStart = currentMinute < 30 ? 0 : 30;
+        log.info("Heartbeat threshold for this 30-min slot: {} → next utterance at :{}",
+                n, String.format("%02d", slotStart + n));
     }
 
-    /** Every minute: if currentMinute >= threshold and not yet fired this hour, fire. */
+    /** Every minute: if (minute % 30) >= threshold and not yet fired this slot, fire. */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Seoul")
     public void heartbeatCheck() {
         if (!properties.enabled()) return;
@@ -62,8 +68,8 @@ public class HeartbeatService {
         int threshold = state.getThreshold();
         if (threshold < 0 || threshold == FIRED_THRESHOLD) return;
 
-        int currentMinute = now.getMinute();
-        if (currentMinute < threshold) return;
+        int slotMinute = now.getMinute() % 30;
+        if (slotMinute < threshold) return;
 
         // Fire
         try {
