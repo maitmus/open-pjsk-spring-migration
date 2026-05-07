@@ -13,12 +13,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Optional;
 
 @Slf4j
 @Component
 public class SystemPromptBuilder {
 
-    private static final String GRADES_FILENAME = "GRADES.md";
+    private static final String GRADES_FILE = "GRADES.md";
+    private static final String QUICK_REF_FILE = "quick-ref.md";
+    private static final String EVENTS_FILE = "events.json";
+    private static final String USER_FILE = "USER.md";
 
     private final PersonaRegistry registry;
     private final PersonaProperties personaProperties;
@@ -39,9 +43,30 @@ public class SystemPromptBuilder {
     public String build() {
         StringBuilder sb = new StringBuilder();
         sb.append(loadResource(baseInstructions)).append("\n\n");
-        sb.append("## 페르소나 정의\n\n");
+
+        Path baseDir = Paths.get(personaProperties.dir());
+        Path workspaceDir = baseDir.getParent();
+
+        // 사용자(MaiT) 정보
+        loadFile(workspaceDir, USER_FILE).ifPresent(c ->
+                sb.append("## 사용자 정보 (USER.md)\n\n").append(c).append("\n"));
+
+        // 페르소나 정의
+        sb.append("\n## 페르소나 정의\n\n");
         registry.all().values().forEach(p -> appendPersona(sb, p));
-        loadGrades().ifPresent(grades -> sb.append("\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\n").append(grades).append("\n"));
+
+        // 호칭·존댓말 매트릭스
+        loadFile(baseDir, GRADES_FILE).ifPresent(c ->
+                sb.append("\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\n").append(c).append("\n"));
+
+        // 빠른 참조 (MaiT 대화 어미 등 GRADES.md에 없는 운영 룰 포함)
+        loadFile(baseDir, QUICK_REF_FILE).ifPresent(c ->
+                sb.append("\n## 빠른 참조 (quick-ref.md)\n\n").append(c).append("\n"));
+
+        // 이벤트 캘린더 (생일/기념일 — user prompt의 '오늘 날짜'와 매칭해서 자연스럽게 언급)
+        loadFile(baseDir, EVENTS_FILE).ifPresent(c ->
+                sb.append("\n## 이벤트 캘린더 (events.json)\n\n```json\n").append(c).append("```\n"));
+
         sb.append("\n").append(loadResource(outputSchema));
         return sb.toString();
     }
@@ -60,17 +85,18 @@ public class SystemPromptBuilder {
         }
     }
 
-    private java.util.Optional<String> loadGrades() {
-        Path gradesPath = Paths.get(personaProperties.dir()).resolve(GRADES_FILENAME);
-        if (!Files.isRegularFile(gradesPath)) {
-            log.debug("GRADES.md not found at {} — skipping", gradesPath);
-            return java.util.Optional.empty();
+    private Optional<String> loadFile(Path dir, String name) {
+        if (dir == null) return Optional.empty();
+        Path p = dir.resolve(name);
+        if (!Files.isRegularFile(p)) {
+            log.debug("{} not found at {} — skipping", name, p);
+            return Optional.empty();
         }
         try {
-            return java.util.Optional.of(Files.readString(gradesPath, StandardCharsets.UTF_8));
+            return Optional.of(Files.readString(p, StandardCharsets.UTF_8));
         } catch (IOException e) {
-            log.warn("Failed to read GRADES.md at {}: {}", gradesPath, e.getMessage());
-            return java.util.Optional.empty();
+            log.warn("Failed to read {}: {}", p, e.getMessage());
+            return Optional.empty();
         }
     }
 }

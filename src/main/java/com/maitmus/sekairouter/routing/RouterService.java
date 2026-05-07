@@ -28,6 +28,10 @@ public class RouterService {
 
     private String buildUserPrompt(RouterRequest request, CharacterId suggested) {
         StringBuilder sb = new StringBuilder();
+        // 오늘 날짜(KST) — events.json의 생일/기념일과 매칭하여 캐릭터가 자연스럽게 언급
+        sb.append("오늘 날짜 (KST): ")
+                .append(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))
+                .append("\n\n");
         sb.append("## 채널 최근 발화\n");
         if (request.recentTurns().isEmpty()) {
             sb.append("(없음 — 새 대화)\n");
