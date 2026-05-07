@@ -2,12 +2,15 @@ package com.maitmus.sekairouter.routing;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
+import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
+import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.WebSearchTool20250305;
 import com.maitmus.sekairouter.config.AnthropicProperties;
+import java.util.List;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +46,12 @@ public class AnthropicClientWrapper {
                 // recommended minimum is 5000 tokens. Current default (1000) may truncate.
                 // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
                 .maxTokens(properties.maxTokens())
-                .system(systemPrompt)
+                .systemOfTextBlockParams(List.of(
+                        TextBlockParam.builder()
+                                .text(systemPrompt)
+                                .cacheControl(CacheControlEphemeral.builder().build())
+                                .build()
+                ))
                 .addUserMessage(userPrompt)
                 .addTool(WEB_SEARCH_TOOL)
                 .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
@@ -51,6 +59,11 @@ public class AnthropicClientWrapper {
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
+        log.debug("Anthropic usage: cache_creation={}, cache_read={}, input={}, output={}",
+                response.usage().cacheCreationInputTokens().orElse(null),
+                response.usage().cacheReadInputTokens().orElse(null),
+                response.usage().inputTokens(),
+                response.usage().outputTokens());
 
         // web_search responses contain multiple text blocks (intent → search results → final answer).
         // The final text block holds the JSON routing decision; earlier blocks are search prelude.
