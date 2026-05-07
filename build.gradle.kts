@@ -25,7 +25,7 @@ dependencies {
     implementation("net.dv8tion:JDA:5.2.1")
 
     // Anthropic
-    implementation("com.anthropic:anthropic-java:0.8.0")
+    implementation("com.anthropic:anthropic-java:2.30.0")
 
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-parameter-names")
