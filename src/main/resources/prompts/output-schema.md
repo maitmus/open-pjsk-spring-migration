@@ -15,6 +15,7 @@
 - `character`: 7개 ID 중 하나 (소문자) — `airi/emu/haruka/miku/minori/nene/shizuku`
 - 절대 캐릭터 ID 외 다른 값 사용 금지
 - 텍스트만 출력. 출력 전후에 markdown 코드 펜스 또는 다른 텍스트 추가 금지
+- **web_search 사용 후에도 출력은 JSON 객체 자체만**. "AccuWeather 결과...", "확인했습니다", "기상청 예보..." 같은 검색 결과 요약·prelude 자연어 절대 금지. JSON 안의 `message` 필드에 캐릭터 톤으로 정보를 녹여 넣고, 응답 텍스트 자체는 `{` 로 시작해서 `}` 로 끝나야 한다
 
 ### `reasoning` 필드 형식 (필수)
 
