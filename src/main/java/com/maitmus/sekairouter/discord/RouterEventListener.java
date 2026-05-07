@@ -29,12 +29,14 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class RouterEventListener extends ListenerAdapter {
 
-    // 캐릭터 사이 buffer: 이전 send 완료 후 다음 typing 시작까지 대기
-    private static final long INTER_MESSAGE_BUFFER_MS = 600;
-    // 동적 typing duration: base + 글자당 가산, max로 cap
+    // 동적 typing duration: 본인 메시지 길이 기반
     private static final long TYPING_BASE_MS = 800;
     private static final long TYPING_PER_CHAR_MS = 80;
     private static final long TYPING_MAX_MS = 4000;
+    // 동적 read buffer: 이전 캐릭터 메시지 길이 기반 (사용자가 읽는 시간)
+    private static final long READ_BASE_MS = 500;
+    private static final long READ_PER_CHAR_MS = 40;
+    private static final long READ_MAX_MS = 2500;
 
     private final DiscordProperties properties;
     private final RouterService routerService;
@@ -90,8 +92,10 @@ public class RouterEventListener extends ListenerAdapter {
             return;
         }
 
-        // typing duration이 메시지 길이에 비례. 캐릭터별 누적 타임라인:
-        //   typing@cumulative → send@(cumulative + typingDuration) → 다음 캐릭터 typing@(send + buffer)
+        // 캐릭터별 누적 타임라인:
+        //   typing@cumulative → send@(cumulative + typingDuration)
+        //   → 다음 캐릭터 typing@(send + readBuffer of 이전 메시지)
+        // readBuffer는 사용자가 이전 캐릭터 응답을 읽는 시간(이전 메시지 길이 비례).
         long cumulative = 0;
         for (PersonaResponse r : responses) {
             long typingDuration = typingDurationFor(r.message());
@@ -109,13 +113,18 @@ public class RouterEventListener extends ListenerAdapter {
                     lastSpeaker.record(channelId, r.character());
                 }
             }, sendAt, TimeUnit.MILLISECONDS);
-            cumulative = sendAt + INTER_MESSAGE_BUFFER_MS;
+            cumulative = sendAt + readBufferFor(r.message());
         }
     }
 
     private static long typingDurationFor(String message) {
         long len = message == null ? 0 : message.length();
         return Math.min(TYPING_MAX_MS, TYPING_BASE_MS + len * TYPING_PER_CHAR_MS);
+    }
+
+    private static long readBufferFor(String previousMessage) {
+        long len = previousMessage == null ? 0 : previousMessage.length();
+        return Math.min(READ_MAX_MS, READ_BASE_MS + len * READ_PER_CHAR_MS);
     }
 
     private String reasoningOf(RoutingDecision d) {
