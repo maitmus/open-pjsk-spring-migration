@@ -21,20 +21,19 @@ class EventsCalendarTest {
 
     @Test
     void todayOverride_returnsBirthday_whenDateMatches(@TempDir Path tmp) throws IOException {
-        // 2026-09-09 in KST: EMU birthday
+        // events.json structure: { "birthdays": { "MM-DD": {...}, ... } }
         writeEventsJson(tmp, """
                 {
-                  "birthdays": [
-                    { "date": "09-09", "label": "에무 생일", "characters": ["EMU"] }
-                  ],
-                  "anniversaries": []
+                  "birthdays": {
+                    "09-09": { "character": "emu", "name": "에무", "label": "오오토리 에무 생일" }
+                  },
+                  "anniversaries": {}
                 }
                 """);
 
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
-        // Fix clock to 2026-09-09 00:30 KST
         Clock fixed = Clock.fixed(
-                Instant.parse("2026-09-08T15:30:00Z"), // UTC = KST - 9h → this is 2026-09-09 00:30 KST
+                Instant.parse("2026-09-08T15:30:00Z"), // UTC → 2026-09-09 00:30 KST
                 KST);
         EventsCalendar calendar = new EventsCalendar(props, fixed);
         calendar.load();
@@ -42,7 +41,7 @@ class EventsCalendarTest {
         Optional<EventsCalendar.EventOverride> result = calendar.todayOverride();
 
         assertThat(result).isPresent();
-        assertThat(result.get().label()).isEqualTo("에무 생일");
+        assertThat(result.get().label()).isEqualTo("오오토리 에무 생일");
         assertThat(result.get().kind()).isEqualTo(EventsCalendar.EventKind.BIRTHDAY);
         assertThat(result.get().characters()).containsExactly(CharacterId.EMU);
     }
@@ -51,17 +50,16 @@ class EventsCalendarTest {
     void todayOverride_empty_whenNoEventToday(@TempDir Path tmp) throws IOException {
         writeEventsJson(tmp, """
                 {
-                  "birthdays": [
-                    { "date": "09-09", "label": "에무 생일", "characters": ["EMU"] }
-                  ],
-                  "anniversaries": []
+                  "birthdays": {
+                    "09-09": { "character": "emu", "name": "에무", "label": "오오토리 에무 생일" }
+                  },
+                  "anniversaries": {}
                 }
                 """);
 
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
-        // Fix clock to 2026-01-01 KST — no event on that day
         Clock fixed = Clock.fixed(
-                Instant.parse("2025-12-31T15:00:00Z"), // UTC → 2026-01-01 00:00 KST
+                Instant.parse("2025-12-31T15:00:00Z"), // → 2026-01-01 00:00 KST
                 KST);
         EventsCalendar calendar = new EventsCalendar(props, fixed);
         calendar.load();
@@ -71,20 +69,19 @@ class EventsCalendarTest {
 
     @Test
     void todayOverride_nullCharacter_returnsEmptyCharactersList(@TempDir Path tmp) throws IOException {
-        // Birthdays where the character list is empty (e.g. 츠카사·루이 birthday — other characters mention)
+        // Real events.json has entries with character=null for non-routed characters (츠카사·루이)
         writeEventsJson(tmp, """
                 {
-                  "birthdays": [
-                    { "date": "03-08", "label": "츠카사 생일", "characters": [] }
-                  ],
-                  "anniversaries": []
+                  "birthdays": {
+                    "05-17": { "character": null, "name": "츠카사", "label": "텐마 츠카사 생일" }
+                  },
+                  "anniversaries": {}
                 }
                 """);
 
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
-        // 2026-03-08 KST
         Clock fixed = Clock.fixed(
-                Instant.parse("2026-03-07T15:00:00Z"), // → 2026-03-08 00:00 KST
+                Instant.parse("2026-05-16T15:00:00Z"), // → 2026-05-17 00:00 KST
                 KST);
         EventsCalendar calendar = new EventsCalendar(props, fixed);
         calendar.load();
@@ -100,16 +97,16 @@ class EventsCalendarTest {
     void todayOverride_anniversary(@TempDir Path tmp) throws IOException {
         writeEventsJson(tmp, """
                 {
-                  "birthdays": [],
-                  "anniversaries": [
-                    { "date": "04-12", "label": "WxS 결성 기념일", "characters": ["EMU", "NENE"] }
-                  ]
+                  "birthdays": {},
+                  "anniversaries": {
+                    "09-30": { "label": "PJSK 출시 기념일", "characters": ["emu", "nene"] }
+                  }
                 }
                 """);
 
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
         Clock fixed = Clock.fixed(
-                Instant.parse("2026-04-11T15:00:00Z"), // → 2026-04-12 00:00 KST
+                Instant.parse("2026-09-29T15:00:00Z"), // → 2026-09-30 00:00 KST
                 KST);
         EventsCalendar calendar = new EventsCalendar(props, fixed);
         calendar.load();
@@ -123,7 +120,6 @@ class EventsCalendarTest {
 
     @Test
     void load_graceful_whenNoEventsFile(@TempDir Path tmp) {
-        // events.json doesn't exist — should not throw, just return empty
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
         Clock fixed = Clock.fixed(Instant.parse("2026-09-08T15:30:00Z"), KST);
         EventsCalendar calendar = new EventsCalendar(props, fixed);
