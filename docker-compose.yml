@@ -11,5 +11,7 @@ services:
       - JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Seoul
     volumes:
       - /home/maitmus/.openclaw/workspace/identities:/app/identities:ro
+      # USER.md는 SystemPromptBuilder가 PERSONA_DIR의 부모 디렉토리에서 찾음 (/app/USER.md)
+      - /home/maitmus/.openclaw/workspace/USER.md:/app/USER.md:ro
       - /home/maitmus/sekai-router-logs:/app/logs
     # No ports needed — Discord bot with no embedded web server
