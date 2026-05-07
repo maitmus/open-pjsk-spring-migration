@@ -30,3 +30,9 @@ anthropic:
 persona:
   dir: ${PERSONA_DIR:/home/maitmus/.openclaw/workspace/identities}
   watch-interval-ms: 60000
+
+heartbeat:
+  enabled: ${HEARTBEAT_ENABLED:true}
+  quiet-start-hour: ${HEARTBEAT_QUIET_START_HOUR:21}
+  quiet-end-hour: ${HEARTBEAT_QUIET_END_HOUR:10}
+  dialogue-probability: ${HEARTBEAT_DIALOGUE_PROB:0.5}
