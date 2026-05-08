@@ -45,3 +45,9 @@ heartbeat:
   quiet-start-hour: ${HEARTBEAT_QUIET_START_HOUR:21}
   quiet-end-hour: ${HEARTBEAT_QUIET_END_HOUR:10}
   dialogue-probability: ${HEARTBEAT_DIALOGUE_PROB:0.5}
+
+# 매일 아침 날씨 발화 — 09:30 KST 발화 → 1h 캐시가 첫 하트비트(~10:29 직전)까지 살아 있어 cross-call hit
+daily-weather:
+  enabled: ${DAILY_WEATHER_ENABLED:true}
+  cron: ${DAILY_WEATHER_CRON:0 30 9 * * *}
+  location: ${DAILY_WEATHER_LOCATION:부산 중앙동}

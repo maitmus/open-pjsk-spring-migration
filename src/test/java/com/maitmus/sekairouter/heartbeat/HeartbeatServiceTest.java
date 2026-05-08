@@ -242,8 +242,9 @@ class HeartbeatServiceTest {
     }
 
     private HeartbeatService buildService(HeartbeatProperties props, Clock clock) {
+        DailyWeatherProperties dailyWeatherProps = new DailyWeatherProperties(false, "0 30 9 * * *", "부산 중앙동");
         return new HeartbeatService(
-                props, state, events, promptBuilder, anthropic,
+                props, dailyWeatherProps, state, events, promptBuilder, anthropic,
                 randomSelector, proxy, typing, scheduler, discordProperties, clock);
     }
 }

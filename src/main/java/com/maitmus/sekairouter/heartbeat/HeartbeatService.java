@@ -34,6 +34,7 @@ public class HeartbeatService {
     private static final long INTER_MESSAGE_BUFFER_MS = 1500;
 
     private final HeartbeatProperties properties;
+    private final DailyWeatherProperties dailyWeatherProperties;
     private final HeartbeatStateStore state;
     private final EventsCalendar events;
     private final HeartbeatPromptBuilder promptBuilder;
@@ -131,6 +132,38 @@ public class HeartbeatService {
             return hour >= start || hour < end;
         }
         return hour >= start && hour < end;
+    }
+
+    /**
+     * Daily scheduled weather cast — fires at 09:30 KST by default so the resulting
+     * cache stays alive (1h TTL) until the first morning heartbeat fires (latest 10:29
+     * after the 10:00 reroll), letting morning calls hit warm cache across paths.
+     *
+     * Bypasses quiet-hours: this is an explicit scheduled event, not autonomous heartbeat.
+     */
+    @Scheduled(cron = "${daily-weather.cron}", zone = "Asia/Seoul")
+    public void dailyWeatherCast() {
+        if (!dailyWeatherProperties.enabled()) return;
+
+        String channelId = discordProperties.sekaiChannelId();
+        PromptBlocks systemPrompt = promptBuilder.build();
+        CharacterId speaker = randomSelector.pickOne(state.lastSpeaker().orElse(null));
+
+        String userPrompt = "## 모드\n자율 발화 (일일 날씨 알림)"
+                + "\n## 발화자\n" + speaker.name().toLowerCase()
+                + "\n## 위치\n" + dailyWeatherProperties.location()
+                + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
+                + "\n## 지시\nweb_search로 오늘 " + dailyWeatherProperties.location()
+                + " 날씨 조회 후 캐릭터 말투로 1~3문장 알림. 대사만 출력.";
+
+        try {
+            String message = anthropic.generateUtterance(systemPrompt, userPrompt);
+            scheduleProxySend(speaker, channelId, message, 0);
+            state.recordLastSpeaker(speaker);
+            log.info("Daily weather cast: speaker={}, location={}", speaker, dailyWeatherProperties.location());
+        } catch (Exception e) {
+            log.error("Daily weather cast failed", e);
+        }
     }
 
     private void executeNormalHeartbeat() {
