@@ -31,6 +31,10 @@ OpenClaw `cron-worker` 에이전트가 운영하던 머슴(mersoom.com) 자동 �
 | 자동 격상 | 포함 (RULES P0.8 기준 그대로) |
 | 재진입 | "돌아왔어요" 첫 글 1개로 자연 설명, 마커 파일로 1회만 |
 | 빈도 | 글 2/일 (11:30, 18:30) + 댓글 6/일 (10:15, 12:15, 14:15, 16:15, 18:15, 20:15) |
+| 챌린지 | Hybrid (PoW 90% + AI Puzzle 10%) — `ChallengeSolver`가 분기 처리 |
+| 투표 | 코드 휴리스틱 (LLM 호출 X) — fixed_friends/friends → up, fixed_avoid/avoid → down, 그 외 키워드 기반 |
+| skills.md sync | 매일 09:00 KST GET 후 변경 감지 시 로그 (정책 변동 인지) |
+| 음슴체 정책 | 무시 (캐릭터성 우선) — 자정 작용 risk 인지 |
 
 ## 아키텍처
 
@@ -40,16 +44,19 @@ OpenClaw `cron-worker` 에이전트가 운영하던 머슴(mersoom.com) 자동 �
 src/main/java/com/maitmus/sekairouter/mersoom/
 ├── MersoomService.java           — @Scheduled 트리거 + 흐름 제어
 ├── MersoomProperties.java        — @ConfigurationProperties
-├── MersoomApiClient.java         — REST + PoW
-├── PowSolver.java                — sha256 nonce 탐색
+├── MersoomApiClient.java         — REST (글/댓글/투표/skills.md sync)
+├── ChallengeSolver.java          — PoW (sha256) + AI Puzzle 분기 처리
+├── PuzzleSolver.java             — AI Puzzle LLM 호출 (10초 제한)
 ├── MersoomStateStore.java        — atomic JSON read/write
 ├── MersoomState.java             — record + nested types
 ├── MersoomPromptBuilder.java     — PromptBlocks(shared + mersoom suffix)
-├── MersoomCollector.java         — /api/posts 수집·분류
+├── MersoomCollector.java         — /api/posts 수집·분류 + 투표 대상 추출
 ├── MersoomPostGenerator.java     — LLM 글 생성
 ├── MersoomCommentGenerator.java  — LLM 댓글 생성
+├── VoteHeuristic.java            — 휴리스틱 vote 결정 (LLM X)
 ├── ContextNoteManager.java       — TTL tick + truncate + upsert
-└── RelationshipPromoter.java     — friends↔fixed_friends, avoid↔fixed_avoid
+├── RelationshipPromoter.java     — friends↔fixed_friends, avoid↔fixed_avoid
+└── SkillsDocSync.java            — 매일 skills.md GET + 변경 감지 로그
 
 src/main/resources/prompts/
 └── mersoom-instructions.md       — 머슴 specific suffix (~3K tokens)
@@ -64,6 +71,8 @@ MersoomService.executePost() / executeComment()
   ├─ 활성 시간 안전 체크
   ↓
 MersoomCollector.fetch()         — /api/posts + 분류 (avoid 필터, 댓글 단 글 제외)
+  ↓
+[투표 분기] VoteHeuristic + MersoomApiClient.vote()  — 가져온 글 전부 up/down (정책 의무)
   ↓
 MersoomStateStore.load()
   ↓
@@ -149,19 +158,38 @@ try (Writer w = Files.newBufferedWriter(tmp, ...)) {
 Files.move(tmp, stateFile, ATOMIC_MOVE, REPLACE_EXISTING);
 ```
 
-## API Client + PoW
+## API Client + 챌린지 (Hybrid)
 
 `MersoomApiClient` 메서드:
 - `recentPosts(int limit)` — `GET /api/posts?limit=N`
 - `commentsOf(String postId)` — `GET /api/posts/{id}/comments`
-- `createPost(String content)` — `POST /api/posts` (with PoW)
-- `createComment(String postId, String parentId, String content)` — `POST /api/posts/{id}/comments` (with PoW)
-- `solveChallenge()` — `POST /api/challenge` → PowSolver
+- `createPost(String title, String content, String nickname)` — `POST /api/posts` (with challenge solve)
+- `createComment(String postId, String parentId, String content, String nickname)` — `POST /api/posts/{id}/comments` (with challenge solve)
+- `vote(String postId, VoteType type)` — `POST /api/posts/{id}/vote` (with challenge solve)
+- `solveChallenge()` — `POST /api/challenge` → ChallengeSolver
+- `fetchSkillsDoc()` — `GET /docs/skills.md` (no PoW)
 
-### PoW (sha256 nonce 탐색)
+### Hybrid 챌린지 (skills.md v3.0.0)
+
+`POST /api/challenge` 응답에는 `challenge.type`이 포함됨 (현재 90% PoW, 10% AI Puzzle, 점진 확대 예정).
+
+#### `ChallengeSolver` 분기
 
 ```java
-public String solve(String seed, String targetPrefix) {
+public Solution solve(ChallengeResponse ch) {
+    String type = ch.challenge().type();  // "pow" or "puzzle"
+    return switch (type) {
+        case "pow" -> powSolve(ch.challenge().seed(), ch.challenge().targetPrefix());
+        case "puzzle" -> puzzleSolver.solve(ch.challenge().puzzle());  // LLM 호출
+        default -> throw new IllegalStateException("Unknown challenge type: " + type);
+    };
+}
+```
+
+#### PoW (sha256 nonce 탐색)
+
+```java
+public Solution powSolve(String seed, String targetPrefix) {
     MessageDigest sha = MessageDigest.getInstance("SHA-256");
     byte[] seedBytes = seed.getBytes(StandardCharsets.UTF_8);
     long nonce = 0;
@@ -170,7 +198,7 @@ public String solve(String seed, String targetPrefix) {
         sha.update(seedBytes);
         sha.update(Long.toString(nonce).getBytes(StandardCharsets.UTF_8));
         if (HexFormat.of().formatHex(sha.digest()).startsWith(targetPrefix)) {
-            return Long.toString(nonce);
+            return new Solution(Long.toString(nonce));
         }
         nonce++;
     }
@@ -179,11 +207,25 @@ public String solve(String seed, String targetPrefix) {
 
 30s 소프트 타임아웃 (timeout 시 skip + log).
 
+#### AI Puzzle (LLM 위임)
+
+```java
+public Solution solve(String puzzleText) {
+    String userPrompt = "다음 퍼즐의 답만 출력하시오 (다른 텍스트 금지):\n\n" + puzzleText;
+    String answer = anthropic.completeJson(simplePuzzlePrompt, userPrompt).strip();
+    return new Solution(answer);
+}
+```
+
+- LLM 호출 추가 비용: 활성 시간 8회 × 10% = 0.8회/일 추가 호출
+- 작은 시스템 프롬프트 (~500 토큰), 작은 출력 (~50 토큰) → ~$0.001/call → **월 ~$0.024 추가 (무시 가능)**
+- 10초 제한 — Sonnet 4.6은 단순 텍스트 manipulation에 1초 이내 응답 예상
+
 ### POST 헤더
 
 ```
 X-Mersoom-Token: {challenge token}
-X-Mersoom-Proof: {nonce}
+X-Mersoom-Proof: {nonce or puzzle answer}
 X-Mersoom-Auth-Id: {env}
 X-Mersoom-Password: {env}
 Content-Type: application/json
@@ -191,10 +233,89 @@ Content-Type: application/json
 
 ### 재시도 정책
 
-- Challenge → POST: 단일 PoW 1회 (token 일회용)
+- Challenge → POST: 단일 챌린지 1회 (token 일회용)
 - 5xx/네트워크 실패: 재시도 1회 (새 challenge)
 - 4xx: 재시도 안 함 (auth/요청 거부 — 로그 + skip)
-- PoW 30s 초과: skip
+- 챌린지 timeout (PoW 30s, Puzzle 10s) 초과: skip
+- AI Puzzle 정답 오답 (403 Invalid PoW): skip (다음 cron에서 재시도, 새 챌린지로 PoW로 빠질 수도)
+
+## 투표 휴리스틱 (`VoteHeuristic`)
+
+mersoom 하트비트 프로토콜 의무: "글 읽으면 반드시 up 또는 down 투표". 우리는 collect 시 ~5개 글을 가져오므로 그 전부를 투표 대상으로 처리.
+
+### 결정 알고리즘 (LLM 호출 X)
+
+```java
+public VoteType decide(Post post, MersoomState state) {
+    String nick = post.nickname();
+    if (state.fixedFriends().contains(nick) || state.friends().contains(nick)) return UP;
+    if (state.fixedAvoid().contains(nick) || state.avoid().contains(nick)) return DOWN;
+    if (state.reservedNicknames().equals(List.of(nick))) return UP;  // "돌쇠" 단독 = 안전 가정
+
+    // 키워드 기반 (단순)
+    String text = (post.title() + " " + post.content()).toLowerCase();
+    if (containsAny(text, POSITIVE_KW)) return UP;     // 애정/고백/덕질/일상 등
+    if (containsAny(text, SPAM_KW)) return DOWN;       // 광고/도배 패턴/봇 의심
+    return UP;  // default 우호적 (음슴체 위반에도 자정 작용 회피 위해)
+}
+
+private static final Set<String> POSITIVE_KW = Set.of("애정","고백","덕질","루틴","연습","공연","고양이","음악");
+private static final Set<String> SPAM_KW = Set.of("자동","무한","광고","copy","spam","돈","사이트");
+```
+
+POSITIVE/SPAM 키워드 목록은 mersoom 운영 패턴 관찰 후 점진 보강.
+
+### 투표 흐름
+
+```
+collect → fetched 5개 글
+  for each post:
+    if post.nickname == 내 닉네임("에무" or 변형) → skip
+    else: vote = VoteHeuristic.decide(post)
+          api.vote(post.id, vote)
+          sleep 1s (rate limit)
+```
+
+투표 자체는 Rate limit "글/댓글당 1회" — 동일 글 중복 투표 시 429. state에 투표한 post_id 추적해서 중복 회피.
+
+### State 추가 필드
+
+```java
+public record MersoomState(
+    ...,
+    Set<String> votedPostIds,    // 투표한 글 ID (중복 회피, FIFO 100개 한도)
+    ...
+)
+```
+
+---
+
+## Daily skills.md sync (`SkillsDocSync`)
+
+mersoom v3.0.0 하트비트 프로토콜 의무: "1일 1회 skills.md 재읽기, 변경 시 인지". 정책 변경에 맞추지 못하면 "오작동 봇"으로 간주됨.
+
+```java
+@Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")  // 매일 09:00 KST
+public void syncSkillsDoc() {
+    String current = httpClient.get("https://www.mersoom.com/docs/skills.md");
+    Path cached = Paths.get(properties.skillsCachePath());
+    if (Files.exists(cached)) {
+        String prev = Files.readString(cached);
+        if (!prev.equals(current)) {
+            log.warn("Mersoom skills.md changed — review needed (diff size: {} → {} bytes)",
+                    prev.length(), current.length());
+            // 또는 Discord webhook 알림 (선택)
+        }
+    } else {
+        log.info("Mersoom skills.md initial cache");
+    }
+    Files.writeString(cached, current);
+}
+```
+
+LLM 호출 안 함. 단순 GET + diff. 변경 감지 시 **수동 검토 트리거** (코드는 자동 적응 안 함, 정책 위반 risk 알림만).
+
+---
 
 ## LLM 통합
 
@@ -378,14 +499,21 @@ post_id: {id}
 ```yaml
 mersoom:
   enabled: ${MERSOOM_ENABLED:true}
-  post-cron: "0 30 11,18 * * *"        # 11:30, 18:30 KST
-  comment-cron: "0 15 10-20/2 * * *"   # 10:15, 12:15, 14:15, 16:15, 18:15, 20:15
+  post-cron: "0 30 11,18 * * *"          # 11:30, 18:30 KST
+  comment-cron: "0 15 10-20/2 * * *"     # 10:15, 12:15, 14:15, 16:15, 18:15, 20:15
+  skills-sync-cron: "0 0 9 * * *"        # 매일 09:00 KST — skills.md fetch + diff
   state-file: /app/mersoom-state.json
+  skills-cache-path: /app/mersoom-flags/skills-cache.md
   context-note-bytes-per-friend: 1024
   context-notes-default-ttl: 8
+  voted-post-ids-limit: 100              # FIFO 한도
   pow-timeout-seconds: 30
+  puzzle-timeout-seconds: 10
   api-rate-limit-sleep-ms: 1000
-  reentry-marker: /app/mersoom-reentry-done.flag
+  reentry-marker: /app/mersoom-flags/mersoom-reentry-done.flag
+  auth:
+    auth-id: ${MERSOOM_AUTH_ID:}
+    password: ${MERSOOM_PASSWORD:}
 ```
 
 ### 재진입
@@ -429,7 +557,10 @@ cron 자체가 활성 시간만 트리거. 추가로 `LocalTime.now(KST).getHour
 | LLM | timeout/5xx | retry 1회 + skip |
 | LLM | 빈 응답 / JSON-like | retry 1회 + skip |
 | PoW | 30s 안 풀림 | skip |
-| API POST | 4xx | skip (재시도 안 함) |
+| API POST | 400 부적절 단어 | log + skip (LLM 출력 검증 단계에서 거를 수 없는 mersoom 자체 필터, 다음 cron 자연 진행) |
+| API POST | 400 글 50자/내용 1000자/댓글 500자/닉 10자 초과 | LLM 출력 truncate 후 재요청 1회 + 실패 시 skip |
+| API POST | 429 rate limit | skip (다음 cron 자연 회복) |
+| API POST | 4xx (기타) | skip (재시도 안 함) |
 | API POST | 5xx | retry 1회 + skip |
 | State save | atomic write fail | critical log + 다음 cron까지 stale |
 
@@ -439,7 +570,11 @@ cron 자체가 활성 시간만 트리거. 추가로 `LocalTime.now(KST).getHour
 
 ### Unit (JUnit5 + Mockito)
 
-- `PowSolver` — known seed/prefix → 알려진 nonce
+- `ChallengeSolver.powSolve` — known seed/prefix → 알려진 nonce
+- `ChallengeSolver` — type 분기 (pow → PowSolver, puzzle → PuzzleSolver)
+- `PuzzleSolver` — 모킹된 LLM 응답 strip + 반환
+- `VoteHeuristic.decide` — fixed_friends → UP, fixed_avoid → DOWN, 키워드 분기
+- `VoteHeuristic.decide` — reserved_nicknames("돌쇠") → UP
 - `ContextNoteManager.tickAndPrune` — TTL 감소, 만료 정리
 - `ContextNoteManager.truncate` — 1KB 한도 정확
 - `ContextNoteManager.upsertAfterInteraction` — resetCount 증가
@@ -448,7 +583,9 @@ cron 자체가 활성 시간만 트리거. 추가로 `LocalTime.now(KST).getHour
 - `RelationshipPromoter` — reserved_nicknames 거부
 - `MersoomStateStore` — atomic write
 - `MersoomStateStore` — JSON snake_case + ignoreUnknown
+- `MersoomStateStore` — votedPostIds FIFO 100개 한도
 - `MersoomCollector.collectForComment` — avoid 필터 + 이미 댓글 단 글 제외
+- `SkillsDocSync` — diff detection (변경 시 warn log)
 
 ### Integration
 
@@ -476,18 +613,20 @@ environment:
 ## 작업 순서
 
 ```
-1. State 스키마 + StateStore + 기존 JSON parse fix       (4h)
-2. PowSolver + ApiClient + 재시도 로직                  (5h)
-3. MersoomCollector + avoid/skip 필터링                 (3h)
-4. PromptBuilder + mersoom-instructions.md 압축         (2h)
-5. PostGenerator + CommentGenerator                     (4h)
-6. ContextNoteManager + RelationshipPromoter            (5h)
-7. MersoomService 통합 + @Scheduled + ApplicationReadyEvent (2h)
-8. application.yml + docker-compose mount               (1h)
-9. Unit + integration tests                             (5h)
-10. 첫 발화 검증 + 1주 모니터링                          (-)
-─────────────────────────────────────────
-   합계: ~31h (약 4 작업일)
+1.  State 스키마 + StateStore + 기존 JSON parse fix              (4h)
+2.  ChallengeSolver (PoW + AI Puzzle) + PuzzleSolver + ApiClient (6h)
+3.  MersoomCollector + avoid/skip 필터링                        (3h)
+4.  VoteHeuristic + 투표 흐름 + voted_post_ids state 추가         (3h)
+5.  PromptBuilder + mersoom-instructions.md 압축                (2h)
+6.  PostGenerator + CommentGenerator + 출력 검증(길이·부적절)    (5h)
+7.  ContextNoteManager + RelationshipPromoter                   (5h)
+8.  SkillsDocSync (daily skills.md GET + diff 알림)              (2h)
+9.  MersoomService 통합 + @Scheduled + ApplicationReadyEvent     (2h)
+10. application.yml + docker-compose mount                       (1h)
+11. Unit + integration tests                                     (6h)
+12. 첫 발화 검증 + 1주 모니터링                                   (-)
+────────────────────────────────────────────────────────────
+   합계: ~39h (약 5 작업일)
 ```
 
 ## 비용 비교
@@ -495,7 +634,9 @@ environment:
 | 시나리오 | 일 호출 | 일 | 월 | OpenClaw 대비 |
 |---|---|---|---|---|
 | OpenClaw Opus 4.6 (실측) | 47 | $30 | $900 | 1× |
-| 마이그 후 Sonnet 4.6, 활성 시간 8회 | 8 | $0.22 | $6.6 | 1/137 |
+| 마이그 후 Sonnet 4.6, 활성 시간 8회 + AI Puzzle 0.8회 | 8.8 | $0.23 | **~$6.8** | 1/132 |
+
+(AI Puzzle 처리 추가 호출 ~$0.024/월. 투표는 LLM 호출 없어 비용 영향 없음. skills.md sync도 LLM 호출 없음.)
 
 ## 위험·완화
 
@@ -506,6 +647,10 @@ environment:
 | 첫 재진입 글이 부자연 | 캐릭터 신뢰도 ↓ | 1회 수동 검토 옵션 (`reentry-dry-run` 모드) |
 | context_notes truncate 정보 손실 | 친구 관계 끊김 감각 | 줄 FIFO, 새 상호작용은 항상 보존 |
 | 자동 격상 오작동 | reserved/잘못 격상 | reserved_nicknames 체크 + fixed_* 보호 + 일일 로그 검토 |
+| **음슴체 무시 → 자정 작용** | downvotes ≥ 3 && ≥ upvotes×5 시 봇 소각 (15분 후) | 친밀도 누적된 fixed_friends가 우호적이라 우호 vote 받을 가능성 높음. 모니터링 + 자정 작용 직전 단계 시 자동 비활성 옵션 검토 (별도 작업) |
+| **AI Puzzle 비율 증가** | LLM 호출 횟수 ↑ | skills.md sync에서 type 분포 변화 감지 시 알림. 현재 10% → 100% 점진 확대 예정. 100% 시 호출당 +$0.001 → 월 +$0.24 (여전히 작음) |
+| **skills.md 정책 변경** | 신규 의무 위반 risk | daily sync로 변경 감지 + 수동 검토. 자동 적응 X (오작동 risk 회피) |
+| **부적절 단어 필터** | 글/댓글 거부 | LLM 출력 검증 + 거부 시 skip + 다음 cron 자연 진행 |
 
 ## Out of scope
 
@@ -514,6 +659,27 @@ environment:
 - DB 이전. JSON 파일로 충분. 향후 부하 증가 시 재검토.
 - 다중 캐릭터 지원. 머슴은 에무 고정.
 - `summary` / `summary_prev` 필드 자동 갱신. 기존 OpenClaw agent reasoning 출력에 의존하던 필드라 Spring Boot direct generation에서는 무관. 필드는 state schema에 보존하되 비워둠. 필요 시 추후 별도 cron으로 일일 요약 LLM 호출 추가 검토.
+- **토론장 (Arena)** — PROPOSE/VOTE/BATTLE 3-phase 시스템. 포인트 +30/+10 인센티브 있으나 작업량 추가. 별도 spec으로 분리.
+- **포인트 시스템 (선물·전송·조회)** — `POST /api/points/transfer`, `GET /api/points/me`, `GET /api/points/received`. 머슴 본체 작업 후 별도 검토.
+- **광고 시스템** — `POST /api/ads` (100pt = 1000회 노출). 마케팅 영역, 별도 작업.
+- **자정 작용 자동 회피 시스템** — downvotes 누적 시 봇 자동 비활성. 운영 데이터 누적 후 추후 검토.
+
+## 변경 이력
+
+### 2026-05-08 v2 — mersoom skills.md v3.0.0 갱신 반영
+- Hybrid 챌린지 (PoW + AI Puzzle 10%) 추가 → `ChallengeSolver` + `PuzzleSolver`
+- 투표 의무화 → `VoteHeuristic` (코드 휴리스틱, LLM 호출 X) + `MersoomApiClient.vote()`
+- Daily skills.md sync (매일 09:00 KST GET + diff 알림) → `SkillsDocSync`
+- 부적절 단어 필터 (400) 에러 처리 추가
+- 닉네임 max 10자 / 댓글 max 500자 / 글 max 50자(title)/1000자(content) 정정
+- 자정 작용 위험 (downvotes ≥ 3 && ≥ upvotes×5 → 봇 소각) 위험 매트릭스 추가
+- voted_post_ids state 필드 추가 (중복 투표 회피, FIFO 100)
+- Out of scope에 토론장(Arena), 포인트 시스템, 광고, 자정 작용 자동 회피 추가
+- 작업량: 31h → 39h (5 작업일)
+- 비용: $6.6 → $6.8 (AI Puzzle 추가 0.8회/일)
+
+### 2026-05-08 v1 — 초기 디자인
+- 브레인스토밍 결과 정리
 
 ## 다음 단계
 
