@@ -55,8 +55,8 @@ class HeartbeatServiceTest {
 
         // Sensible defaults
         when(discordProperties.sekaiChannelId()).thenReturn("ch-test");
-        when(promptBuilder.build()).thenReturn("system prompt");
-        when(anthropic.generateUtterance(anyString(), anyString())).thenReturn("안녕!");
+        when(promptBuilder.build()).thenReturn(new com.maitmus.sekairouter.routing.PromptBlocks("shared", "suffix"));
+        when(anthropic.generateUtterance(any(), anyString())).thenReturn("안녕!");
         when(randomSelector.pickOne(any())).thenReturn(CharacterId.EMU);
         when(state.lastSpeaker()).thenReturn(Optional.empty());
         when(events.todayOverride()).thenReturn(Optional.empty());
@@ -173,7 +173,7 @@ class HeartbeatServiceTest {
         when(state.lastSpeaker()).thenReturn(Optional.empty());
         when(randomSelector.pickOne(null)).thenReturn(CharacterId.AIRI);
         when(events.todayOverride()).thenReturn(Optional.empty());
-        when(anthropic.generateUtterance(anyString(), anyString())).thenReturn("오늘 날씨 좋다~");
+        when(anthropic.generateUtterance(any(), anyString())).thenReturn("오늘 날씨 좋다~");
 
         // dialogueProbability=0.0 → always solo path
         HeartbeatService service = buildService(enabledProps(0.0), clockAt(14, 10));
@@ -181,7 +181,7 @@ class HeartbeatServiceTest {
         service.heartbeatCheck();
 
         // Anthropic called exactly once for solo utterance
-        verify(anthropic, times(1)).generateUtterance(anyString(), anyString());
+        verify(anthropic, times(1)).generateUtterance(any(), anyString());
 
         // scheduleProxySend: 2 scheduler.schedule calls (typing + send)
         verify(scheduler, times(2)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
@@ -205,14 +205,14 @@ class HeartbeatServiceTest {
         EventsCalendar.EventOverride birthday = new EventsCalendar.EventOverride(
                 "에무 생일", List.of(CharacterId.EMU), EventsCalendar.EventKind.BIRTHDAY);
         when(events.todayOverride()).thenReturn(Optional.of(birthday));
-        when(anthropic.generateUtterance(anyString(), anyString())).thenReturn("생일 축하해~!");
+        when(anthropic.generateUtterance(any(), anyString())).thenReturn("생일 축하해~!");
 
         HeartbeatService service = buildService(enabledProps(0.5), clockAt(14, 10));
 
         service.heartbeatCheck();
 
         // Anthropic called once for event utterance
-        verify(anthropic, times(1)).generateUtterance(anyString(), anyString());
+        verify(anthropic, times(1)).generateUtterance(any(), anyString());
 
         // 2 schedule calls for typing + send
         verify(scheduler, times(2)).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));

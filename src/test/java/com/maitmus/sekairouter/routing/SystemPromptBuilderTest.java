@@ -20,6 +20,14 @@ import static org.mockito.Mockito.when;
 
 class SystemPromptBuilderTest {
 
+    private static SystemPromptBuilder newBuilder(PersonaRegistry registry, PersonaProperties props) {
+        SharedPromptContent shared = new SharedPromptContent(registry, props);
+        return new SystemPromptBuilder(
+                shared,
+                new ClassPathResource("prompts/router-base-instructions.md"),
+                new ClassPathResource("prompts/output-schema.md"));
+    }
+
     @Test
     void build_includesAllPersonasAndInstructions(@TempDir Path tmp) {
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
@@ -29,19 +37,16 @@ class SystemPromptBuilderTest {
         when(registry.all()).thenReturn(personas);
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
 
-        SystemPromptBuilder builder = new SystemPromptBuilder(
-                registry,
-                props,
-                new ClassPathResource("prompts/router-base-instructions.md"),
-                new ClassPathResource("prompts/output-schema.md"));
-        String prompt = builder.build();
+        PromptBlocks blocks = newBuilder(registry, props).build();
 
-        assertThat(prompt).contains("라우팅 규칙");
-        assertThat(prompt).contains("에무 페르소나 본문");
-        assertThat(prompt).contains("네네 페르소나 본문");
-        assertThat(prompt).contains("출력 JSON 스키마");
+        // 페르소나/매트릭스/이벤트는 sharedPrefix에
+        assertThat(blocks.sharedPrefix()).contains("에무 페르소나 본문");
+        assertThat(blocks.sharedPrefix()).contains("네네 페르소나 본문");
+        // 라우터 지시문/출력 스키마는 pathSuffix에
+        assertThat(blocks.pathSuffix()).contains("라우팅 규칙");
+        assertThat(blocks.pathSuffix()).contains("출력 JSON 스키마");
         // GRADES.md 없으면 매트릭스 섹션 없이 빌드
-        assertThat(prompt).doesNotContain("호칭·존댓말 매트릭스");
+        assertThat(blocks.sharedPrefix()).doesNotContain("호칭·존댓말 매트릭스");
     }
 
     @Test
@@ -53,14 +58,9 @@ class SystemPromptBuilderTest {
         when(registry.all()).thenReturn(personas);
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
 
-        SystemPromptBuilder builder = new SystemPromptBuilder(
-                registry,
-                props,
-                new ClassPathResource("prompts/router-base-instructions.md"),
-                new ClassPathResource("prompts/output-schema.md"));
-        String prompt = builder.build();
+        PromptBlocks blocks = newBuilder(registry, props).build();
 
-        assertThat(prompt).contains("호칭·존댓말 매트릭스");
-        assertThat(prompt).contains("에무 → 네네: 네네쨩");
+        assertThat(blocks.sharedPrefix()).contains("호칭·존댓말 매트릭스");
+        assertThat(blocks.sharedPrefix()).contains("에무 → 네네: 네네쨩");
     }
 }

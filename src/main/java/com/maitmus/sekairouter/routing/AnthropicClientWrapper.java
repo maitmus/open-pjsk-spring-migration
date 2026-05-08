@@ -39,19 +39,14 @@ public class AnthropicClientWrapper {
                 .build();
     }
 
-    public String completeJson(String systemPrompt, String userPrompt) {
+    public String completeJson(PromptBlocks prompt, String userPrompt) {
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(Model.of(properties.model()))
                 // web_search responses contain search results embedded in the reply;
                 // recommended minimum is 5000 tokens. Current default (1000) may truncate.
                 // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
                 .maxTokens(properties.maxTokens())
-                .systemOfTextBlockParams(List.of(
-                        TextBlockParam.builder()
-                                .text(systemPrompt)
-                                .cacheControl(CacheControlEphemeral.builder().build())
-                                .build()
-                ))
+                .systemOfTextBlockParams(buildSystemBlocks(prompt))
                 .addUserMessage(userPrompt)
                 .addTool(WEB_SEARCH_TOOL)
                 .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
@@ -82,24 +77,14 @@ public class AnthropicClientWrapper {
      * Unlike {@link #completeJson}, this does not expect a JSON response — callers receive
      * the raw character utterance text.
      *
-     * Uses cache_control on the system prompt (heartbeat prompt is ~17K tokens that
-     * benefits from caching across repeated calls within the same day).
-     * web_search is included so the character can reference current events/weather if needed.
+     * Both blocks use TTL_1H so heartbeat's 30-min cadence stays cache-warm and the shared
+     * block keeps serving routing reads.
      */
-    public String generateUtterance(String systemPrompt, String userPrompt) {
-        // 하트비트는 30분 간격 호출이라 5min cache는 매번 만료 → write 비용 누적.
-        // 1h ttl: write 1.25x → 2.0x로 증가하지만 1시간 안 두 번째 호출이 read(0.1x)로 처리되어 평균 비용 절감.
+    public String generateUtterance(PromptBlocks prompt, String userPrompt) {
         MessageCreateParams params = MessageCreateParams.builder()
                 .model(Model.of(properties.model()))
                 .maxTokens(properties.maxTokens())
-                .systemOfTextBlockParams(List.of(
-                        TextBlockParam.builder()
-                                .text(systemPrompt)
-                                .cacheControl(CacheControlEphemeral.builder()
-                                        .ttl(CacheControlEphemeral.Ttl.TTL_1H)
-                                        .build())
-                                .build()
-                ))
+                .systemOfTextBlockParams(buildSystemBlocks(prompt))
                 .addUserMessage(userPrompt)
                 .addTool(WEB_SEARCH_TOOL)
                 .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
@@ -122,5 +107,26 @@ public class AnthropicClientWrapper {
                 .orElseThrow(() -> new IllegalStateException("No text content in utterance response"));
         log.debug("Anthropic utterance: {}", text);
         return text;
+    }
+
+    /**
+     * Two-block cache layout: shared prefix first (so prefix-match serves both paths),
+     * path-specific suffix second. Both blocks set cache_control with TTL_1H.
+     */
+    private static List<TextBlockParam> buildSystemBlocks(PromptBlocks prompt) {
+        return List.of(
+                TextBlockParam.builder()
+                        .text(prompt.sharedPrefix())
+                        .cacheControl(CacheControlEphemeral.builder()
+                                .ttl(CacheControlEphemeral.Ttl.TTL_1H)
+                                .build())
+                        .build(),
+                TextBlockParam.builder()
+                        .text(prompt.pathSuffix())
+                        .cacheControl(CacheControlEphemeral.builder()
+                                .ttl(CacheControlEphemeral.Ttl.TTL_1H)
+                                .build())
+                        .build()
+        );
     }
 }

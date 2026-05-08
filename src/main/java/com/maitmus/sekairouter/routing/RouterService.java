@@ -19,7 +19,7 @@ public class RouterService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RoutingDecision route(RouterRequest request, CharacterId suggestedCharacter) {
-        String systemPrompt = promptBuilder.build();
+        PromptBlocks systemPrompt = promptBuilder.build();
         String userPrompt = buildUserPrompt(request, suggestedCharacter);
 
         String json = anthropic.completeJson(systemPrompt, userPrompt);

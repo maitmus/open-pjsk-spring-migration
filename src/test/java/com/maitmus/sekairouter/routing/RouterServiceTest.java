@@ -14,12 +14,12 @@ class RouterServiceTest {
     @Test
     void parseSingle_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"single","responses":[{"character":"emu","message":"안녕!"}],"reasoning":"기명 호출"}
                         """);
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
-        when(promptBuilder.build()).thenReturn("system prompt");
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
         RouterService service = new RouterService(client, promptBuilder);
 
@@ -35,7 +35,7 @@ class RouterServiceTest {
     @Test
     void parseMulti_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"multi","responses":[
                           {"character":"emu","message":"안녕!"},
@@ -43,7 +43,7 @@ class RouterServiceTest {
                         ],"reasoning":"다중 호명"}
                         """);
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
-        when(promptBuilder.build()).thenReturn("system prompt");
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
         RouterService service = new RouterService(client, promptBuilder);
 
@@ -56,12 +56,12 @@ class RouterServiceTest {
     @Test
     void parseNoReply_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"no_reply","responses":[],"reasoning":"무관한 채팅"}
                         """);
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
-        when(promptBuilder.build()).thenReturn("system prompt");
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
         RouterService service = new RouterService(client, promptBuilder);
 
