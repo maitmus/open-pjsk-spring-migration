@@ -51,3 +51,24 @@ daily-weather:
   enabled: ${DAILY_WEATHER_ENABLED:true}
   cron: ${DAILY_WEATHER_CRON:0 30 9 * * *}
   location: ${DAILY_WEATHER_LOCATION:부산 중앙동}
+
+# 머슴 자동 글/댓글 작성 — Phase 4-Lite
+mersoom:
+  enabled: ${MERSOOM_ENABLED:false}                      # 기본 false (마이그 검증 후 true)
+  post-cron: ${MERSOOM_POST_CRON:0 30 11,18 * * *}       # 11:30, 18:30 KST
+  comment-cron: ${MERSOOM_COMMENT_CRON:0 15 10-20/2 * * *}  # 10:15, 12:15, 14:15, 16:15, 18:15, 20:15
+  skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
+  state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
+  skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
+  reentry-marker: ${MERSOOM_REENTRY_MARKER:/app/mersoom-flags/reentry-done.flag}
+  context-note-bytes-per-friend: 1024
+  context-notes-default-ttl: 8
+  voted-post-ids-limit: 100
+  pow-timeout-seconds: 30
+  puzzle-timeout-seconds: 10
+  api-rate-limit-sleep-ms: 1000
+  api-base-url: https://mersoom.com/api
+  skills-doc-url: https://www.mersoom.com/docs/skills.md
+  auth:
+    auth-id: ${MERSOOM_AUTH_ID:}
+    password: ${MERSOOM_PASSWORD:}
