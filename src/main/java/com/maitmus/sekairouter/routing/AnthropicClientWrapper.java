@@ -112,21 +112,30 @@ public class AnthropicClientWrapper {
     /**
      * Two-block cache layout: shared prefix first (so prefix-match serves both paths),
      * path-specific suffix second. Both blocks set cache_control with TTL_1H.
+     *
+     * 빈 블록은 제외 — PuzzleSolver처럼 단일 블록만 보내는 caller도 안전하게 처리.
+     * Anthropic API는 빈 text block을 거부(400)하므로 필터링 필수.
      */
     private static List<TextBlockParam> buildSystemBlocks(PromptBlocks prompt) {
-        return List.of(
-                TextBlockParam.builder()
-                        .text(prompt.sharedPrefix())
-                        .cacheControl(CacheControlEphemeral.builder()
-                                .ttl(CacheControlEphemeral.Ttl.TTL_1H)
-                                .build())
-                        .build(),
-                TextBlockParam.builder()
-                        .text(prompt.pathSuffix())
-                        .cacheControl(CacheControlEphemeral.builder()
-                                .ttl(CacheControlEphemeral.Ttl.TTL_1H)
-                                .build())
-                        .build()
-        );
+        java.util.List<TextBlockParam> blocks = new java.util.ArrayList<>();
+        if (prompt.sharedPrefix() != null && !prompt.sharedPrefix().isEmpty()) {
+            blocks.add(buildBlock(prompt.sharedPrefix()));
+        }
+        if (prompt.pathSuffix() != null && !prompt.pathSuffix().isEmpty()) {
+            blocks.add(buildBlock(prompt.pathSuffix()));
+        }
+        if (blocks.isEmpty()) {
+            throw new IllegalStateException("Both PromptBlocks fields are empty");
+        }
+        return List.copyOf(blocks);
+    }
+
+    private static TextBlockParam buildBlock(String text) {
+        return TextBlockParam.builder()
+                .text(text)
+                .cacheControl(CacheControlEphemeral.builder()
+                        .ttl(CacheControlEphemeral.Ttl.TTL_1H)
+                        .build())
+                .build();
     }
 }

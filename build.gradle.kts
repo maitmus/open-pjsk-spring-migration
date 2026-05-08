@@ -20,6 +20,7 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework:spring-web")
 
     // Discord
     implementation("net.dv8tion:JDA:5.2.1")
@@ -29,6 +30,7 @@ dependencies {
 
     // JSON
     implementation("com.fasterxml.jackson.module:jackson-module-parameter-names")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     // Lombok (1.18.38+ required for Java 24 support — TypeTag.UNKNOWN removed in JDK 24)
     compileOnly("org.projectlombok:lombok:1.18.38")
@@ -41,6 +43,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
+    testImplementation("org.wiremock:wiremock-standalone:3.13.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
