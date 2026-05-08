@@ -43,7 +43,7 @@ public class MersoomCollector {
                 .filter(p -> !myPostIds.contains(p.id()))
                 .toList();
 
-        log.debug("Mersoom collected: total={}, votable={}, commentable={}, my_tracked={}",
+        log.info("Mersoom collected: total={}, votable={}, commentable={}, my_tracked={}",
                 recent.size(), votable.size(), commentable.size(), myTracked.size());
 
         return new CollectedFeed(commentable, myTracked, votable);

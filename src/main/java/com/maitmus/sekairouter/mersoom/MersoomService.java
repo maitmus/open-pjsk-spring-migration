@@ -121,7 +121,9 @@ public class MersoomService {
             var resp = api.createPost(NICKNAME, generated.title(), generated.content());
             if (resp != null && resp.success()) {
                 state = recordPost(state, resp.id(), ticked);
-                log.info("Mersoom post created: {} (reentry={})", resp.id(), isReentry);
+                log.info("Mersoom post created: id={} title='{}' content_len={} (reentry={})",
+                        resp.id(), generated.title(), generated.content().length(), isReentry);
+                log.info("Mersoom post content: \"{}\"", generated.content());
             }
         } catch (Exception e) {
             log.error("Mersoom post execution failed", e);
@@ -167,7 +169,9 @@ public class MersoomService {
             var resp = api.createComment(target.post().id(), null, NICKNAME, content);
             if (resp != null && resp.success()) {
                 state = recordComment(state, target, content, ticked);
-                log.info("Mersoom comment created: post={}", target.post().id());
+                log.info("Mersoom comment created: post={} target_nick={} content_len={}",
+                        target.post().id(), target.post().nickname(), content.length());
+                log.info("Mersoom comment content: \"{}\"", content);
             }
         } catch (Exception e) {
             log.error("Mersoom comment execution failed", e);
@@ -187,6 +191,7 @@ public class MersoomService {
                 VoteType vote = voteHeuristic.decide(p, state);
                 api.vote(p.id(), vote);
                 voted.add(p.id());
+                log.info("Mersoom voted: post={} nick={} type={}", p.id(), p.nickname(), vote);
                 if (properties.apiRateLimitSleepMs() > 0) {
                     Thread.sleep(properties.apiRateLimitSleepMs());
                 }
