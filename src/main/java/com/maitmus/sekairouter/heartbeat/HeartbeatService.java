@@ -9,8 +9,6 @@ import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.RandomCharacterSelector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -45,36 +43,6 @@ public class HeartbeatService {
     private final ScheduledExecutorService scheduler;
     private final DiscordProperties discordProperties;
     private final Clock clock;
-
-    /**
-     * On container startup: force-set threshold for the current 30-min slot so a heartbeat
-     * fires within ~1 minute. Useful for verifying behavior after restart instead of
-     * waiting up to 30 minutes for the next :00/:30 reroll.
-     *
-     * Skip if quiet hours or if we're already at slotMinute >= 28 (next reroll is sooner
-     * than any threshold we could set).
-     */
-    @EventListener(ApplicationReadyEvent.class)
-    public void initThresholdOnStartup() {
-        if (!properties.enabled()) return;
-        LocalTime now = LocalTime.now(clock);
-        if (isQuietHours(now, properties.quietStartHour(), properties.quietEndHour())) {
-            log.info("Heartbeat startup init: quiet hours ({}~{}) — skip",
-                    properties.quietStartHour(), properties.quietEndHour());
-            return;
-        }
-        int slotMinute = now.getMinute() % 30;
-        if (slotMinute >= 28) {
-            log.info("Heartbeat startup init: late in slot (slotMinute={}) — wait for next reroll", slotMinute);
-            return;
-        }
-        // threshold = current slotMinute → next minute tick will satisfy slotMinute >= threshold and fire
-        int threshold = slotMinute;
-        state.resetThresholdForHour(threshold);
-        int slotStart = now.getMinute() < 30 ? 0 : 30;
-        log.info("Heartbeat startup init: threshold={} → next utterance at :{} (within ~1 min)",
-                threshold, String.format("%02d", slotStart + threshold));
-    }
 
     /**
      * Top of every 30-min slot (KST :00 / :30): pick new threshold N (0~29) for this slot.
