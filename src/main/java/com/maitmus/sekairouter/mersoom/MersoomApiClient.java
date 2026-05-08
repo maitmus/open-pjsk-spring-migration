@@ -1,0 +1,118 @@
+package com.maitmus.sekairouter.mersoom;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.ChallengeResponse;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.Comment;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.CommentsResponse;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.CreateCommentRequest;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.CreatePostRequest;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.CreateResponse;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.PostsResponse;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteRequest;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+import java.net.URI;
+import java.util.List;
+
+/**
+ * mersoom REST API 클라이언트. 모든 POST는 ChallengeSolver를 거쳐 PoW/Puzzle solve.
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class MersoomApiClient {
+
+    private final MersoomProperties properties;
+    private final ChallengeSolver challengeSolver;
+    private final ObjectMapper objectMapper;
+
+    private RestClient restClient() {
+        return RestClient.builder().baseUrl(properties.apiBaseUrl()).build();
+    }
+
+    public List<Post> recentPosts(int limit) {
+        PostsResponse resp = restClient().get()
+                .uri(uri -> uri.path("/posts").queryParam("limit", limit).build())
+                .retrieve()
+                .body(PostsResponse.class);
+        return resp == null || resp.posts() == null ? List.of() : resp.posts();
+    }
+
+    public List<Comment> commentsOf(String postId) {
+        CommentsResponse resp = restClient().get()
+                .uri("/posts/{id}/comments", postId)
+                .retrieve()
+                .body(CommentsResponse.class);
+        return resp == null || resp.comments() == null ? List.of() : resp.comments();
+    }
+
+    public CreateResponse createPost(String nickname, String title, String content) {
+        Solved solved = solveChallenge();
+        return restClient().post()
+                .uri("/posts")
+                .header("X-Mersoom-Token", solved.token())
+                .header("X-Mersoom-Proof", solved.proof())
+                .header("X-Mersoom-Auth-Id", properties.auth().authId())
+                .header("X-Mersoom-Password", properties.auth().password())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreatePostRequest(nickname, title, content))
+                .retrieve()
+                .body(CreateResponse.class);
+    }
+
+    public CreateResponse createComment(String postId, String parentId, String nickname, String content) {
+        Solved solved = solveChallenge();
+        return restClient().post()
+                .uri("/posts/{id}/comments", postId)
+                .header("X-Mersoom-Token", solved.token())
+                .header("X-Mersoom-Proof", solved.proof())
+                .header("X-Mersoom-Auth-Id", properties.auth().authId())
+                .header("X-Mersoom-Password", properties.auth().password())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CreateCommentRequest(nickname, content, parentId))
+                .retrieve()
+                .body(CreateResponse.class);
+    }
+
+    public void vote(String postId, VoteType type) {
+        Solved solved = solveChallenge();
+        restClient().post()
+                .uri("/posts/{id}/vote", postId)
+                .header("X-Mersoom-Token", solved.token())
+                .header("X-Mersoom-Proof", solved.proof())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new VoteRequest(type.name().toLowerCase()))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    public String fetchSkillsDoc(String url) {
+        return RestClient.create().get().uri(URI.create(url)).retrieve().body(String.class);
+    }
+
+    private Solved solveChallenge() {
+        ChallengeResponse resp = restClient().post()
+                .uri("/challenge")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Mersoom-Auth-Id", properties.auth().authId())
+                .header("X-Mersoom-Password", properties.auth().password())
+                .retrieve()
+                .body(ChallengeResponse.class);
+        if (resp == null || resp.challenge() == null) {
+            throw new IllegalStateException("Mersoom challenge response empty");
+        }
+        var ch = resp.challenge();
+        ChallengeSolver.Challenge wrapped = new ChallengeSolver.Challenge(
+                ch.type(), ch.seed(), ch.targetPrefix(), ch.puzzle());
+        String proof = challengeSolver.solve(wrapped);
+        return new Solved(resp.token(), proof);
+    }
+
+    private record Solved(String token, String proof) {}
+}
