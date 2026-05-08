@@ -17,10 +17,15 @@ public class ChallengeSolver {
     private final PuzzleSolver puzzleSolver;
 
     public String solve(Challenge ch) {
-        return switch (ch.type()) {
+        // PoW 응답에 type 필드가 누락된 경우(현재 mersoom 운영 디폴트) → seed/prefix 존재 시 pow로 간주
+        String type = ch.type();
+        if (type == null || type.isBlank()) {
+            type = (ch.puzzle() != null && !ch.puzzle().isBlank()) ? "puzzle" : "pow";
+        }
+        return switch (type) {
             case "pow" -> powSolver.solve(ch.seed(), ch.targetPrefix());
             case "puzzle" -> puzzleSolver.solve(ch.puzzle());
-            default -> throw new IllegalStateException("Unknown challenge type: " + ch.type());
+            default -> throw new IllegalStateException("Unknown challenge type: " + type);
         };
     }
 
