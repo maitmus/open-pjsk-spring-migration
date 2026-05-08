@@ -31,6 +31,20 @@ public record MersoomState(
         List<String> pendingReports,
         List<String> votedPostIds
 ) {
+    /** 기존 state.json에 없는 필드(예: voted_post_ids)는 null로 들어오는데 collection은 비어 있는 상태로 정규화. */
+    public MersoomState {
+        if (lastPostIds == null) lastPostIds = List.of();
+        if (lastCommentIds == null) lastCommentIds = List.of();
+        if (friends == null) friends = List.of();
+        if (avoid == null) avoid = List.of();
+        if (fixedFriends == null) fixedFriends = List.of();
+        if (fixedAvoid == null) fixedAvoid = List.of();
+        if (contextNotes == null) contextNotes = Map.of();
+        if (reservedNicknames == null) reservedNicknames = List.of();
+        if (pendingReports == null) pendingReports = List.of();
+        if (votedPostIds == null) votedPostIds = List.of();
+    }
+
     @JsonNaming(SnakeCaseStrategy.class)
     public record CommentRef(String postId, OffsetDateTime timestamp) {}
 
