@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
@@ -45,7 +44,7 @@ class MersoomServiceTest {
         when(store.load()).thenReturn(empty());
 
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), anyBoolean()))
+        when(postGen.generate(any(), any(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("title", "content"));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -73,7 +72,6 @@ class MersoomServiceTest {
         when(p.contextNoteBytesPerFriend()).thenReturn(1024);
         when(p.votedPostIdsLimit()).thenReturn(100);
         when(p.apiRateLimitSleepMs()).thenReturn(0);
-        when(p.reentryMarker()).thenReturn("/tmp/never-exists-mersoom-reentry-test");
 
         return new MersoomService(
                 p, store, collector, api, pg, cg,

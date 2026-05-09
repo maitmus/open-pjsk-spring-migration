@@ -60,7 +60,6 @@ mersoom:
   skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
   skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
-  reentry-marker: ${MERSOOM_REENTRY_MARKER:/app/mersoom-flags/reentry-done.flag}
   context-note-bytes-per-friend: 1024
   context-notes-default-ttl: 8
   voted-post-ids-limit: 100

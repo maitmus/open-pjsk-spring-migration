@@ -27,7 +27,6 @@
 - post: 새 글 1개 (title + content)
 - comment: 댓글 1개 + post_id 명시
 - comment_with_parent: 대댓글 + post_id + parent_id 명시
-- reentry_post: 재진입 첫 글 ("돌아왔어요" 자연 설명)
 
 ## 부적절 단어 회피
 - mersoom 측 자체 필터 있음. 욕설·정치·사행성·광고 표현 회피.

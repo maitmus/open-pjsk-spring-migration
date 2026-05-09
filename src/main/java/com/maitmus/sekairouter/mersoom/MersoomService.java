@@ -7,15 +7,9 @@ import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.mersoom.MersoomState.CommentRef;
 import com.maitmus.sekairouter.mersoom.MersoomState.ContextNote;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -26,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** mersoom 머슴 메인 서비스 — cron 트리거 + 흐름 제어. */
 @Slf4j
@@ -47,7 +40,6 @@ public class MersoomService {
     private final ContextNoteManager contextNoteManager;
     private final RelationshipPromoter relationshipPromoter;
     private final Clock clock;
-    private final AtomicBoolean reentryPending = new AtomicBoolean(false);
     private final Object lock = new Object();
 
     public MersoomService(MersoomProperties properties, MersoomStateStore store, MersoomCollector collector,
@@ -65,21 +57,6 @@ public class MersoomService {
         this.contextNoteManager = contextNoteManager;
         this.relationshipPromoter = relationshipPromoter;
         this.clock = clock;
-    }
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void scheduleReentryIfNeeded() {
-        if (!properties.enabled()) return;
-        try {
-            MersoomState state = store.load();
-            if (state.lastPostIds().isEmpty()) return;
-            Path marker = Paths.get(properties.reentryMarker());
-            if (Files.exists(marker)) return;
-            log.info("Mersoom re-entry pending — 다음 post-cron에서 첫 글 작성 예정");
-            reentryPending.set(true);
-        } catch (Exception e) {
-            log.warn("Re-entry check failed", e);
-        }
     }
 
     @Scheduled(cron = "${mersoom.post-cron}", zone = "Asia/Seoul")
@@ -107,8 +84,6 @@ public class MersoomService {
     }
 
     private void doExecutePost() {
-        boolean isReentry = reentryPending.compareAndSet(true, false);
-
         MersoomState state = store.load();
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
         List<String> updatedVoted = castVotes(state, feed.votable());
@@ -116,13 +91,12 @@ public class MersoomService {
         Map<String, ContextNote> ticked = contextNoteManager.tickAndPrune(state.contextNotes());
 
         try {
-            var generated = postGenerator.generate(state, feed,
-                    LocalDate.now(clock.withZone(KST)), isReentry);
+            var generated = postGenerator.generate(state, feed, LocalDate.now(clock.withZone(KST)));
             var resp = api.createPost(NICKNAME, generated.title(), generated.content());
             if (resp != null && resp.success()) {
                 state = recordPost(state, resp.id(), ticked);
-                log.info("Mersoom post created: id={} title='{}' content_len={} (reentry={})",
-                        resp.id(), generated.title(), generated.content().length(), isReentry);
+                log.info("Mersoom post created: id={} title='{}' content_len={}",
+                        resp.id(), generated.title(), generated.content().length());
                 log.info("Mersoom post content: \"{}\"", generated.content());
             }
         } catch (Exception e) {
@@ -132,19 +106,6 @@ public class MersoomService {
 
         state = relationshipPromoter.evaluate(state);
         store.save(state);
-
-        if (isReentry) {
-            try {
-                Path marker = Paths.get(properties.reentryMarker());
-                if (marker.getParent() != null) {
-                    Files.createDirectories(marker.getParent());
-                }
-                Files.createFile(marker);
-                log.info("Mersoom re-entry marker created: {}", marker);
-            } catch (IOException e) {
-                log.warn("Failed to create reentry marker", e);
-            }
-        }
     }
 
     private void doExecuteComment() {

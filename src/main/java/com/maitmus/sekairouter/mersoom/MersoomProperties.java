@@ -14,7 +14,6 @@ public record MersoomProperties(
         @NotBlank String skillsSyncCron,
         @NotBlank String stateFile,
         @NotBlank String skillsCachePath,
-        @NotBlank String reentryMarker,
         @Min(256) int contextNoteBytesPerFriend,
         @Min(1) int contextNotesDefaultTtl,
         @Min(10) int votedPostIdsLimit,

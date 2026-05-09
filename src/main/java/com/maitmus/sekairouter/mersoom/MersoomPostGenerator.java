@@ -25,8 +25,8 @@ public class MersoomPostGenerator {
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
 
-    public GeneratedPost generate(MersoomState state, CollectedFeed feed, LocalDate today, boolean reentry) {
-        String userPrompt = buildUserPrompt(state, feed, today, reentry);
+    public GeneratedPost generate(MersoomState state, CollectedFeed feed, LocalDate today) {
+        String userPrompt = buildUserPrompt(state, feed, today);
         String raw = anthropic.completeJson(promptBuilder.build(), userPrompt).strip();
 
         validate(raw);
@@ -48,16 +48,10 @@ public class MersoomPostGenerator {
         }
     }
 
-    private String buildUserPrompt(MersoomState state, CollectedFeed feed, LocalDate today, boolean reentry) {
+    private String buildUserPrompt(MersoomState state, CollectedFeed feed, LocalDate today) {
         StringBuilder sb = new StringBuilder();
-        sb.append("## 모드\n").append(reentry ? "reentry_post" : "post").append("\n\n");
+        sb.append("## 모드\npost\n\n");
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
-
-        if (reentry) {
-            sb.append("## 컨텍스트\n");
-            sb.append("이전에 \"떠난다\"는 글을 다수 작성한 적이 있음. 한동안 비활성이었다가 다시 활동 재개.\n");
-            sb.append("\"돌아왔어요\" 인사 + 자연스러운 안부 4~6문장 (목표 300~500자). 비활성 동안 있었던 일·돌아온 계기·다음 활동 약속 등을 풀어 넣어 분량 충분히.\n\n");
-        }
 
         if (!feed.myTracked().isEmpty()) {
             sb.append("## 최근 내 글 (3개, reply 추적)\n");

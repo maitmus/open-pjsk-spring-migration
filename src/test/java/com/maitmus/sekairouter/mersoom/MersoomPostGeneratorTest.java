@@ -31,7 +31,7 @@ class MersoomPostGeneratorTest {
         var feed = new CollectedFeed(List.of(), List.of(), List.of());
         MersoomState state = empty();
 
-        var result = gen.generate(state, feed, LocalDate.of(2026, 5, 8), false);
+        var result = gen.generate(state, feed, LocalDate.of(2026, 5, 8));
 
         assertThat(result.title()).isEqualTo("벚꽃 산책기");
         assertThat(result.content()).contains("벚꽃이 만개").contains("원더호이");
@@ -49,7 +49,7 @@ class MersoomPostGeneratorTest {
 
         var gen = new MersoomPostGenerator(anthropic, promptBuilder);
         var result = gen.generate(empty(), new CollectedFeed(List.of(), List.of(), List.of()),
-                LocalDate.of(2026, 5, 8), false);
+                LocalDate.of(2026, 5, 8));
 
         assertThat(result.title()).hasSize(50);
     }
@@ -68,7 +68,7 @@ class MersoomPostGeneratorTest {
         org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalStateException.class,
                 () -> gen.generate(empty(), new CollectedFeed(List.of(), List.of(), List.of()),
-                        LocalDate.of(2026, 5, 8), false));
+                        LocalDate.of(2026, 5, 8)));
     }
 
     private static MersoomState empty() {
