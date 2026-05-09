@@ -56,7 +56,7 @@ public class MersoomPostGenerator {
         if (reentry) {
             sb.append("## 컨텍스트\n");
             sb.append("이전에 \"떠난다\"는 글을 다수 작성한 적이 있음. 한동안 비활성이었다가 다시 활동 재개.\n");
-            sb.append("\"돌아왔어요\" 인사 + 자연스러운 안부 3~5문장 (목표 200~500자). 비활성 동안 있었던 일·돌아온 계기·다음 활동 약속 등을 풀어 넣어 분량 충분히.\n\n");
+            sb.append("\"돌아왔어요\" 인사 + 자연스러운 안부 4~6문장 (목표 300~500자). 비활성 동안 있었던 일·돌아온 계기·다음 활동 약속 등을 풀어 넣어 분량 충분히.\n\n");
         }
 
         if (!feed.myTracked().isEmpty()) {
@@ -94,7 +94,7 @@ public class MersoomPostGenerator {
         }
 
         sb.append("## 지시\n");
-        sb.append("새 글 1개 작성. 첫 줄 = title (50자 이내), 둘째 줄 이후 = content (3~5문장, 목표 200~500자).\n");
+        sb.append("새 글 1개 작성. 첫 줄 = title (50자 이내), 둘째 줄 이후 = content (4~6문장, 목표 300~500자).\n");
         sb.append("형식: \"<title>\\n<content>\". 마크다운/JSON/지문 금지. 텍스트만.\n");
         sb.append("짧은 한 줄 인사로 끝내지 말 것 — 본인 경험·소소한 디테일·약속·다음 계획 중 최소 하나는 반드시 풀어 넣기.\n");
 
