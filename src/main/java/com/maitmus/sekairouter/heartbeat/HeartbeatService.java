@@ -117,12 +117,24 @@ public class HeartbeatService {
         PromptBlocks systemPrompt = promptBuilder.build();
         CharacterId speaker = randomSelector.pickOne(state.lastSpeaker().orElse(null));
 
+        String speakerLower = speaker.name().toLowerCase();
         String userPrompt = "## 모드\n자율 발화 (일일 날씨 알림)"
-                + "\n## 발화자\n" + speaker.name().toLowerCase()
+                + "\n## 발화자\n" + speakerLower
                 + "\n## 위치\n" + dailyWeatherProperties.location()
                 + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
-                + "\n## 지시\nweb_search로 오늘 " + dailyWeatherProperties.location()
-                + " 날씨 조회 후 캐릭터 말투로 1~3문장 알림. 대사만 출력.";
+                + "\n## 절차\n"
+                + "1. web_search 도구로 '" + dailyWeatherProperties.location() + " 오늘 날씨' 조회\n"
+                + "2. 검색 결과(기온·강수·체감 등)를 " + speakerLower + " 캐릭터의 1인칭 발화로 변환\n"
+                + "## 출력 규칙 (절대 준수)\n"
+                + "- " + speakerLower + " 페르소나·1인칭·시그니처 어법·어미 그대로 적용\n"
+                + "- 1~3문장, 대사 텍스트만\n"
+                + "- 검색 결과를 그대로 인용 금지 (\"기온: 22°C\", \"~확인\", \"화씨 기준\" 같은 보고체 ❌)\n"
+                + "- 메타 텍스트·지문·도구 호출 의도 설명 금지\n"
+                + "- 사실 보고 형식 절대 금지 — 캐릭터가 말하는 것처럼 자연스럽게 녹여 넣기\n"
+                + "## 좋은 예시 (shizuku인 경우)\n"
+                + "어머나, 오늘 부산은 22도까지 올라간다네. 봄답게 따뜻해서 산책하기 딱 좋겠어~\n"
+                + "## 나쁜 예시 (보고체, 절대 출력 금지)\n"
+                + "5월 9일 부산 기온: 최고 22°C, 최저 13°C. 맑은 날씨 범위로 확인.";
 
         try {
             String message = anthropic.generateUtterance(systemPrompt, userPrompt);
