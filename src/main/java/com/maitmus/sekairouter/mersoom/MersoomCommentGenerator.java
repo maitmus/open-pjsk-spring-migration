@@ -58,7 +58,8 @@ public class MersoomCommentGenerator {
         }
 
         sb.append("## 지시\n");
-        sb.append("이 글에 댓글 1개. 1~2문장 (500자 이내). 에무 톤. 텍스트만.\n");
+        sb.append("이 글에 댓글 1개. 2~4문장 (목표 100~300자). 에무 톤. 텍스트만.\n");
+        sb.append("짧은 공감 한 줄로 끝내지 말 것 — 본인 경험·소소한 디테일·후속 질문·약속 중 최소 하나는 풀어 넣기.\n");
         return sb.toString();
     }
 
