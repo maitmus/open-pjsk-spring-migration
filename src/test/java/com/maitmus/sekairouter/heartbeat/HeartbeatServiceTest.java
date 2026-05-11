@@ -36,6 +36,7 @@ class HeartbeatServiceTest {
     private HeartbeatPromptBuilder promptBuilder;
     private AnthropicClientWrapper anthropic;
     private RandomCharacterSelector randomSelector;
+    private HeartbeatSeedPicker seedPicker;
     private ProxySpeechService proxy;
     private TypingIndicatorService typing;
     private ScheduledExecutorService scheduler;
@@ -48,6 +49,7 @@ class HeartbeatServiceTest {
         promptBuilder = mock(HeartbeatPromptBuilder.class);
         anthropic = mock(AnthropicClientWrapper.class);
         randomSelector = mock(RandomCharacterSelector.class);
+        seedPicker = mock(HeartbeatSeedPicker.class);
         proxy = mock(ProxySpeechService.class);
         typing = mock(TypingIndicatorService.class);
         scheduler = mock(ScheduledExecutorService.class);
@@ -59,6 +61,9 @@ class HeartbeatServiceTest {
         when(anthropic.generateUtterance(any(), anyString())).thenReturn("안녕!");
         when(randomSelector.pickOne(any())).thenReturn(CharacterId.EMU);
         when(state.lastSpeaker()).thenReturn(Optional.empty());
+        when(state.recentUtterances()).thenReturn(List.of());
+        when(seedPicker.pickTopic()).thenReturn("test-topic");
+        when(seedPicker.pickDialoguePattern()).thenReturn("test-pattern");
         when(events.todayOverride()).thenReturn(Optional.empty());
         // Stub schedule to prevent NPE on ScheduledFuture return value (even though we ignore it)
         doReturn(null).when(scheduler).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
@@ -191,6 +196,36 @@ class HeartbeatServiceTest {
 
         // lastSpeaker recorded
         verify(state).recordLastSpeaker(CharacterId.AIRI);
+
+        // utterance recorded for anti-repetition ring buffer
+        verify(state).recordUtterance(CharacterId.AIRI, "오늘 날씨 좋다~");
+
+        // topic seed picked + injected into user prompt
+        verify(seedPicker).pickTopic();
+        ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(anthropic).generateUtterance(any(), userPromptCaptor.capture());
+        assertThat(userPromptCaptor.getValue()).contains("오늘의 토픽 시드");
+    }
+
+    @Test
+    void heartbeatCheck_solo_injectsRecentUtterancesBlock_whenBufferNonempty() {
+        when(state.getThreshold()).thenReturn(0);
+        when(randomSelector.pickOne(any())).thenReturn(CharacterId.AIRI);
+        when(state.recentUtterances()).thenReturn(List.of(
+                new HeartbeatStateStore.RecentUtterance(CharacterId.EMU, "원더호~이☆ 붕어빵 먹었어요!"),
+                new HeartbeatStateStore.RecentUtterance(CharacterId.NENE, "...대전 게임 1등.")
+        ));
+
+        HeartbeatService service = buildService(enabledProps(0.0), clockAt(14, 10));
+        service.heartbeatCheck();
+
+        ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(anthropic).generateUtterance(any(), userPromptCaptor.capture());
+        String prompt = userPromptCaptor.getValue();
+        assertThat(prompt).contains("최근 발화 이력");
+        assertThat(prompt).contains("원더호~이");
+        assertThat(prompt).contains("대전 게임");
+        assertThat(prompt).contains("회피");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -245,6 +280,6 @@ class HeartbeatServiceTest {
         DailyWeatherProperties dailyWeatherProps = new DailyWeatherProperties(false, "0 30 9 * * *", "부산 중앙동");
         return new HeartbeatService(
                 props, dailyWeatherProps, state, events, promptBuilder, anthropic,
-                randomSelector, proxy, typing, scheduler, discordProperties, clock);
+                randomSelector, seedPicker, proxy, typing, scheduler, discordProperties, clock);
     }
 }

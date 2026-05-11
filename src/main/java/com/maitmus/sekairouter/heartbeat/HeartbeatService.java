@@ -1,6 +1,7 @@
 package com.maitmus.sekairouter.heartbeat;
 
 import com.maitmus.sekairouter.config.DiscordProperties;
+import com.maitmus.sekairouter.heartbeat.HeartbeatStateStore.RecentUtterance;
 import com.maitmus.sekairouter.persona.CharacterId;
 import com.maitmus.sekairouter.proxy.ProxySpeechService;
 import com.maitmus.sekairouter.proxy.TypingIndicatorService;
@@ -16,6 +17,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -38,6 +40,7 @@ public class HeartbeatService {
     private final HeartbeatPromptBuilder promptBuilder;
     private final AnthropicClientWrapper anthropic;
     private final RandomCharacterSelector randomSelector;
+    private final HeartbeatSeedPicker seedPicker;
     private final ProxySpeechService proxy;
     private final TypingIndicatorService typing;
     private final ScheduledExecutorService scheduler;
@@ -139,12 +142,14 @@ public class HeartbeatService {
                 + "## 나쁜 예시 (절대 출력 금지)\n"
                 + "❌ 5월 10일 부산 기온: 최고 22°C, 최저 13°C. 맑은 날씨 범위로 확인.\n"
                 + "❌ 맑은 날씨에 체감은 살짝 쌀쌀한 편이네. 아이리답게 자연스럽게 발화 변환.\n"
-                + "❌ 위 정보 바탕으로 캐릭터 톤으로 변환했어요.";
+                + "❌ 위 정보 바탕으로 캐릭터 톤으로 변환했어요."
+                + recentUtterancesBlock();
 
         try {
             String message = anthropic.generateUtterance(systemPrompt, userPrompt);
             scheduleProxySend(speaker, channelId, message, 0);
             state.recordLastSpeaker(speaker);
+            state.recordUtterance(speaker, message);
             log.info("Daily weather cast: speaker={}, location={}", speaker, dailyWeatherProperties.location());
         } catch (Exception e) {
             log.error("Daily weather cast failed", e);
@@ -159,38 +164,51 @@ public class HeartbeatService {
         PromptBlocks systemPrompt = promptBuilder.build();
 
         if (!dialogue) {
+            String topicSeed = seedPicker.pickTopic();
             String userPrompt = "## 모드\n자율 발화 (솔로)\n## 발화자\n" + speaker.name().toLowerCase()
                     + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
+                    + "\n## 오늘의 토픽 시드 (이 각도에서 발화)\n" + topicSeed
                     + "\n## 지시\n" + speaker.name().toLowerCase()
-                    + "이(가) 채널에 자기 일상/감상/취미/근황을 자연스럽게 한 마디 한다. 1~3문장. 대사만 출력.";
+                    + "이(가) 채널에 자기 일상/감상/취미/근황을 자연스럽게 한 마디 한다. **위 토픽 시드 각도를 살려** 1~3문장. 대사만 출력."
+                    + recentUtterancesBlock();
             String message = anthropic.generateUtterance(systemPrompt, userPrompt);
             scheduleProxySend(speaker, channelId, message, 0);
             state.recordLastSpeaker(speaker);
+            state.recordUtterance(speaker, message);
             return;
         }
 
         // 2-character dialogue
         CharacterId partner = randomSelector.pickOne(speaker);
+        String topicSeed = seedPicker.pickTopic();
+        String dialoguePattern = seedPicker.pickDialoguePattern();
         String firstUser = "## 모드\n자율 발화 (2인 대화 — 첫 발화)\n## 발화자\n" + speaker.name().toLowerCase()
                 + "\n## 동료\n" + partner.name().toLowerCase()
                 + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
+                + "\n## 오늘의 토픽 시드\n" + topicSeed
+                + "\n## 첫 발화 패턴 시드 (이 패턴으로 문장 시작)\n" + dialoguePattern
                 + "\n## 지시\n" + speaker.name().toLowerCase()
                 + "이(가) " + partner.name().toLowerCase()
-                + "에게 채널에서 가볍게 말을 건다. GRADES.md 호칭/존댓말 매트릭스 준수. 1~2문장. 대사만 출력.";
+                + "에게 채널에서 가볍게 말을 건다. **위 토픽 시드와 패턴 시드를 반영**해 1~2문장. "
+                + "GRADES.md 호칭/존댓말 매트릭스 준수. 대사만 출력."
+                + recentUtterancesBlock();
         String firstLine = anthropic.generateUtterance(systemPrompt, firstUser);
         scheduleProxySend(speaker, channelId, firstLine, 0);
+        state.recordUtterance(speaker, firstLine);
 
         String secondUser = "## 모드\n자율 발화 (2인 대화 — 응답)\n## 발화자\n" + partner.name().toLowerCase()
                 + "\n## 직전 발화자\n" + speaker.name().toLowerCase()
                 + "\n## 직전 대사\n" + firstLine
                 + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
                 + "\n## 지시\n" + partner.name().toLowerCase()
-                + "이(가) 위 대사에 자연스럽게 반응한다. GRADES.md 호칭/존댓말 매트릭스 준수. 1~2문장. 대사만 출력.";
+                + "이(가) 위 대사에 자연스럽게 반응한다. GRADES.md 호칭/존댓말 매트릭스 준수. 1~2문장. 대사만 출력."
+                + recentUtterancesBlock();
         String secondLine = anthropic.generateUtterance(systemPrompt, secondUser);
         // Schedule second send after first send completes
         long secondDelay = TYPING_BEFORE_SEND_MS + INTER_MESSAGE_BUFFER_MS + TYPING_BEFORE_SEND_MS;
         scheduleProxySend(partner, channelId, secondLine, secondDelay);
         state.recordLastSpeaker(partner);
+        state.recordUtterance(partner, secondLine);
     }
 
     private void executeEventHeartbeat(EventsCalendar.EventOverride override) {
@@ -207,10 +225,33 @@ public class HeartbeatService {
         String userPrompt = "## 모드\n자율 발화 (이벤트)\n## 이벤트\n" + override.label() + " (" + override.kind() + ")"
                 + "\n## 발화자\n" + speaker.name().toLowerCase()
                 + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
-                + "\n## 지시\n오늘 이벤트와 연결되는 자연스러운 한 마디. 1~3문장. 대사만 출력.";
+                + "\n## 지시\n오늘 이벤트와 연결되는 자연스러운 한 마디. 1~3문장. 대사만 출력."
+                + recentUtterancesBlock();
         String message = anthropic.generateUtterance(systemPrompt, userPrompt);
         scheduleProxySend(speaker, channelId, message, 0);
         state.recordLastSpeaker(speaker);
+        state.recordUtterance(speaker, message);
+    }
+
+    /**
+     * 최근 발화 이력을 user prompt 말미에 붙이는 블록.
+     * LLM이 직전 발화들과 토픽·소재·문장 시작 패턴이 겹치지 않도록 회피하게 한다.
+     */
+    private String recentUtterancesBlock() {
+        List<RecentUtterance> list = state.recentUtterances();
+        if (list == null || list.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("\n\n## 최근 발화 이력 (반복 회피용 — 오래된 → 최근)\n");
+        for (RecentUtterance u : list) {
+            sb.append("- [").append(u.speaker().name().toLowerCase()).append("] ")
+                    .append(safeOneLine(u.text())).append("\n");
+        }
+        sb.append("\n위 발화들과 **소재·토픽·문장 시작 패턴이 겹치지 않도록** 다른 각도로 발화. ")
+                .append("특히 같은 캐릭터의 직전 발화에서 사용한 시그니처 소재(예: 붕어빵·조깅·대전 게임·화과자·이미지 트레이닝·산책·새 곡 등)는 의식적으로 회피하고 페르소나 안에서 다른 면을 보일 것.");
+        return sb.toString();
+    }
+
+    private static String safeOneLine(String s) {
+        return s == null ? "" : s.replace("\n", " ").strip();
     }
 
     private void scheduleProxySend(CharacterId character, String channelId, String message, long extraDelayMs) {
