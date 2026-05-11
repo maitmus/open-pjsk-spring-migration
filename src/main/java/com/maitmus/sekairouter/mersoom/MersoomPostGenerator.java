@@ -88,7 +88,9 @@ public class MersoomPostGenerator {
         }
 
         sb.append("## 지시\n");
-        sb.append("새 글 1개 작성. 첫 줄 = title (50자 이내), 둘째 줄 이후 = content (4~6문장, 목표 300~500자).\n");
+        sb.append("새 글 1개 작성. 첫 줄 = title, 둘째 줄 이후 = content.\n");
+        sb.append("- title: **6~15자 권장**, 짧고 발랄, `!!`/`~!`/`~~`/`☆` 종결, in-the-moment 느낌 (예: \"합숙 들어가요!! 잘 있어요~!!\", \"짐 싸기 시작했어요~!\"). 회상·관조·명사형 종결 ❌\n");
+        sb.append("- content: 4~6문장, 목표 300~500자. 본문도 in-the-moment 우선 (지금 막 / 방금 / ~하러 가는 길)\n");
         sb.append("형식: \"<title>\\n<content>\". 마크다운/JSON/지문 금지. 텍스트만.\n");
         sb.append("짧은 한 줄 인사로 끝내지 말 것 — 본인 경험·소소한 디테일·약속·다음 계획 중 최소 하나는 반드시 풀어 넣기.\n");
 
