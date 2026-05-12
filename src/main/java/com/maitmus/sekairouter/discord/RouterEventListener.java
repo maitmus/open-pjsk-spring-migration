@@ -14,13 +14,16 @@ import com.maitmus.sekairouter.routing.RouterService;
 import com.maitmus.sekairouter.routing.RoutingDecision;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -46,6 +49,22 @@ public class RouterEventListener extends ListenerAdapter {
     private final ProxySpeechService proxy;
     private final TypingIndicatorService typing;
     private final ScheduledExecutorService scheduler;
+    private final Map<CharacterId, JDA> characterJdas;
+
+    /** botUserId → CharacterId. JDA awaitReady() 후 selfUser ID 안정적으로 알 수 있어 lazy 빌드. */
+    private volatile Map<String, CharacterId> botUserIdToCharacter;
+
+    private Map<String, CharacterId> botUserIdMap() {
+        Map<String, CharacterId> snapshot = botUserIdToCharacter;
+        if (snapshot != null) return snapshot;
+        synchronized (this) {
+            if (botUserIdToCharacter != null) return botUserIdToCharacter;
+            Map<String, CharacterId> built = new HashMap<>();
+            characterJdas.forEach((id, jda) -> built.put(jda.getSelfUser().getId(), id));
+            botUserIdToCharacter = Map.copyOf(built);
+            return botUserIdToCharacter;
+        }
+    }
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
@@ -71,9 +90,15 @@ public class RouterEventListener extends ListenerAdapter {
         memory.append(channelId, new ConversationTurn("user", content, Instant.now().getEpochSecond()));
 
         CharacterId last = lastSpeaker.get(channelId).orElse(null);
-        CharacterId suggested = randomSelector.pickOne(last);
+        CharacterId forced = detectForcedCharacter(message);
+        CharacterId suggested = forced == null ? randomSelector.pickOne(last) : null;
 
-        RouterRequest request = new RouterRequest(channelId, memory.getRecent(channelId), content, last);
+        if (forced != null) {
+            log.info("Reply detected — forcing character {} for channel {}", forced, channelId);
+        }
+
+        RouterRequest request = new RouterRequest(
+                channelId, memory.getRecent(channelId), content, last, forced);
 
         try {
             RoutingDecision decision = routerService.route(request, suggested);
@@ -81,6 +106,18 @@ public class RouterEventListener extends ListenerAdapter {
         } catch (Exception e) {
             log.error("Routing failed for message on {}: {}", channelId, e.getMessage(), e);
         }
+    }
+
+    /**
+     * Discord reply 감지. 답장 대상 메시지의 작성자가 캐릭터 봇이면 해당 CharacterId 반환.
+     * - 답장 아니면 null
+     * - 답장 대상이 사용자/외부 봇이면 null (기존 routing 로직 유지)
+     * - referencedMessage가 cache miss면 null (best effort, fetch는 latency 우려로 안 함)
+     */
+    private CharacterId detectForcedCharacter(Message message) {
+        Message ref = message.getReferencedMessage();
+        if (ref == null) return null;
+        return botUserIdMap().get(ref.getAuthor().getId());
     }
 
     private void handleDecision(String channelId, RoutingDecision decision) {

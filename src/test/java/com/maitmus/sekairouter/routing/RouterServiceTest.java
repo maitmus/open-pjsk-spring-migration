@@ -2,11 +2,13 @@ package com.maitmus.sekairouter.routing;
 
 import com.maitmus.sekairouter.persona.CharacterId;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RouterServiceTest {
@@ -51,6 +53,36 @@ class RouterServiceTest {
 
         assertThat(decision).isInstanceOf(RoutingDecision.Multi.class);
         assertThat(decision.responses()).hasSize(2);
+    }
+
+    @Test
+    void forceCharacter_injectsForceDirectiveInPrompt_andOmitsSuggested() {
+        AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"decision":"single","responses":[{"character":"nene","message":"...왔어"}],"reasoning":"forced"}
+                        """);
+        SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
+
+        RouterService service = new RouterService(client, promptBuilder);
+
+        RouterRequest request = new RouterRequest(
+                "ch1", List.of(), "ㅎㅇ", CharacterId.EMU, CharacterId.NENE);
+        // suggested=EMU should be ignored when force is set
+        RoutingDecision decision = service.route(request, CharacterId.EMU);
+
+        ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(client).completeJson(org.mockito.ArgumentMatchers.any(), userPromptCaptor.capture());
+        String userPrompt = userPromptCaptor.getValue();
+
+        assertThat(userPrompt).contains("강제 응답자");
+        assertThat(userPrompt).contains("nene");
+        assertThat(userPrompt).contains("`multi`/`no_reply` 금지");
+        // suggestedCharacter line must NOT appear when force is active
+        assertThat(userPrompt).doesNotContain("suggestedCharacter:");
+
+        assertThat(decision).isInstanceOf(RoutingDecision.Single.class);
     }
 
     @Test
