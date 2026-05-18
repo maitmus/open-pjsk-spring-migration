@@ -90,4 +90,26 @@ class TimeOfDayLabelerTest {
         assertThat(labeler.label(saturday(20, 59))).isEqualTo("주말 저녁");
         assertThat(labeler.label(sunday(19, 0))).isEqualTo("주말 저녁");
     }
+
+    @Test
+    void weekday_beforeActive_09_59_returnsFallback() {
+        assertThat(labeler.label(weekday(9, 59))).isEqualTo("활성 시간 외");
+    }
+
+    @Test
+    void weekday_afterActive_21_00_returnsFallback() {
+        assertThat(labeler.label(weekday(21, 0))).isEqualTo("활성 시간 외");
+    }
+
+    @Test
+    void weekend_beforeActive_09_59_returnsFallback() {
+        assertThat(labeler.label(saturday(9, 59))).isEqualTo("활성 시간 외");
+        assertThat(labeler.label(sunday(0, 0))).isEqualTo("활성 시간 외");
+    }
+
+    @Test
+    void weekend_afterActive_21_00_returnsFallback() {
+        assertThat(labeler.label(saturday(21, 0))).isEqualTo("활성 시간 외");
+        assertThat(labeler.label(sunday(23, 59))).isEqualTo("활성 시간 외");
+    }
 }

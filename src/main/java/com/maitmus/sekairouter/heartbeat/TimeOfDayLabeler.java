@@ -14,6 +14,7 @@ public class TimeOfDayLabeler {
 
     public String label(LocalDateTime now) {
         int hour = now.getHour();
+        if (hour < 10 || hour >= 21) return "활성 시간 외";
         DayOfWeek dow = now.getDayOfWeek();
         boolean weekend = dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
 
