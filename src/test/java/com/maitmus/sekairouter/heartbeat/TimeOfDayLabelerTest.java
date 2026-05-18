@@ -112,4 +112,33 @@ class TimeOfDayLabelerTest {
         assertThat(labeler.label(saturday(21, 0))).isEqualTo("활성 시간 외");
         assertThat(labeler.label(sunday(23, 59))).isEqualTo("활성 시간 외");
     }
+
+    @Test
+    void promptBlock_weekday_formatsAsExpected() {
+        // 2026-05-13 (수) 14:23 → 오후 수업
+        LocalDateTime t = LocalDateTime.of(2026, 5, 13, 14, 23, 0);
+        assertThat(labeler.promptBlock(t))
+                .isEqualTo("## 현재 시각 (KST)\n2026-05-13 (수) 14:23 (오후 수업)");
+    }
+
+    @Test
+    void promptBlock_saturday_morning() {
+        LocalDateTime t = LocalDateTime.of(2026, 5, 16, 10, 5, 0);
+        assertThat(labeler.promptBlock(t))
+                .isEqualTo("## 현재 시각 (KST)\n2026-05-16 (토) 10:05 (주말 오전)");
+    }
+
+    @Test
+    void promptBlock_sunday_evening() {
+        LocalDateTime t = LocalDateTime.of(2026, 5, 17, 19, 0, 0);
+        assertThat(labeler.promptBlock(t))
+                .isEqualTo("## 현재 시각 (KST)\n2026-05-17 (일) 19:00 (주말 저녁)");
+    }
+
+    @Test
+    void promptBlock_inactiveHour_stillFormatsWithFallbackLabel() {
+        LocalDateTime t = LocalDateTime.of(2026, 5, 13, 9, 59, 0);
+        assertThat(labeler.promptBlock(t))
+                .isEqualTo("## 현재 시각 (KST)\n2026-05-13 (수) 09:59 (활성 시간 외)");
+    }
 }

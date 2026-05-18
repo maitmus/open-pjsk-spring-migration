@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Maps a KST LocalDateTime to a student-schedule-aware time-of-day label
@@ -11,6 +12,9 @@ import java.time.LocalDateTime;
  */
 @Component
 public class TimeOfDayLabeler {
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     public String label(LocalDateTime now) {
         int hour = now.getHour();
@@ -30,5 +34,25 @@ public class TimeOfDayLabeler {
         if (hour < 18) return "방과 후";
         if (hour < 20) return "귀가/저녁";
         return "밤 휴식";
+    }
+
+    public String promptBlock(LocalDateTime now) {
+        return "## 현재 시각 (KST)\n"
+                + now.format(DATE_FMT)
+                + " (" + dayOfWeekKo(now.getDayOfWeek()) + ") "
+                + now.format(TIME_FMT)
+                + " (" + label(now) + ")";
+    }
+
+    private static String dayOfWeekKo(DayOfWeek dow) {
+        return switch (dow) {
+            case MONDAY -> "월";
+            case TUESDAY -> "화";
+            case WEDNESDAY -> "수";
+            case THURSDAY -> "목";
+            case FRIDAY -> "금";
+            case SATURDAY -> "토";
+            case SUNDAY -> "일";
+        };
     }
 }
