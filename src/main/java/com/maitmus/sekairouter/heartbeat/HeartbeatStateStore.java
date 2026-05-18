@@ -3,10 +3,13 @@ package com.maitmus.sekairouter.heartbeat;
 import com.maitmus.sekairouter.persona.CharacterId;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -34,6 +37,12 @@ public class HeartbeatStateStore {
 
     /** Recent utterances ring buffer (oldest → newest). Capped at RECENT_BUFFER_SIZE. */
     private final Deque<RecentUtterance> recentUtterances = new ArrayDeque<>();
+
+    /** Per-character counter of event-mode utterances fired on {@link #eventCountsDate}. */
+    private final Map<CharacterId, Integer> eventCountsByCharacter = new EnumMap<>(CharacterId.class);
+
+    /** Date the {@link #eventCountsByCharacter} map applies to. Mismatch → reset on next access. */
+    private LocalDate eventCountsDate;
 
     public void setThreshold(int n) {
         this.threshold = n;
@@ -78,4 +87,23 @@ public class HeartbeatStateStore {
     }
 
     public record RecentUtterance(CharacterId speaker, String text) {}
+
+    /** Per-character event-utterance count for {@code today}. Resets if today differs from the stored date. */
+    public synchronized int eventCount(CharacterId character, LocalDate today) {
+        rolloverIfStale(today);
+        return eventCountsByCharacter.getOrDefault(character, 0);
+    }
+
+    /** Increments {@code character}'s event count for {@code today}, resetting on date change. */
+    public synchronized void recordEvent(CharacterId character, LocalDate today) {
+        rolloverIfStale(today);
+        eventCountsByCharacter.merge(character, 1, Integer::sum);
+    }
+
+    private void rolloverIfStale(LocalDate today) {
+        if (eventCountsDate == null || !eventCountsDate.equals(today)) {
+            eventCountsByCharacter.clear();
+            eventCountsDate = today;
+        }
+    }
 }

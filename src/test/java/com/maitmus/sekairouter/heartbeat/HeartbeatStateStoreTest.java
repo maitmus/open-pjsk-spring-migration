@@ -3,11 +3,15 @@ package com.maitmus.sekairouter.heartbeat;
 import com.maitmus.sekairouter.persona.CharacterId;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class HeartbeatStateStoreTest {
 
     private final HeartbeatStateStore store = new HeartbeatStateStore();
+    private static final LocalDate DAY_A = LocalDate.of(2026, 5, 17);
+    private static final LocalDate DAY_B = LocalDate.of(2026, 5, 18);
 
     @Test
     void defaultThreshold_isMinusOne() {
@@ -94,5 +98,44 @@ class HeartbeatStateStoreTest {
         // snapshot is an independent List; clearing it shouldn't affect store
         snapshot.clear();
         assertThat(store.recentUtterances()).hasSize(1);
+    }
+
+    @Test
+    void eventCount_defaultsToZero() {
+        assertThat(store.eventCount(CharacterId.EMU, DAY_A)).isZero();
+    }
+
+    @Test
+    void recordEvent_incrementsCountForThatCharacterOnly() {
+        store.recordEvent(CharacterId.EMU, DAY_A);
+
+        assertThat(store.eventCount(CharacterId.EMU, DAY_A)).isEqualTo(1);
+        assertThat(store.eventCount(CharacterId.NENE, DAY_A)).isZero();
+
+        store.recordEvent(CharacterId.EMU, DAY_A);
+        assertThat(store.eventCount(CharacterId.EMU, DAY_A)).isEqualTo(2);
+    }
+
+    @Test
+    void eventCount_resetsOnDateChange() {
+        store.recordEvent(CharacterId.EMU, DAY_A);
+        store.recordEvent(CharacterId.NENE, DAY_A);
+        assertThat(store.eventCount(CharacterId.EMU, DAY_A)).isEqualTo(1);
+
+        // Querying with a new date triggers reset
+        assertThat(store.eventCount(CharacterId.EMU, DAY_B)).isZero();
+        assertThat(store.eventCount(CharacterId.NENE, DAY_B)).isZero();
+    }
+
+    @Test
+    void recordEvent_onNewDate_resetsAllPriorCounts() {
+        store.recordEvent(CharacterId.EMU, DAY_A);
+        store.recordEvent(CharacterId.NENE, DAY_A);
+
+        // recordEvent itself observes the date change and resets before incrementing
+        store.recordEvent(CharacterId.EMU, DAY_B);
+
+        assertThat(store.eventCount(CharacterId.EMU, DAY_B)).isEqualTo(1);
+        assertThat(store.eventCount(CharacterId.NENE, DAY_B)).isZero();
     }
 }
