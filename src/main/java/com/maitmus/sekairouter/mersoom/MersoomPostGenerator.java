@@ -24,6 +24,7 @@ public class MersoomPostGenerator {
 
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
+    private final MersoomSeedPicker seedPicker;
 
     public GeneratedPost generate(MersoomState state, CollectedFeed feed, LocalDate today) {
         String userPrompt = buildUserPrompt(state, feed, today);
@@ -53,6 +54,10 @@ public class MersoomPostGenerator {
         sb.append("## 모드\npost\n\n");
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
 
+        sb.append("## 오늘 글 시드 (이 각도로 작성)\n");
+        sb.append("- 토픽: ").append(seedPicker.pickTopic()).append("\n");
+        sb.append("- 톤·도입 패턴: ").append(seedPicker.pickTone()).append("\n\n");
+
         if (!feed.myTracked().isEmpty()) {
             sb.append("## 최근 내 글 (3개, reply 추적)\n");
             for (Commentable c : feed.myTracked()) {
@@ -65,7 +70,7 @@ public class MersoomPostGenerator {
                     }
                 }
             }
-            sb.append("\n");
+            sb.append("→ 위 최근 글들과 **토픽·소재·제목 시작 패턴이 겹치지 않도록** 위 시드 각도로 작성.\n\n");
         }
 
         if (!feed.commentable().isEmpty()) {
@@ -94,7 +99,7 @@ public class MersoomPostGenerator {
         sb.append("형식: \"<title>\\n<content>\". 마크다운/JSON/지문 금지. 텍스트만.\n");
         sb.append("출력 전 자수 점검:\n");
         sb.append("  1) title이 16자 이상이면 짧게 다시 쓰기\n");
-        sb.append("  2) content가 280자 미만이면 본인 디테일(붕어빵·아크로바틱·동아리·다음 계획 중 하나) 1~2문장 추가해서 분량 채우기 (단, 산만하지 않게 한 토픽 한 호흡씩)\n");
+        sb.append("  2) content가 280자 미만이면 **위 토픽 시드 각도에서** 디테일 1~2문장 추가해서 분량 채우기 (산만하지 않게 한 호흡씩, 다른 토픽 끌어오지 말 것)\n");
         sb.append("짧은 한 줄 인사로 끝내지 말 것 — 본인 경험·소소한 디테일·약속·다음 계획 중 최소 하나는 반드시 풀어 넣기.\n");
 
         return sb.toString();

@@ -26,7 +26,7 @@ class MersoomPostGeneratorTest {
         MersoomPromptBuilder promptBuilder = mock(MersoomPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
-        MersoomPostGenerator gen = new MersoomPostGenerator(anthropic, promptBuilder);
+        MersoomPostGenerator gen = new MersoomPostGenerator(anthropic, promptBuilder, new MersoomSeedPicker());
 
         var feed = new CollectedFeed(List.of(), List.of(), List.of());
         MersoomState state = empty();
@@ -47,7 +47,7 @@ class MersoomPostGeneratorTest {
         MersoomPromptBuilder promptBuilder = mock(MersoomPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("s", "s"));
 
-        var gen = new MersoomPostGenerator(anthropic, promptBuilder);
+        var gen = new MersoomPostGenerator(anthropic, promptBuilder, new MersoomSeedPicker());
         var result = gen.generate(empty(), new CollectedFeed(List.of(), List.of(), List.of()),
                 LocalDate.of(2026, 5, 8));
 
@@ -63,7 +63,7 @@ class MersoomPostGeneratorTest {
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build()).thenReturn(new PromptBlocks("s", "s"));
 
-        var gen = new MersoomPostGenerator(anthropic, pb);
+        var gen = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker());
 
         org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalStateException.class,
