@@ -4,6 +4,7 @@ import com.maitmus.sekairouter.config.PersonaProperties;
 import com.maitmus.sekairouter.persona.CharacterId;
 import com.maitmus.sekairouter.persona.Persona;
 import com.maitmus.sekairouter.persona.PersonaRegistry;
+import com.maitmus.sekairouter.persona.PersonaType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.ClassPathResource;
@@ -31,8 +32,8 @@ class SystemPromptBuilderTest {
     @Test
     void build_includesAllPersonasAndInstructions(@TempDir Path tmp) {
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
-        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", "에무 페르소나 본문"));
-        personas.put(CharacterId.NENE, new Persona(CharacterId.NENE, "쿠사나기 네네", "네네 페르소나 본문"));
+        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", PersonaType.HUMAN_SEKAI, "에무 페르소나 본문"));
+        personas.put(CharacterId.NENE, new Persona(CharacterId.NENE, "쿠사나기 네네", PersonaType.HUMAN_SEKAI, "네네 페르소나 본문"));
         PersonaRegistry registry = mock(PersonaRegistry.class);
         when(registry.all()).thenReturn(personas);
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);
@@ -53,7 +54,7 @@ class SystemPromptBuilderTest {
     void build_includesGradesMatrixWhenPresent(@TempDir Path tmp) throws IOException {
         Files.writeString(tmp.resolve("GRADES.md"), "# 호칭표\n에무 → 네네: 네네쨩\n");
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
-        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", "에무 본문"));
+        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", PersonaType.HUMAN_SEKAI, "에무 본문"));
         PersonaRegistry registry = mock(PersonaRegistry.class);
         when(registry.all()).thenReturn(personas);
         PersonaProperties props = new PersonaProperties(tmp.toString(), 60_000);

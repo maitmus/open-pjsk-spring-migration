@@ -4,6 +4,7 @@ import com.maitmus.sekairouter.config.PersonaProperties;
 import com.maitmus.sekairouter.persona.CharacterId;
 import com.maitmus.sekairouter.persona.Persona;
 import com.maitmus.sekairouter.persona.PersonaRegistry;
+import com.maitmus.sekairouter.persona.PersonaType;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.SharedPromptContent;
 import org.junit.jupiter.api.Test;
@@ -41,8 +42,8 @@ class HeartbeatPromptBuilderTest {
                 """);
 
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
-        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", "에무 페르소나 본문"));
-        personas.put(CharacterId.NENE, new Persona(CharacterId.NENE, "쿠사나기 네네", "네네 페르소나 본문"));
+        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", PersonaType.HUMAN_SEKAI, "에무 페르소나 본문"));
+        personas.put(CharacterId.NENE, new Persona(CharacterId.NENE, "쿠사나기 네네", PersonaType.HUMAN_SEKAI, "네네 페르소나 본문"));
 
         PersonaRegistry registry = mock(PersonaRegistry.class);
         when(registry.all()).thenReturn(personas);
@@ -53,7 +54,9 @@ class HeartbeatPromptBuilderTest {
 
         // Heartbeat-specific instruction markers — pathSuffix
         assertThat(blocks.pathSuffix()).contains("자율 발화 모드");
-        assertThat(blocks.pathSuffix()).contains("JSON 없음");
+        // 출력은 이제 {"reasoning":"...","utterance":"..."} JSON 형식
+        assertThat(blocks.pathSuffix()).contains("\"utterance\"");
+        assertThat(blocks.pathSuffix()).contains("reasoning");
 
         // Persona section — sharedPrefix
         assertThat(blocks.sharedPrefix()).contains("## 페르소나 정의");
@@ -79,7 +82,7 @@ class HeartbeatPromptBuilderTest {
     @Test
     void build_worksWithoutOptionalFiles(@TempDir Path tmp) {
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
-        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", "에무 내용"));
+        personas.put(CharacterId.EMU, new Persona(CharacterId.EMU, "오오토리 에무", PersonaType.HUMAN_SEKAI, "에무 내용"));
 
         PersonaRegistry registry = mock(PersonaRegistry.class);
         when(registry.all()).thenReturn(personas);
@@ -101,7 +104,7 @@ class HeartbeatPromptBuilderTest {
         Files.writeString(tmp.resolve("USER.md"), "# 사용자\nMaiT입니다.\n");
 
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
-        personas.put(CharacterId.MINORI, new Persona(CharacterId.MINORI, "하나사토 미노리", "미노리 내용"));
+        personas.put(CharacterId.MINORI, new Persona(CharacterId.MINORI, "하나사토 미노리", PersonaType.HUMAN_SEKAI, "미노리 내용"));
 
         PersonaRegistry registry = mock(PersonaRegistry.class);
         when(registry.all()).thenReturn(personas);

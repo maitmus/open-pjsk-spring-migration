@@ -22,6 +22,11 @@ public class PersonaLoader {
             Pattern.MULTILINE
     );
 
+    private static final Pattern TYPE_PATTERN = Pattern.compile(
+            "^- \\*\\*Type:\\*\\*\\s*(\\S+)\\s*$",
+            Pattern.MULTILINE
+    );
+
     public Map<CharacterId, Persona> loadAll(Path dir) throws IOException {
         Map<CharacterId, Persona> personas = new EnumMap<>(CharacterId.class);
         try (Stream<Path> stream = Files.list(dir)) {
@@ -39,7 +44,8 @@ public class PersonaLoader {
             try {
                 String content = Files.readString(file);
                 String displayName = extractDisplayName(content).orElse(id.name());
-                return Optional.of(new Persona(id, displayName, content));
+                PersonaType type = extractType(content).orElse(PersonaType.HUMAN_SEKAI);
+                return Optional.of(new Persona(id, displayName, type, content));
             } catch (IOException e) {
                 log.error("Failed to read persona file {}", file, e);
                 return Optional.empty();
@@ -50,5 +56,10 @@ public class PersonaLoader {
     private Optional<String> extractDisplayName(String content) {
         Matcher m = NAME_PATTERN.matcher(content);
         return m.find() ? Optional.of(m.group(1).trim()) : Optional.empty();
+    }
+
+    private Optional<PersonaType> extractType(String content) {
+        Matcher m = TYPE_PATTERN.matcher(content);
+        return m.find() ? PersonaType.fromString(m.group(1)) : Optional.empty();
     }
 }
