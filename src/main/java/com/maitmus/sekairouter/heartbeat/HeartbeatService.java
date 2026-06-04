@@ -1,6 +1,5 @@
 package com.maitmus.sekairouter.heartbeat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.maitmus.sekairouter.config.DiscordProperties;
 import com.maitmus.sekairouter.heartbeat.HeartbeatStateStore.RecentUtterance;
 import com.maitmus.sekairouter.persona.CharacterId;
@@ -9,9 +8,9 @@ import com.maitmus.sekairouter.persona.PersonaType;
 import com.maitmus.sekairouter.proxy.ProxySpeechService;
 import com.maitmus.sekairouter.proxy.TypingIndicatorService;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
-import com.maitmus.sekairouter.routing.JsonExtractor;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.RandomCharacterSelector;
+import com.maitmus.sekairouter.routing.UtteranceEnvelopeParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -53,8 +52,6 @@ public class HeartbeatService {
     private final PersonaRegistry personaRegistry;
     private final TimeOfDayLabeler timeOfDayLabeler;
     private final Clock clock;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Top of every 30-min slot (KST :00 / :30): pick new threshold N (0~29) for this slot.
@@ -274,21 +271,16 @@ public class HeartbeatService {
      */
     private String callUtterance(PromptBlocks systemPrompt, String userPrompt) {
         String raw = anthropic.generateUtterance(systemPrompt, userPrompt);
-        try {
-            String cleaned = JsonExtractor.extract(raw);
-            UtteranceEnvelope env = objectMapper.readValue(cleaned, UtteranceEnvelope.class);
-            if (env.utterance() == null || env.utterance().isBlank()) {
-                log.error("Heartbeat utterance empty after parse — raw={}", raw);
-                return null;
-            }
-            if (env.reasoning() != null && !env.reasoning().isBlank()) {
-                log.info("Heartbeat reasoning (not sent): {}", env.reasoning());
-            }
-            return env.utterance().strip();
-        } catch (Exception e) {
-            log.error("Heartbeat utterance JSON parse failed — raw={}", raw, e);
+        Optional<UtteranceEnvelopeParser.Envelope> parsed = UtteranceEnvelopeParser.parse(raw);
+        if (parsed.isEmpty()) {
+            log.error("Heartbeat utterance unparseable or empty — raw={}", raw);
             return null;
         }
+        UtteranceEnvelopeParser.Envelope env = parsed.get();
+        if (env.reasoning() != null && !env.reasoning().isBlank()) {
+            log.info("Heartbeat reasoning (not sent): {}", env.reasoning());
+        }
+        return env.utterance();
     }
 
     /**
@@ -357,7 +349,4 @@ public class HeartbeatService {
                     INTER_MESSAGE_BUFFER_MS + TYPING_BEFORE_SEND_MS, TimeUnit.MILLISECONDS);
         }, TYPING_BEFORE_SEND_MS, TimeUnit.MILLISECONDS);
     }
-
-    /** 하트비트 LLM 응답의 JSON envelope. */
-    private record UtteranceEnvelope(String reasoning, String utterance) {}
 }
