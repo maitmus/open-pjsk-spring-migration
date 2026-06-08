@@ -39,6 +39,7 @@ public class MersoomService {
     private final VoteHeuristic voteHeuristic;
     private final ContextNoteManager contextNoteManager;
     private final RelationshipPromoter relationshipPromoter;
+    private final CommentTopicGate commentTopicGate;
     private final Clock clock;
     private final Object lock = new Object();
 
@@ -46,7 +47,7 @@ public class MersoomService {
                           MersoomApiClient api, MersoomPostGenerator postGenerator,
                           MersoomCommentGenerator commentGenerator, VoteHeuristic voteHeuristic,
                           ContextNoteManager contextNoteManager, RelationshipPromoter relationshipPromoter,
-                          Clock clock) {
+                          CommentTopicGate commentTopicGate, Clock clock) {
         this.properties = properties;
         this.store = store;
         this.collector = collector;
@@ -56,6 +57,7 @@ public class MersoomService {
         this.voteHeuristic = voteHeuristic;
         this.contextNoteManager = contextNoteManager;
         this.relationshipPromoter = relationshipPromoter;
+        this.commentTopicGate = commentTopicGate;
         this.clock = clock;
     }
 
@@ -124,7 +126,18 @@ public class MersoomService {
             return;
         }
 
-        Commentable target = feed.commentable().get(0);
+        // 밝은 화제에만 댓글. 범죄·사고·사망 등 무거운 글은 후보에서 제외 (LLM 호출 전 차단).
+        Commentable target = feed.commentable().stream()
+                .filter(c -> commentTopicGate.isBrightEnough(c.post()))
+                .findFirst()
+                .orElse(null);
+        if (target == null) {
+            log.info("Mersoom comment skip — 무거운 주제만 있어 댓글 회피 (commentable={})", feed.commentable().size());
+            state = withContextNotes(state, ticked);
+            state = relationshipPromoter.evaluate(state);
+            store.save(state);
+            return;
+        }
         try {
             String content = commentGenerator.generate(state, target);
             var resp = api.createComment(target.post().id(), null, NICKNAME, content);
