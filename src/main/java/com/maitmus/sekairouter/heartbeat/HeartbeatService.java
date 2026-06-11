@@ -10,6 +10,7 @@ import com.maitmus.sekairouter.proxy.TypingIndicatorService;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.RandomCharacterSelector;
+import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.UtteranceEnvelopeParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,7 @@ public class HeartbeatService {
     private final DiscordProperties discordProperties;
     private final PersonaRegistry personaRegistry;
     private final TimeOfDayLabeler timeOfDayLabeler;
+    private final OutputSanityGate outputSanityGate;
     private final Clock clock;
 
     /**
@@ -280,7 +282,13 @@ public class HeartbeatService {
         if (env.reasoning() != null && !env.reasoning().isBlank()) {
             log.info("Heartbeat reasoning (not sent): {}", env.reasoning());
         }
-        return env.utterance();
+        String utterance = env.utterance();
+        if (!outputSanityGate.isClean(utterance)) {
+            log.warn("Heartbeat 백스톱 — 발화 누수 마커 감지, 전송 스킵: {}",
+                    utterance == null ? "null" : utterance.substring(0, Math.min(60, utterance.length())));
+            return null;
+        }
+        return utterance;
     }
 
     /**

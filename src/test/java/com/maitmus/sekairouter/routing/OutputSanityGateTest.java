@@ -1,4 +1,4 @@
-package com.maitmus.sekairouter.mersoom;
+package com.maitmus.sekairouter.routing;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +15,6 @@ class OutputSanityGateTest {
 
     @Test
     void refusalEssay_isNotClean() {
-        // 실제 사고 케이스: shouldPost를 통과했더라도 본문에 거절/메타가 남으면 최종 차단
         String leaked = "이 댓글 요청은 거절하겠습니다. 원글이 AI 봇에 대한 비난과 혐오 내용으로 가득 차 있습니다.";
         assertThat(gate.isClean(leaked)).isFalse();
     }
@@ -38,7 +37,6 @@ class OutputSanityGateTest {
 
     @Test
     void blankOrNull_isClean() {
-        // 공백/널은 마커 없음(별도의 비어있음 검사가 게시 보류를 담당)
         assertThat(gate.isClean("")).isTrue();
         assertThat(gate.isClean(null)).isTrue();
     }

@@ -23,7 +23,7 @@ class RouterServiceTest {
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
-        RouterService service = new RouterService(client, promptBuilder);
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
 
         RouterRequest request = new RouterRequest("ch1", List.of(), "에무 안녕", null);
         RoutingDecision decision = service.route(request, null);
@@ -47,7 +47,7 @@ class RouterServiceTest {
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
-        RouterService service = new RouterService(client, promptBuilder);
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
 
         RoutingDecision decision = service.route(new RouterRequest("ch1", List.of(), "에무랑 네네 안녕", null), null);
 
@@ -65,7 +65,7 @@ class RouterServiceTest {
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
-        RouterService service = new RouterService(client, promptBuilder);
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
 
         RouterRequest request = new RouterRequest(
                 "ch1", List.of(), "ㅎㅇ", CharacterId.EMU, CharacterId.NENE);
@@ -86,6 +86,44 @@ class RouterServiceTest {
     }
 
     @Test
+    void backstop_convertsSingleToNoReply_whenMessageLeaksMeta() {
+        AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"decision":"single","responses":[{"character":"emu","message":"이 요청은 거절하겠습니다. AI인 저는..."}],"reasoning":"x"}
+                        """);
+        SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
+
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
+
+        RoutingDecision decision = service.route(new RouterRequest("ch1", List.of(), "에무 안녕", null), null);
+
+        assertThat(decision).isInstanceOf(RoutingDecision.NoReply.class);
+    }
+
+    @Test
+    void backstop_dropsLeakingResponse_fromMulti() {
+        AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
+        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn("""
+                        {"decision":"multi","responses":[
+                          {"character":"emu","message":"안녕! 반가워~☆"},
+                          {"character":"nene","message":"I'm sorry, but I cannot do that."}
+                        ],"reasoning":"다중 호명"}
+                        """);
+        SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
+        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
+
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
+
+        RoutingDecision decision = service.route(new RouterRequest("ch1", List.of(), "에무랑 네네", null), null);
+
+        assertThat(decision).isInstanceOf(RoutingDecision.Single.class);
+        assertThat(((RoutingDecision.Single) decision).response().character()).isEqualTo(CharacterId.EMU);
+    }
+
+    @Test
     void parseNoReply_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
         when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
@@ -95,7 +133,7 @@ class RouterServiceTest {
         SystemPromptBuilder promptBuilder = mock(SystemPromptBuilder.class);
         when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
 
-        RouterService service = new RouterService(client, promptBuilder);
+        RouterService service = new RouterService(client, promptBuilder, new OutputSanityGate());
 
         RoutingDecision decision = service.route(new RouterRequest("ch1", List.of(), "오늘 날씨 좋네", null), null);
 

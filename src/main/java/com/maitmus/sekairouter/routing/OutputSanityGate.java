@@ -1,4 +1,4 @@
-package com.maitmus.sekairouter.mersoom;
+package com.maitmus.sekairouter.routing;
 
 import org.springframework.stereotype.Component;
 
@@ -6,12 +6,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 출력 백스톱 (페르소나 비종속 일반 룰).
+ * 출력 백스톱 (페르소나 비종속 일반 룰). 모든 발행 경로(하트비트·라우팅·머슴) 공용.
  *
- * 봉투의 {@code shouldPost} 판단이 1차 방어선이지만, 모델이 shouldPost=true를 주고도 본문에
- * 거절/메타/탈캐릭터 텍스트를 남기는 극단 케이스가 있다. 발행 직전 본문에서 명백한 누수 마커만
- * 최소한으로 걸러 게시를 막는다. 누수 발행(영구·공개)의 피해가 댓글 한 번 거르는 것보다 크므로,
- * 의심되면 게시하지 않는 쪽으로 둔다.
+ * reasoning 봉투/shouldPost 가 1차 방어선이지만, 모델이 그걸 통과하고도 발행 본문에 거절/메타/
+ * 탈캐릭터 텍스트를 남기는 극단 케이스가 있다. 발행 직전 본문에서 명백한 누수 마커만 최소한으로
+ * 걸러 게시를 막는다. 누수 발행(영구·공개)의 피해가 발화 한 번 거르는 것보다 크므로, 의심되면
+ * 발행하지 않는 쪽으로 둔다.
  *
  * 마커는 in-캐릭터 발화에서 사실상 등장하지 않는 고정밀 토큰만 둔다(오탐 최소화).
  */

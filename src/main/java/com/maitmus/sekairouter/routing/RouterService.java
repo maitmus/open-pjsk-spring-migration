@@ -16,6 +16,7 @@ public class RouterService {
 
     private final AnthropicClientWrapper anthropic;
     private final SystemPromptBuilder promptBuilder;
+    private final OutputSanityGate outputSanityGate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RoutingDecision route(RouterRequest request, CharacterId suggestedCharacter) {
@@ -23,7 +24,35 @@ public class RouterService {
         String userPrompt = buildUserPrompt(request, suggestedCharacter);
 
         String json = anthropic.completeJson(systemPrompt, userPrompt);
-        return parse(json);
+        return applyBackstop(parse(json));
+    }
+
+    /**
+     * 발행 직전 백스톱. 라우팅 응답은 {@code reasoning}이 메타 사고를 격리하지만, 모델이 발행 필드
+     * (message)에 거절·메타를 직접 써넣는 극단 케이스는 reasoning만으로 못 막는다. 누수 마커가 있는
+     * 응답은 떨어내고, 남는 게 없으면 no_reply로 전환한다.
+     */
+    private RoutingDecision applyBackstop(RoutingDecision decision) {
+        return switch (decision) {
+            case RoutingDecision.Single s -> outputSanityGate.isClean(s.response().message())
+                    ? s
+                    : noReplyDueToBackstop(s.reasoning());
+            case RoutingDecision.Multi m -> {
+                var clean = m.responses().stream()
+                        .filter(r -> outputSanityGate.isClean(r.message()))
+                        .toList();
+                if (clean.size() == m.responses().size()) yield m;
+                if (clean.isEmpty()) yield noReplyDueToBackstop(m.reasoning());
+                if (clean.size() == 1) yield new RoutingDecision.Single(clean.get(0), m.reasoning());
+                yield new RoutingDecision.Multi(clean, m.reasoning());
+            }
+            case RoutingDecision.NoReply n -> n;
+        };
+    }
+
+    private RoutingDecision noReplyDueToBackstop(String reasoning) {
+        log.warn("Routing 백스톱 — 발행 필드 누수 마커 감지, no_reply로 전환 (reasoning={})", reasoning);
+        return new RoutingDecision.NoReply((reasoning == null ? "" : reasoning) + " [백스톱: 누수 마커 차단]");
     }
 
     private String buildUserPrompt(RouterRequest request, CharacterId suggested) {

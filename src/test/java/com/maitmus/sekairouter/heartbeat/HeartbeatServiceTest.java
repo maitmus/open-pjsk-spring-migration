@@ -1,5 +1,7 @@
 package com.maitmus.sekairouter.heartbeat;
 
+import com.maitmus.sekairouter.routing.OutputSanityGate;
+
 import com.maitmus.sekairouter.config.DiscordProperties;
 import com.maitmus.sekairouter.persona.CharacterId;
 import com.maitmus.sekairouter.persona.Persona;
@@ -238,6 +240,23 @@ class HeartbeatServiceTest {
     }
 
     @Test
+    void heartbeatCheck_solo_skipsSendWhenUtteranceLeaksMeta() {
+        when(state.getThreshold()).thenReturn(0);
+        when(randomSelector.pickOne(any())).thenReturn(CharacterId.AIRI);
+        // 파싱은 되지만 utterance에 누수 마커 → 백스톱이 전송 차단
+        when(anthropic.generateUtterance(any(), anyString()))
+                .thenReturn("{\"reasoning\":\"r\",\"utterance\":\"죄송하지만 I cannot 이건 작성할 수 없어요\"}");
+
+        HeartbeatService service = buildService(enabledProps(0.0), clockAt(14, 10));
+        service.heartbeatCheck();
+
+        verify(state, never()).recordUtterance(any(), anyString());
+        verify(state, never()).recordLastSpeaker(any());
+        verify(scheduler, never()).schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        verify(state).markFired();
+    }
+
+    @Test
     void heartbeatCheck_solo_virtualSinger_callsSeedPickerWithVsType() {
         // 미쿠 = VS인 경우 seedPicker가 VS 타입으로 호출되는지 검증
         when(state.getThreshold()).thenReturn(0);
@@ -406,6 +425,6 @@ class HeartbeatServiceTest {
         return new HeartbeatService(
                 props, dailyWeatherProps, state, events, promptBuilder, anthropic,
                 randomSelector, seedPicker, proxy, typing, scheduler, discordProperties,
-                personaRegistry, new TimeOfDayLabeler(), clock);
+                personaRegistry, new TimeOfDayLabeler(), new OutputSanityGate(), clock);
     }
 }
