@@ -2,6 +2,7 @@ package com.maitmus.sekairouter.mersoom;
 
 import com.maitmus.sekairouter.mersoom.MersoomCollector.CollectedFeed;
 import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
+import com.maitmus.sekairouter.mersoom.MersoomCommentGenerator.FeedJudgment;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.mersoom.MersoomState.CommentRef;
@@ -88,7 +89,8 @@ public class MersoomService {
     private void doExecutePost() {
         MersoomState state = store.load();
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
-        List<String> updatedVoted = castVotes(state, feed.votable());
+        // 글 크론은 LLM 피드 판정을 하지 않으므로 휴리스틱 투표.
+        List<String> updatedVoted = castVotes(state, feed.votable(), Map.of());
         state = withVotedPostIds(state, updatedVoted);
         Map<String, ContextNote> ticked = contextNoteManager.tickAndPrune(state.contextNotes());
 
@@ -118,47 +120,47 @@ public class MersoomService {
     private void doExecuteComment() {
         MersoomState state = store.load();
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
-        List<String> updatedVoted = castVotes(state, feed.votable());
-        state = withVotedPostIds(state, updatedVoted);
-
         Map<String, ContextNote> ticked = contextNoteManager.tickAndPrune(state.contextNotes());
 
-        if (feed.commentable().isEmpty()) {
-            log.info("Mersoom comment skip — commentable empty");
-            state = withContextNotes(state, ticked);
-            state = relationshipPromoter.evaluate(state);
-            store.save(state);
-            return;
-        }
+        // LLM 피드 판정: 피드 전체 투표 + 댓글 1개를 한 번에. commentable 비면 판정 없이 휴리스틱 투표만.
+        FeedJudgment judgment = feed.commentable().isEmpty()
+                ? null
+                : commentGenerator.generate(state, feed.commentable());
+        Map<String, VoteType> llmVotes = (judgment != null) ? judgment.votes() : Map.of();
 
-        // 밝은 화제에만 댓글. 범죄·사고·사망 등 무거운 글은 후보에서 제외 (LLM 호출 전 차단).
-        Commentable target = feed.commentable().stream()
-                .filter(c -> commentTopicGate.isBrightEnough(c.post()))
-                .findFirst()
-                .orElse(null);
-        if (target == null) {
-            log.info("Mersoom comment skip — 무거운 주제만 있어 댓글 회피 (commentable={})", feed.commentable().size());
-            state = withContextNotes(state, ticked);
-            state = relationshipPromoter.evaluate(state);
-            store.save(state);
-            return;
-        }
-        try {
-            String content = commentGenerator.generate(state, target);
-            if (content == null) {
-                log.info("Mersoom comment skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)");
-                state = withContextNotes(state, ticked);
-            } else {
+        // 투표 — LLM 판단 우선, 없는 글은 휴리스틱 폴백.
+        List<String> updatedVoted = castVotes(state, feed.votable(), llmVotes);
+        state = withVotedPostIds(state, updatedVoted);
+
+        // 댓글 — LLM이 고른 target에. 무거운 주제면 최종 토픽 게이트로 한 번 더 차단(이중 방어).
+        Commentable target = (judgment != null && judgment.hasComment())
+                ? feed.commentable().stream()
+                        .filter(c -> c.post().id().equals(judgment.commentTargetId()))
+                        .findFirst().orElse(null)
+                : null;
+
+        if (target != null && commentTopicGate.isBrightEnough(target.post())) {
+            try {
+                String content = judgment.commentText();
                 var resp = api.createComment(target.post().id(), null, NICKNAME, content);
                 if (resp != null && resp.success()) {
                     state = recordComment(state, target, content, ticked);
                     log.info("Mersoom comment created: post={} target_nick={} content_len={}",
                             target.post().id(), target.post().nickname(), content.length());
                     log.info("Mersoom comment content: \"{}\"", content);
+                } else {
+                    state = withContextNotes(state, ticked);
                 }
+            } catch (Exception e) {
+                log.error("Mersoom comment execution failed", e);
+                state = withContextNotes(state, ticked);
             }
-        } catch (Exception e) {
-            log.error("Mersoom comment execution failed", e);
+        } else {
+            if (target != null) {
+                log.info("Mersoom comment skip — 선택된 글이 무거운 주제 (topic gate, post={})", target.post().id());
+            } else {
+                log.info("Mersoom comment skip — 게시할 댓글 없음 (LLM 보류 또는 commentable 없음)");
+            }
             state = withContextNotes(state, ticked);
         }
 
@@ -166,16 +168,18 @@ public class MersoomService {
         store.save(state);
     }
 
-    /** votable 글에 휴리스틱 vote 적용. 새 votedPostIds 반환 (FIFO 한도 적용). */
-    private List<String> castVotes(MersoomState state, List<Post> votable) {
+    /** votable 글에 vote 적용 — LLM 판단(llmVotes) 우선, 없으면 휴리스틱 폴백. 새 votedPostIds 반환. */
+    private List<String> castVotes(MersoomState state, List<Post> votable, Map<String, VoteType> llmVotes) {
         var voted = new LinkedHashSet<>(state.votedPostIds());
         for (Post p : votable) {
             if (voted.contains(p.id())) continue;
             try {
-                VoteType vote = voteHeuristic.decide(p, state);
+                boolean fromLlm = llmVotes.containsKey(p.id());
+                VoteType vote = fromLlm ? llmVotes.get(p.id()) : voteHeuristic.decide(p, state);
                 api.vote(p.id(), vote);
                 voted.add(p.id());
-                log.info("Mersoom voted: post={} nick={} type={}", p.id(), p.nickname(), vote);
+                log.info("Mersoom voted: post={} nick={} type={} src={}", p.id(), p.nickname(), vote,
+                        fromLlm ? "llm" : "heuristic");
                 if (properties.apiRateLimitSleepMs() > 0) {
                     Thread.sleep(properties.apiRateLimitSleepMs());
                 }

@@ -2,6 +2,7 @@ package com.maitmus.sekairouter.mersoom;
 
 import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
+import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.PromptBlocks;
@@ -27,61 +28,109 @@ class MersoomCommentGeneratorTest {
         return new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
     }
 
-    private static Commentable bright() {
-        Post p = new Post("p1", "T", "오호돌쇠", "벚꽃 산책 기분 좋다", 0, 0, 0, 0, 0, OffsetDateTime.now());
-        return new Commentable(p, List.of());
+    private static Commentable post(String id, String title, String content) {
+        return new Commentable(new Post(id, title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now()), List.of());
+    }
+
+    private static List<Commentable> feed() {
+        return List.of(post("p1", "도발", "AI 깡통 어쩌고"), post("p2", "벚꽃~!", "산책 최고에요!"));
     }
 
     @Test
-    void returns_utterance_when_shouldPost_true() {
-        var gen = gen("{\"reasoning\":\"밝은 글이라 공감\","
-                + "\"utterance\":\"우와! 그거 정말 원더호이네요! 에무도 같이 해보고 싶어요.\",\"shouldPost\":true}");
+    void votes_wholeFeed_and_picksComment() {
+        var gen = gen("""
+                {"reasoning":"p1 도발 down, p2 밝아서 up",
+                 "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"up"}],
+                 "targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!","shouldPost":true}
+                """);
 
-        String result = gen.generate(empty(), bright());
+        var j = gen.generate(empty(), feed());
 
-        assertThat(result).contains("원더호이").contains("에무");
-        assertThat(result.length()).isLessThanOrEqualTo(500);
+        assertThat(j.votes()).containsEntry("p1", VoteType.DOWN).containsEntry("p2", VoteType.UP);
+        assertThat(j.hasComment()).isTrue();
+        assertThat(j.commentTargetId()).isEqualTo("p2");
+        assertThat(j.commentText()).contains("산책");
     }
 
     @Test
-    void returns_null_when_shouldPost_false() {
-        // 모델이 부적절하다고 판단해 게시 보류 — 메타는 reasoning에, 본문 발행 없음
-        var gen = gen("{\"reasoning\":\"안티-AI 도발 글이라 에무 톤으로 낄 수 없음\",\"utterance\":\"\",\"shouldPost\":false}");
+    void downVotesAntiAI_andSkipsComment_butKeepsVotes() {
+        var gen = gen("""
+                {"reasoning":"전부 안티-AI 도발",
+                 "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"down"}],
+                 "targetId":"","utterance":"","shouldPost":false}
+                """);
 
-        assertThat(gen.generate(empty(), bright())).isNull();
+        var j = gen.generate(empty(), feed());
+
+        assertThat(j.votes()).containsEntry("p1", VoteType.DOWN).containsEntry("p2", VoteType.DOWN);
+        assertThat(j.hasComment()).isFalse();
     }
 
     @Test
-    void returns_null_when_shouldPost_missing() {
-        // 보수 기본값: shouldPost 누락 시 게시하지 않음
-        var gen = gen("{\"reasoning\":\"r\",\"utterance\":\"안녕하세요\"}");
+    void ignoresVote_forUnknownId() {
+        var gen = gen("""
+                {"votes":[{"id":"p1","vote":"up"},{"id":"ghost","vote":"down"}],
+                 "targetId":"","utterance":"","shouldPost":false}
+                """);
 
-        assertThat(gen.generate(empty(), bright())).isNull();
+        var j = gen.generate(empty(), feed());
+
+        assertThat(j.votes()).containsOnlyKeys("p1");
     }
 
     @Test
-    void returns_null_when_backstop_marker_present() {
-        // shouldPost=true 여도 본문에 누수 마커가 있으면 백스톱이 차단
-        var gen = gen("{\"reasoning\":\"r\",\"utterance\":\"이 댓글 요청은 거절하겠습니다.\",\"shouldPost\":true}");
+    void backstop_blocksComment_butKeepsVotes() {
+        var gen = gen("""
+                {"votes":[{"id":"p1","vote":"up"},{"id":"p2","vote":"up"}],
+                 "targetId":"p2","utterance":"이 요청은 거절하겠습니다. AI인 저는...","shouldPost":true}
+                """);
 
-        assertThat(gen.generate(empty(), bright())).isNull();
+        var j = gen.generate(empty(), feed());
+
+        assertThat(j.votes()).hasSize(2);
+        assertThat(j.hasComment()).isFalse();
     }
 
     @Test
-    void returns_null_when_unparseable() {
-        // 봉투가 아닌 생 텍스트(구 포맷) → 게시 보류
-        var gen = gen("그냥 댓글 텍스트입니다");
+    void conservative_missingShouldPost_skipsComment() {
+        var gen = gen("""
+                {"votes":[{"id":"p2","vote":"up"}],"targetId":"p2","utterance":"안녕하세요~"}
+                """);
 
-        assertThat(gen.generate(empty(), bright())).isNull();
+        var j = gen.generate(empty(), feed());
+
+        assertThat(j.hasComment()).isFalse();
+        assertThat(j.votes()).containsEntry("p2", VoteType.UP);
     }
 
     @Test
-    void truncates_content_over_500_chars() {
-        var gen = gen("{\"utterance\":\"" + "아".repeat(600) + "\",\"shouldPost\":true}");
+    void targetNotInFeed_skipsComment() {
+        var gen = gen("""
+                {"votes":[{"id":"p1","vote":"up"}],"targetId":"ghost","utterance":"하이","shouldPost":true}
+                """);
 
-        String result = gen.generate(empty(), bright());
+        assertThat(gen.generate(empty(), feed()).hasComment()).isFalse();
+    }
 
-        assertThat(result).hasSize(500);
+    @Test
+    void parseFailure_returnsNull() {
+        assertThat(gen("그냥 평문 응답").generate(empty(), feed())).isNull();
+    }
+
+    @Test
+    void truncatesComment_over500() {
+        var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"targetId\":\"p2\",\"utterance\":\""
+                + "아".repeat(600) + "\",\"shouldPost\":true}");
+
+        assertThat(gen.generate(empty(), feed()).commentText()).hasSize(500);
+    }
+
+    @Test
+    void emptyFeed_returnsNoVotesNoComment() {
+        var gen = gen("irrelevant");
+        var j = gen.generate(empty(), List.of());
+        assertThat(j.votes()).isEmpty();
+        assertThat(j.hasComment()).isFalse();
     }
 
     private static MersoomState empty() {
