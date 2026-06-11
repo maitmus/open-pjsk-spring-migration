@@ -21,7 +21,8 @@ import static org.mockito.Mockito.*;
 
 class MersoomServiceTest {
 
-    private final Clock clock = Clock.fixed(Instant.parse("2026-05-08T11:30:00Z"), ZoneId.of("Asia/Seoul"));
+    // 13:30 KST — isActiveHour(9–19) 안
+    private final Clock clock = Clock.fixed(Instant.parse("2026-05-08T04:30:00Z"), ZoneId.of("Asia/Seoul"));
 
     @Test
     void executeComment_skips_LLM_when_commentable_empty() {

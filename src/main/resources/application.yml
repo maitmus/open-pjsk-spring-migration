@@ -42,21 +42,21 @@ persona:
 
 heartbeat:
   enabled: ${HEARTBEAT_ENABLED:true}
-  quiet-start-hour: ${HEARTBEAT_QUIET_START_HOUR:21}
-  quiet-end-hour: ${HEARTBEAT_QUIET_END_HOUR:10}
+  quiet-start-hour: ${HEARTBEAT_QUIET_START_HOUR:20}   # 활성 종료 20시 (active 09:00–19:59)
+  quiet-end-hour: ${HEARTBEAT_QUIET_END_HOUR:9}        # 활성 시작 09시
   dialogue-probability: ${HEARTBEAT_DIALOGUE_PROB:0.5}
 
-# 매일 아침 날씨 발화 — 09:30 KST 발화 → 1h 캐시가 첫 하트비트(~10:29 직전)까지 살아 있어 cross-call hit
+# 매일 아침 날씨 발화 — 08:45 KST. 08:30 아레나 발의가 공유 prefix 캐시 생성 → 날씨·첫 발화 전부 cache_read 체인
 daily-weather:
   enabled: ${DAILY_WEATHER_ENABLED:true}
-  cron: ${DAILY_WEATHER_CRON:0 30 9 * * *}
+  cron: ${DAILY_WEATHER_CRON:0 45 8 * * *}
   location: ${DAILY_WEATHER_LOCATION:부산 중앙동}
 
-# 머슴 자동 글/댓글 작성 — Phase 4-Lite
+# 머슴 자동 글/댓글 — 활성창 09–19로 정렬 (게이트 MersoomService.isActiveHour 9–19)
 mersoom:
   enabled: ${MERSOOM_ENABLED:false}                      # 기본 false (마이그 검증 후 true)
-  post-cron: ${MERSOOM_POST_CRON:0 30 11,18 * * *}       # 11:30, 18:30 KST
-  comment-cron: ${MERSOOM_COMMENT_CRON:0 15 10-20/2 * * *}  # 10:15, 12:15, 14:15, 16:15, 18:15, 20:15
+  post-cron: ${MERSOOM_POST_CRON:0 30 10,17 * * *}       # 10:30, 17:30 KST
+  comment-cron: ${MERSOOM_COMMENT_CRON:0 15 9-19/2 * * *}  # 09:15, 11:15, 13:15, 15:15, 17:15, 19:15
   skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
   skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
@@ -70,3 +70,18 @@ mersoom:
   auth:
     auth-id: ${MERSOOM_AUTH_ID:}
     password: ${MERSOOM_PASSWORD:}
+
+# 아레나 토론 — 에무(emu_wonder) 발의 + 쿠사나기 네네(nene_wonder) 토론
+arena:
+  enabled: ${ARENA_ENABLED:false}                        # 기본 false (빌드 검증 후 true)
+  propose-cron: ${ARENA_PROPOSE_CRON:0 30 8 * * *}       # 08:30 KST (PROPOSE 00–09 창, 공유 캐시 prefix 워밍)
+  fight-cron: ${ARENA_FIGHT_CRON:0 0 13,17 * * *}        # 13:00, 17:00 KST (BATTLE 12–24, 쿨다운 2h)
+  api-base-url: ${ARENA_API_BASE:https://www.mersoom.com/api}
+  propose:                                               # 에무 계정으로 주제 발의
+    auth-id: ${MERSOOM_AUTH_ID:}
+    password: ${MERSOOM_PASSWORD:}
+    nickname: 에무
+  fight:                                                 # 네네 계정으로 토론 참여 (풀네임)
+    auth-id: ${NENE_MERSOOM_AUTH_ID:}
+    password: ${NENE_MERSOOM_PASSWORD:}
+    nickname: 쿠사나기 네네

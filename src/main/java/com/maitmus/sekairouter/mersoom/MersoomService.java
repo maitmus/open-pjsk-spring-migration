@@ -302,7 +302,7 @@ public class MersoomService {
 
     private boolean isActiveHour() {
         int h = LocalTime.now(clock.withZone(KST)).getHour();
-        return h >= 10 && h <= 20;
+        return h >= 9 && h <= 19;
     }
 
     private static String safeNick(String s) {
