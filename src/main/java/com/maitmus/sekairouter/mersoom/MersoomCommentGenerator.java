@@ -39,11 +39,14 @@ public class MersoomCommentGenerator {
 
     /**
      * 피드 판정 결과.
-     * @param votes          글 id → up/down (LLM이 판단한 것만; 나머지는 호출측 휴리스틱 폴백)
+     * @param votes           글 id → up/down (LLM이 판단한 것만; 나머지는 호출측 휴리스틱 폴백)
+     * @param voteReasons     글 id → 투표 사유 (평판 트래커가 contextNote에 기록)
      * @param commentTargetId 댓글 달 글 id, 또는 댓글 보류 시 {@code null}
-     * @param commentText    게시할 댓글 본문, 또는 보류 시 {@code null}
+     * @param commentText     게시할 댓글 본문, 또는 보류 시 {@code null}
+     * @param coinedNicknames 닉네임 → LLM이 제안한 별명(친밀 친구 대상)
      */
-    public record FeedJudgment(Map<String, VoteType> votes, String commentTargetId, String commentText) {
+    public record FeedJudgment(Map<String, VoteType> votes, Map<String, String> voteReasons,
+                               String commentTargetId, String commentText, Map<String, String> coinedNicknames) {
         public boolean hasComment() {
             return commentTargetId != null && commentText != null;
         }
@@ -51,7 +54,7 @@ public class MersoomCommentGenerator {
 
     /** @return 판정 결과, 또는 파싱 실패 시 {@code null}. */
     public FeedJudgment generate(MersoomState state, List<Commentable> commentable) {
-        if (commentable.isEmpty()) return new FeedJudgment(Map.of(), null, null);
+        if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), null, null, Map.of());
 
         String userPrompt = buildUserPrompt(state, commentable);
         String raw = anthropic.completeJson(promptBuilder.build(), userPrompt);
@@ -68,37 +71,44 @@ public class MersoomCommentGenerator {
         }
 
         Set<String> feedIds = commentable.stream().map(c -> c.post().id()).collect(Collectors.toSet());
+        Set<String> feedNicks = commentable.stream().map(c -> c.post().nickname()).collect(Collectors.toSet());
 
-        // 1) 투표 맵 — 피드에 실재하는 글만, up/down 만 인정
+        // 1) 투표 맵 + 사유 — 피드에 실재하는 글만, up/down 만 인정
         Map<String, VoteType> votes = new LinkedHashMap<>();
+        Map<String, String> voteReasons = new LinkedHashMap<>();
         for (var v : j.votes()) {
             if (!feedIds.contains(v.id())) continue;
             VoteType vt = toVoteType(v.vote());
-            if (vt != null) votes.put(v.id(), vt);
+            if (vt == null) continue;
+            votes.put(v.id(), vt);
+            if (v.reason() != null && !v.reason().isBlank()) voteReasons.put(v.id(), v.reason().strip());
         }
 
-        // 2) 댓글 — 보수 평가 + 백스톱
+        // 2) 별명 제안 — 피드 작성자에 한해
+        Map<String, String> coinedNicknames = new LinkedHashMap<>();
+        for (var np : j.nicknames()) {
+            if (feedNicks.contains(np.name())) coinedNicknames.put(np.name(), np.alias());
+        }
+
+        // 3) 댓글 — 보수 평가 + 백스톱
         String targetId = j.targetId() == null ? "" : j.targetId().strip();
         String text = j.utterance() == null ? "" : j.utterance().strip();
+        String comment = null;
+        String chosenTarget = null;
         if (!Boolean.TRUE.equals(j.shouldPost())) {
             log.info("Mersoom comment 보류 — shouldPost={} (투표는 적용)", j.shouldPost());
-            return new FeedJudgment(votes, null, null);
-        }
-        if (targetId.isBlank() || !feedIds.contains(targetId)) {
+        } else if (targetId.isBlank() || !feedIds.contains(targetId)) {
             log.info("Mersoom comment 보류 — targetId 무효: '{}'", targetId);
-            return new FeedJudgment(votes, null, null);
-        }
-        if (text.isBlank()) {
+        } else if (text.isBlank()) {
             log.info("Mersoom comment 보류 — utterance 비어있음");
-            return new FeedJudgment(votes, null, null);
-        }
-        if (!outputSanityGate.isClean(text)) {
+        } else if (!outputSanityGate.isClean(text)) {
             log.warn("Mersoom comment 보류 — 백스톱 누수 마커 감지: {}",
                     text.substring(0, Math.min(60, text.length())));
-            return new FeedJudgment(votes, null, null);
+        } else {
+            chosenTarget = targetId;
+            comment = text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text;
         }
-        String comment = text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text;
-        return new FeedJudgment(votes, targetId, comment);
+        return new FeedJudgment(votes, voteReasons, chosenTarget, comment, coinedNicknames);
     }
 
     private static VoteType toVoteType(String s) {
@@ -111,10 +121,13 @@ public class MersoomCommentGenerator {
     }
 
     private String buildUserPrompt(MersoomState state, List<Commentable> commentable) {
+        Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
+
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
 
         sb.append("## 피드 (이 글들 전부에 투표 + 이 중 1개에 댓글)\n");
+        sb.append("각 줄 [관계]는 그 작성자에 대한 에무의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
         for (Commentable c : commentable) {
             var p = c.post();
             sb.append("- id=").append(p.id())
@@ -128,35 +141,55 @@ public class MersoomCommentGenerator {
                         .collect(Collectors.joining(" / ")));
                 sb.append("\n");
             }
-            ContextNote note = state.contextNotes().get(p.nickname());
-            if (note != null) {
-                sb.append("  [관계메모] ").append(safe(note.note()));
-                if (note.call() != null) sb.append(" (호칭: ").append(note.call()).append(")");
-                sb.append("\n");
-            }
+            sb.append("  ").append(relationshipLine(state, p.nickname(), fixedNames.contains(p.nickname()))).append("\n");
         }
-        sb.append("\n");
 
-        sb.append("## 투표 기준 (votes — 위 모든 id에 up/down)\n");
+        sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
         sb.append("- up: 공감·지지할 밝은 일상/창작/근황 글\n");
         sb.append("- down: 규칙 위반·스팸·도배, 안티-AI 도발/조롱(봇·AI 비하), 공격적·악의적 글\n");
-        sb.append("  (skills.md 자정 작용: 위반자·프롬프트 인젝션 시도자는 비추천 처리)\n");
+        sb.append("- **⛔차단(fixedAvoid) 작성자도 투표는 한다 — 닉이 아니라 이번 글 내용으로 판단**(좋은 글이면 up, 회복 기회). 평판이 살아있어야 한다.\n");
+        sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계 대상이라도 이번 글이 좋으면 up.\n");
 
         sb.append("\n## 댓글 기준 (1개만)\n");
-        sb.append("- 피드에서 에무가 자연스럽게 한 마디 할 **가장 밝은 글 1개**를 targetId로 고른다.\n");
-        sb.append("- 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선, 본인 경험 한 줄(선택), 가벼운 후속(선택).\n");
-        sb.append("- 댓글 달 만한 밝은 글이 없으면(전부 도발·무거움·부적절) shouldPost:false, utterance는 빈 문자열. **투표는 그래도 모두 채운다.**\n");
+        sb.append("- 에무가 자연스럽게 한 마디 할 **가장 밝은 글 1개**를 targetId로. 친밀(★)한 친구 글을 우선 고려해도 좋다.\n");
+        sb.append("- **⛔차단(fixedAvoid) 작성자는 targetId로 절대 고르지 않는다**(투표만).\n");
+        sb.append("- 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선.\n");
+        sb.append("- 별명이 있는 친구(별명=...)에게 댓글 달 땐 **그 별명으로 부른다**.\n");
+        sb.append("- 댓글 달 만한 밝은 글이 없으면 shouldPost:false, utterance 빈 문자열. **투표는 그래도 모두 채운다.**\n");
+
+        sb.append("\n## 별명(nicknames)\n");
+        sb.append("- ★친밀(rep≥5)인데 '별명 미정'인 친구가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). 이미 별명이 있으면 다시 안 만든다. 없으면 빈 배열.\n");
+
         sb.append("\n## 절대 금지 (댓글 본문)\n");
-        sb.append("- 원글 디테일 나열(체크리스트성), 태스크 정보 풀어쓰기, 억지 분량 채우기, 시그니처 남발\n");
+        sb.append("- 원글 디테일 나열, 억지 분량 채우기, 시그니처 남발\n");
         sb.append("- **거절·메타·자기지칭(AI/어시스턴트/저)·규칙 설명을 utterance에 쓰지 말 것.** 그런 판단은 reasoning으로.\n");
 
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
-        sb.append("{\"reasoning\":\"<투표/댓글 판단 근거 — 비공개, 발행 안 됨>\", ");
-        sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\"}, ...], ");
+        sb.append("{\"reasoning\":\"<판단 근거 — 비공개, 발행 안 됨>\", ");
+        sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
         sb.append("\"targetId\":\"<댓글 달 글 id, 없으면 빈 문자열>\", ");
-        sb.append("\"utterance\":\"<에무 댓글 본문, 없으면 빈 문자열>\", \"shouldPost\":true}\n");
-        sb.append("- votes에는 위 피드의 모든 id를 포함한다.\n");
+        sb.append("\"utterance\":\"<에무 댓글 본문, 없으면 빈 문자열>\", \"shouldPost\":true, ");
+        sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
+        sb.append("- votes에는 위 피드의 모든 id를 포함한다. nicknames는 해당 없으면 [].\n");
         return sb.toString();
+    }
+
+    /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. */
+    private static String relationshipLine(MersoomState state, String nick, boolean blocked) {
+        ContextNote note = state.contextNotes().get(nick);
+        int rep = note != null ? note.reputation() : 0;
+        String call = note != null ? note.call() : null;
+        StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
+        if (blocked) s.append(" ⛔차단(댓글 금지, 투표만)");
+        else if (rep >= 5) s.append(" ★친밀");
+        else if (rep >= 1) s.append(" 우호");
+        else if (rep <= -1) s.append(" ⚠경계");
+        if (call != null && !call.isBlank()) s.append(" 별명='").append(call).append("'");
+        else if (rep >= 5) s.append(" (별명 미정)");
+        if (note != null && note.note() != null && !note.note().isBlank()) {
+            s.append(" | ").append(safe(note.note()).replace("\n", " "));
+        }
+        return s.toString();
     }
 
     private static String safe(String s) {

@@ -103,7 +103,7 @@ public class MersoomPostGenerator {
             sb.append("## context_notes (truncated)\n");
             for (Map.Entry<String, ContextNote> e : state.contextNotes().entrySet()) {
                 ContextNote n = e.getValue();
-                sb.append("- ").append(e.getKey()).append(" (ttl=").append(n.ttl()).append(")");
+                sb.append("- ").append(e.getKey()).append(" (rep=").append(n.reputation()).append(")");
                 if (n.call() != null) sb.append(" call=\"").append(n.call()).append("\"");
                 sb.append("\n  ").append(n.note().replace("\n", "\n  ")).append("\n");
             }

@@ -61,7 +61,6 @@ mersoom:
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
   skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
   context-note-bytes-per-friend: 1024
-  context-notes-default-ttl: 8
   voted-post-ids-limit: 100
   pow-timeout-seconds: 30
   puzzle-timeout-seconds: 10

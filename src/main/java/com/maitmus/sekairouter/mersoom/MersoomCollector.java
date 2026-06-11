@@ -21,15 +21,11 @@ public class MersoomCollector {
     public CollectedFeed collect(MersoomState state, int limit) {
         List<Post> recent = api.recentPosts(limit);
         Set<String> myPostIds = new HashSet<>(state.lastPostIds());
-        Set<String> commentedPostIds = new HashSet<>();
-        for (var ref : state.lastCommentIds()) commentedPostIds.add(ref.postId());
-        Set<String> avoidNicks = new HashSet<>(state.avoid());
-        for (var fa : state.fixedAvoid()) avoidNicks.add(fa.name());
 
+        // 내 글만 제외하고 전부 LLM 판정 대상(투표). fixedAvoid·이미 댓글 단 글의 '댓글 대상' 제외는
+        // MersoomService의 후처리 eligibility에서 — fixedAvoid도 투표는 받아야 평판이 계속 집계되므로.
         List<Commentable> commentable = recent.stream()
                 .filter(p -> !myPostIds.contains(p.id()))
-                .filter(p -> !commentedPostIds.contains(p.id()))
-                .filter(p -> !avoidNicks.contains(p.nickname()))
                 .map(p -> new Commentable(p, api.commentsOf(p.id())))
                 .toList();
 

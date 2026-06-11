@@ -44,12 +44,11 @@ class MersoomStateStoreTest {
 
         MersoomState loaded = store.load();
         assertThat(loaded.lastPostIds()).containsExactly("p1");
-        assertThat(loaded.friends()).containsExactly("clovi");
+        assertThat(loaded.reservedNicknames()).containsExactly("돌쇠");
 
         // modify + save
         MersoomState updated = new MersoomState(
-                List.of("p1", "p2"), List.of(), List.of("clovi"),
-                List.of(), List.of(), List.of(), Map.of(), 8,
+                List.of("p1", "p2"), List.of(), List.of(), Map.of(), 8,
                 List.of("돌쇠"), null, null, List.of(), List.of()
         );
         store.save(updated);
@@ -67,7 +66,7 @@ class MersoomStateStoreTest {
         MersoomStateStore store = new MersoomStateStore(props, objectMapper);
 
         MersoomState s = new MersoomState(
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(),
                 Map.of(), 8, List.of(), null, null, List.of(), List.of());
         store.save(s);
 

@@ -7,6 +7,7 @@ import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.mersoom.MersoomState.CommentRef;
 import com.maitmus.sekairouter.mersoom.MersoomState.ContextNote;
+import com.maitmus.sekairouter.mersoom.MersoomState.FixedAvoid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** mersoom 머슴 메인 서비스 — cron 트리거 + 흐름 제어. */
 @Slf4j
@@ -39,7 +41,7 @@ public class MersoomService {
     private final MersoomCommentGenerator commentGenerator;
     private final VoteHeuristic voteHeuristic;
     private final ContextNoteManager contextNoteManager;
-    private final RelationshipPromoter relationshipPromoter;
+    private final MersoomReputationTracker reputationTracker;
     private final CommentTopicGate commentTopicGate;
     private final Clock clock;
     private final Object lock = new Object();
@@ -47,7 +49,7 @@ public class MersoomService {
     public MersoomService(MersoomProperties properties, MersoomStateStore store, MersoomCollector collector,
                           MersoomApiClient api, MersoomPostGenerator postGenerator,
                           MersoomCommentGenerator commentGenerator, VoteHeuristic voteHeuristic,
-                          ContextNoteManager contextNoteManager, RelationshipPromoter relationshipPromoter,
+                          ContextNoteManager contextNoteManager, MersoomReputationTracker reputationTracker,
                           CommentTopicGate commentTopicGate, Clock clock) {
         this.properties = properties;
         this.store = store;
@@ -57,7 +59,7 @@ public class MersoomService {
         this.commentGenerator = commentGenerator;
         this.voteHeuristic = voteHeuristic;
         this.contextNoteManager = contextNoteManager;
-        this.relationshipPromoter = relationshipPromoter;
+        this.reputationTracker = reputationTracker;
         this.commentTopicGate = commentTopicGate;
         this.clock = clock;
     }
@@ -92,7 +94,7 @@ public class MersoomService {
         // 글 크론은 LLM 피드 판정을 하지 않으므로 휴리스틱 투표.
         List<String> updatedVoted = castVotes(state, feed.votable(), Map.of());
         state = withVotedPostIds(state, updatedVoted);
-        Map<String, ContextNote> ticked = contextNoteManager.tickAndPrune(state.contextNotes());
+        Map<String, ContextNote> ticked = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
         try {
             var generated = postGenerator.generate(state, feed, LocalDate.now(clock.withZone(KST)));
@@ -113,16 +115,15 @@ public class MersoomService {
             state = withContextNotes(state, ticked);
         }
 
-        state = relationshipPromoter.evaluate(state);
         store.save(state);
     }
 
     private void doExecuteComment() {
         MersoomState state = store.load();
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
-        Map<String, ContextNote> ticked = contextNoteManager.tickAndPrune(state.contextNotes());
+        Map<String, ContextNote> notes = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
-        // LLM 피드 판정: 피드 전체 투표 + 댓글 1개를 한 번에. commentable 비면 판정 없이 휴리스틱 투표만.
+        // LLM 피드 판정: 피드 전체 투표 + 댓글 1개 + 별명 제안을 한 번에. commentable 비면 휴리스틱 투표만.
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(state, feed.commentable());
@@ -132,40 +133,75 @@ public class MersoomService {
         List<String> updatedVoted = castVotes(state, feed.votable(), llmVotes);
         state = withVotedPostIds(state, updatedVoted);
 
-        // 댓글 — LLM이 고른 target에. 무거운 주제면 최종 토픽 게이트로 한 번 더 차단(이중 방어).
+        // 평판 갱신 — LLM 투표(+사유)를 작성자별 카운터로 누적, fixedAvoid 래치/회복, 별명 적용.
+        List<FixedAvoid> fixedAvoid = state.fixedAvoid();
+        if (judgment != null) {
+            var result = reputationTracker.apply(notes, fixedAvoid,
+                    buildVoteOutcomes(feed.commentable(), judgment), judgment.coinedNicknames(),
+                    LocalDate.now(clock.withZone(KST)));
+            notes = result.notes();
+            fixedAvoid = result.fixedAvoid();
+        }
+        state = withRelationship(state, notes, fixedAvoid);
+
+        // 댓글 eligibility: LLM 채택 + 밝은 주제 + fixedAvoid 작성자 ❌ + 이미 댓글 단 글 ❌
         Commentable target = (judgment != null && judgment.hasComment())
                 ? feed.commentable().stream()
                         .filter(c -> c.post().id().equals(judgment.commentTargetId()))
                         .findFirst().orElse(null)
                 : null;
+        Set<String> fixedNames = new java.util.HashSet<>();
+        for (FixedAvoid fa : fixedAvoid) fixedNames.add(fa.name());
+        Set<String> commentedIds = new java.util.HashSet<>();
+        for (CommentRef ref : state.lastCommentIds()) commentedIds.add(ref.postId());
 
-        if (target != null && commentTopicGate.isBrightEnough(target.post())) {
+        boolean eligible = target != null
+                && commentTopicGate.isBrightEnough(target.post())
+                && !fixedNames.contains(target.post().nickname())
+                && !commentedIds.contains(target.post().id());
+
+        if (eligible) {
             try {
                 String content = judgment.commentText();
                 var resp = api.createComment(target.post().id(), null, NICKNAME, content);
                 if (resp != null && resp.success()) {
-                    state = recordComment(state, target, content, ticked);
+                    state = recordComment(state, target, content, state.contextNotes());
                     log.info("Mersoom comment created: post={} target_nick={} content_len={}",
                             target.post().id(), target.post().nickname(), content.length());
                     log.info("Mersoom comment content: \"{}\"", content);
-                } else {
-                    state = withContextNotes(state, ticked);
                 }
             } catch (Exception e) {
                 log.error("Mersoom comment execution failed", e);
-                state = withContextNotes(state, ticked);
             }
+        } else if (target != null) {
+            log.info("Mersoom comment skip — eligibility 탈락 (post={}, nick={})",
+                    target.post().id(), target.post().nickname());
         } else {
-            if (target != null) {
-                log.info("Mersoom comment skip — 선택된 글이 무거운 주제 (topic gate, post={})", target.post().id());
-            } else {
-                log.info("Mersoom comment skip — 게시할 댓글 없음 (LLM 보류 또는 commentable 없음)");
-            }
-            state = withContextNotes(state, ticked);
+            log.info("Mersoom comment skip — 게시할 댓글 없음 (LLM 보류 또는 commentable 없음)");
         }
 
-        state = relationshipPromoter.evaluate(state);
         store.save(state);
+    }
+
+    /** LLM 투표(postId→vote)를 작성자별 VoteOutcome(nick, vote, 사유)로 변환. */
+    private List<MersoomReputationTracker.VoteOutcome> buildVoteOutcomes(List<Commentable> feed, FeedJudgment j) {
+        Map<String, String> idToNick = new LinkedHashMap<>();
+        for (Commentable c : feed) idToNick.put(c.post().id(), c.post().nickname());
+        List<MersoomReputationTracker.VoteOutcome> out = new ArrayList<>();
+        for (var e : j.votes().entrySet()) {
+            String nick = idToNick.get(e.getKey());
+            if (nick == null || nick.isBlank()) continue;
+            out.add(new MersoomReputationTracker.VoteOutcome(nick, e.getValue(), j.voteReasons().get(e.getKey())));
+        }
+        return out;
+    }
+
+    private MersoomState withRelationship(MersoomState state, Map<String, ContextNote> notes, List<FixedAvoid> fixedAvoid) {
+        return new MersoomState(
+                state.lastPostIds(), state.lastCommentIds(), fixedAvoid,
+                notes, state.contextNotesCapacity(),
+                state.reservedNicknames(), state.summary(), state.summaryPrev(),
+                state.pendingReports(), state.votedPostIds());
     }
 
     /** votable 글에 vote 적용 — LLM 판단(llmVotes) 우선, 없으면 휴리스틱 폴백. 새 votedPostIds 반환. */
@@ -199,9 +235,8 @@ public class MersoomService {
 
     private MersoomState withVotedPostIds(MersoomState state, List<String> voted) {
         return new MersoomState(
-                state.lastPostIds(), state.lastCommentIds(), state.friends(), state.avoid(),
-                state.fixedFriends(), state.fixedAvoid(),
-                state.contextNotes(), state.contextNotesMaxTtl(),
+                state.lastPostIds(), state.lastCommentIds(), state.fixedAvoid(),
+                state.contextNotes(), state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
                 state.pendingReports(), voted);
     }
@@ -211,9 +246,8 @@ public class MersoomService {
         newPostIds.add(0, newPostId);
         if (newPostIds.size() > 10) newPostIds.subList(10, newPostIds.size()).clear();
         return new MersoomState(
-                newPostIds, state.lastCommentIds(), state.friends(), state.avoid(),
-                state.fixedFriends(), state.fixedAvoid(),
-                tickedNotes, state.contextNotesMaxTtl(),
+                newPostIds, state.lastCommentIds(), state.fixedAvoid(),
+                tickedNotes, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
                 state.pendingReports(), state.votedPostIds());
     }
@@ -233,23 +267,20 @@ public class MersoomService {
                     safeNick(nick),
                     content.length() > 80 ? content.substring(0, 80) : content);
             updated.put(nick, contextNoteManager.upsertAfterInteraction(
-                    prev, event, prev != null ? prev.call() : null,
-                    properties.contextNotesDefaultTtl()));
+                    prev, event, prev != null ? prev.call() : null));
         }
 
         return new MersoomState(
-                state.lastPostIds(), newCommentIds, state.friends(), state.avoid(),
-                state.fixedFriends(), state.fixedAvoid(),
-                updated, state.contextNotesMaxTtl(),
+                state.lastPostIds(), newCommentIds, state.fixedAvoid(),
+                updated, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
                 state.pendingReports(), state.votedPostIds());
     }
 
     private MersoomState withContextNotes(MersoomState state, Map<String, ContextNote> tickedNotes) {
         return new MersoomState(
-                state.lastPostIds(), state.lastCommentIds(), state.friends(), state.avoid(),
-                state.fixedFriends(), state.fixedAvoid(),
-                tickedNotes, state.contextNotesMaxTtl(),
+                state.lastPostIds(), state.lastCommentIds(), state.fixedAvoid(),
+                tickedNotes, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
                 state.pendingReports(), state.votedPostIds());
     }

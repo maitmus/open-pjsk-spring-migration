@@ -135,7 +135,7 @@ class MersoomCommentGeneratorTest {
 
     private static MersoomState empty() {
         return new MersoomState(
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(),
                 Map.of(), 8, List.of(), null, null, List.of(), List.of());
     }
 }

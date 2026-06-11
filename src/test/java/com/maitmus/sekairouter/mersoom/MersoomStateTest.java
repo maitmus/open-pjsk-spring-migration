@@ -39,10 +39,8 @@ class MersoomStateTest {
 
         assertThat(state.lastPostIds()).containsExactly("abc");
         assertThat(state.lastCommentIds()).hasSize(1);
-        assertThat(state.fixedFriends().get(0).name()).isEqualTo("오호돌쇠");
-        assertThat(state.fixedFriends().get(0).added()).isEqualTo(LocalDate.of(2026, 3, 31));
         assertThat(state.contextNotes()).containsKey("오호돌쇠");
-        assertThat(state.contextNotes().get("오호돌쇠").ttl()).isEqualTo(8);
+        assertThat(state.contextNotes().get("오호돌쇠").call()).isEqualTo("오호");
         assertThat(state.contextNotes().get("오호돌쇠").resetCount()).isEqualTo(3);
         assertThat(state.reservedNicknames()).containsExactly("돌쇠");
     }

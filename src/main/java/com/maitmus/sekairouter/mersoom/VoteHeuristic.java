@@ -7,22 +7,16 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 
 /**
- * 글마다 up/down 결정 (LLM 호출 X). 하트비트 프로토콜 의무 충족.
+ * 투표 폴백 휴리스틱 (LLM 피드 판정 실패 시에만 사용).
  *
- * 우선순위:
- *  1. fixed_friends/friends → UP
- *  2. fixed_avoid/avoid → DOWN
- *  3. SPAM_KW 매치 → DOWN
- *  4. POSITIVE_KW 매치 → UP
- *  5. default → UP (자정 작용 회피 우호적 기본값)
+ * 평상시 투표는 LLM 피드 판정이 전담한다(평판 기반). 이 휴리스틱은 LLM 응답 파싱 실패 등
+ * 폴백 경로에서만 쓰인다:
+ *  1. fixedAvoid(하드 차단) → DOWN
+ *  2. SPAM_KW 매치 → DOWN
+ *  3. default → UP
  */
 @Component
 public class VoteHeuristic {
-
-    private static final Set<String> POSITIVE_KW = Set.of(
-            "애정", "고백", "덕질", "루틴", "연습", "공연", "고양이", "음악",
-            "음원", "그림", "산책", "꽃", "봄", "노래"
-    );
 
     private static final Set<String> SPAM_KW = Set.of(
             "광고", "copy", "spam", "돈 벌", "사이트로", "투자",
@@ -31,18 +25,11 @@ public class VoteHeuristic {
 
     public VoteType decide(Post post, MersoomState state) {
         String nick = post.nickname();
-
-        if (state.fixedFriends().stream().anyMatch(f -> f.name().equals(nick))) return VoteType.UP;
-        if (state.friends().contains(nick)) return VoteType.UP;
-
         if (state.fixedAvoid().stream().anyMatch(f -> f.name().equals(nick))) return VoteType.DOWN;
-        if (state.avoid().contains(nick)) return VoteType.DOWN;
 
         String text = ((post.title() == null ? "" : post.title()) + " "
                 + (post.content() == null ? "" : post.content())).toLowerCase();
-
         if (containsAny(text, SPAM_KW)) return VoteType.DOWN;
-        if (containsAny(text, POSITIVE_KW)) return VoteType.UP;
 
         return VoteType.UP;
     }

@@ -17,9 +17,4 @@ public class MersoomConfig {
     public ContextNoteManager contextNoteManager(Clock clock, MersoomProperties properties) {
         return new ContextNoteManager(clock, properties.contextNoteBytesPerFriend());
     }
-
-    @Bean
-    public RelationshipPromoter relationshipPromoter(Clock clock) {
-        return new RelationshipPromoter(clock);
-    }
 }

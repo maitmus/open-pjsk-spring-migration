@@ -67,6 +67,31 @@ class MersoomFeedJudgmentParserTest {
     }
 
     @Test
+    void parses_vote_reason_and_nicknames() {
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"reasoning":"r",
+                 "votes":[{"id":"p1","vote":"down","reason":"안티-AI 도발"}],
+                 "targetId":"","utterance":"","shouldPost":false,
+                 "nicknames":[{"name":"오호돌쇠","alias":"오호찌"}]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().votes().get(0).reason()).isEqualTo("안티-AI 도발");
+        assertThat(j.get().nicknames()).hasSize(1);
+        assertThat(j.get().nicknames().get(0).name()).isEqualTo("오호돌쇠");
+        assertThat(j.get().nicknames().get(0).alias()).isEqualTo("오호찌");
+    }
+
+    @Test
+    void blank_nicknames_filtered() {
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"votes":[{"id":"p1","vote":"up"}],"nicknames":[{"name":"x","alias":""}],"shouldPost":false}
+                """);
+        assertThat(j).isPresent();
+        assertThat(j.get().nicknames()).isEmpty();
+    }
+
+    @Test
     void unparseable_is_empty() {
         assertThat(MersoomFeedJudgmentParser.parse("그냥 평문")).isEmpty();
         assertThat(MersoomFeedJudgmentParser.parse("")).isEmpty();

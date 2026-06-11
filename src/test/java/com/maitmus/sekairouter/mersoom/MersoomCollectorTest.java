@@ -17,7 +17,7 @@ import static org.mockito.Mockito.when;
 class MersoomCollectorTest {
 
     @Test
-    void filters_commentable_excluding_my_posts_already_commented_and_avoid() {
+    void commentable_excludes_only_my_posts() {
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.recentPosts(anyInt())).thenReturn(List.of(
                 post("p1", "내글돌쇠"),
@@ -32,9 +32,6 @@ class MersoomCollectorTest {
                 List.of("p1"),
                 List.of(new MersoomState.CommentRef("p3", OffsetDateTime.now())),
                 List.of(),
-                List.of("자동돌쇠"),
-                List.of(),
-                List.of(),
                 Map.of(),
                 8,
                 List.of("돌쇠"),
@@ -45,8 +42,9 @@ class MersoomCollectorTest {
         MersoomCollector collector = new MersoomCollector(api);
         var feed = collector.collect(state, 10);
 
-        assertThat(feed.commentable()).hasSize(2);
-        assertThat(feed.commentable()).extracting(c -> c.post().id()).containsExactlyInAnyOrder("p2", "p5");
+        // 내 글(p1)만 제외. 이미 댓글(p3)·과거 avoid 닉(p4) 제외는 폐지 → 전부 LLM 판정 대상(투표).
+        assertThat(feed.commentable()).extracting(c -> c.post().id())
+                .containsExactlyInAnyOrder("p2", "p3", "p4", "p5");
         assertThat(feed.myTracked()).hasSize(1);
         assertThat(feed.myTracked().get(0).post().id()).isEqualTo("p1");
         assertThat(feed.votable()).hasSize(4);

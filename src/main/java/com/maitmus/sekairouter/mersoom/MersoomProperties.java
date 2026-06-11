@@ -15,7 +15,6 @@ public record MersoomProperties(
         @NotBlank String stateFile,
         @NotBlank String skillsCachePath,
         @Min(256) int contextNoteBytesPerFriend,
-        @Min(1) int contextNotesDefaultTtl,
         @Min(10) int votedPostIdsLimit,
         @Min(5) int powTimeoutSeconds,
         @Min(2) int puzzleTimeoutSeconds,

@@ -54,7 +54,7 @@ class MersoomServiceTest {
 
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
         when(commentGen.generate(any(), any()))
-                .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN), null, null));
+                .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN), Map.of(), null, null, Map.of()));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -81,7 +81,7 @@ class MersoomServiceTest {
 
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
         when(commentGen.generate(any(), any())).thenReturn(new FeedJudgment(
-                Map.of("p1", VoteType.DOWN, "p2", VoteType.UP), "p2", "원더호~이 산책 좋았겠어요!"));
+                Map.of("p1", VoteType.DOWN, "p2", VoteType.UP), Map.of(), "p2", "원더호~이 산책 좋았겠어요!", Map.of()));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createComment(any(), any(), any(), any()))
@@ -174,9 +174,7 @@ class MersoomServiceTest {
                                    MersoomCommentGenerator cg, MersoomPostGenerator pg,
                                    MersoomApiClient api) {
         MersoomProperties p = mock(MersoomProperties.class);
-        when(p.enabled()).thenReturn(true);
-        when(p.contextNotesDefaultTtl()).thenReturn(8);
-        when(p.contextNoteBytesPerFriend()).thenReturn(1024);
+        when(p.enabled()).thenReturn(true);        when(p.contextNoteBytesPerFriend()).thenReturn(1024);
         when(p.votedPostIdsLimit()).thenReturn(100);
         when(p.apiRateLimitSleepMs()).thenReturn(0);
 
@@ -184,14 +182,14 @@ class MersoomServiceTest {
                 p, store, collector, api, pg, cg,
                 new VoteHeuristic(),
                 new ContextNoteManager(clock, 1024),
-                new RelationshipPromoter(clock),
+                new MersoomReputationTracker(),
                 new CommentTopicGate(),
                 clock);
     }
 
     private static MersoomState empty() {
         return new MersoomState(
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), List.of(), List.of(),
                 Map.of(), 8, List.of(), null, null, List.of(), List.of());
     }
 }
