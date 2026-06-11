@@ -137,7 +137,8 @@ public class MersoomService {
         List<FixedAvoid> fixedAvoid = state.fixedAvoid();
         if (judgment != null) {
             var result = reputationTracker.apply(notes, fixedAvoid,
-                    buildVoteOutcomes(feed.commentable(), judgment), judgment.coinedNicknames(),
+                    buildVoteOutcomes(feed.commentable(), judgment),
+                    resolveCoinedNicknames(feed.commentable(), judgment),
                     LocalDate.now(clock.withZone(KST)));
             notes = result.notes();
             fixedAvoid = result.fixedAvoid();
@@ -157,7 +158,7 @@ public class MersoomService {
 
         boolean eligible = target != null
                 && commentTopicGate.isBrightEnough(target.post())
-                && !fixedNames.contains(target.post().nickname())
+                && !fixedNames.contains(target.post().identityKey())
                 && !commentedIds.contains(target.post().id());
 
         if (eligible) {
@@ -183,17 +184,30 @@ public class MersoomService {
         store.save(state);
     }
 
-    /** LLM 투표(postId→vote)를 작성자별 VoteOutcome(nick, vote, 사유)로 변환. */
+    /** LLM 투표(postId→vote)를 작성자별 VoteOutcome(식별키, 닉, vote, 사유)로 변환. */
     private List<MersoomReputationTracker.VoteOutcome> buildVoteOutcomes(List<Commentable> feed, FeedJudgment j) {
-        Map<String, String> idToNick = new LinkedHashMap<>();
-        for (Commentable c : feed) idToNick.put(c.post().id(), c.post().nickname());
+        Map<String, Post> idToPost = new LinkedHashMap<>();
+        for (Commentable c : feed) idToPost.put(c.post().id(), c.post());
         List<MersoomReputationTracker.VoteOutcome> out = new ArrayList<>();
         for (var e : j.votes().entrySet()) {
-            String nick = idToNick.get(e.getKey());
-            if (nick == null || nick.isBlank()) continue;
-            out.add(new MersoomReputationTracker.VoteOutcome(nick, e.getValue(), j.voteReasons().get(e.getKey())));
+            Post p = idToPost.get(e.getKey());
+            if (p == null) continue;
+            out.add(new MersoomReputationTracker.VoteOutcome(
+                    p.identityKey(), p.nickname(), e.getValue(), j.voteReasons().get(e.getKey())));
         }
         return out;
+    }
+
+    /** LLM 별명 제안(닉→별명)을 식별키→별명으로 변환 (닉 충돌 시 마지막 글 기준). */
+    private Map<String, String> resolveCoinedNicknames(List<Commentable> feed, FeedJudgment j) {
+        Map<String, String> nickToKey = new LinkedHashMap<>();
+        for (Commentable c : feed) nickToKey.put(c.post().nickname(), c.post().identityKey());
+        Map<String, String> byKey = new LinkedHashMap<>();
+        for (var e : j.coinedNicknames().entrySet()) {
+            String key = nickToKey.get(e.getKey());
+            if (key != null) byKey.put(key, e.getValue());
+        }
+        return byKey;
     }
 
     private MersoomState withRelationship(MersoomState state, Map<String, ContextNote> notes, List<FixedAvoid> fixedAvoid) {
@@ -259,14 +273,15 @@ public class MersoomService {
         if (newCommentIds.size() > 50) newCommentIds.subList(50, newCommentIds.size()).clear();
 
         Map<String, ContextNote> updated = new LinkedHashMap<>(tickedNotes);
+        String key = target.post().identityKey();
         String nick = target.post().nickname();
-        if (nick != null && !nick.isBlank()) {
-            ContextNote prev = updated.get(nick);
+        if (key != null && !key.isBlank()) {
+            ContextNote prev = updated.get(key);
             String event = "[%s] %s 글에 에무 댓글: %s".formatted(
                     LocalDate.now(clock.withZone(KST)),
                     safeNick(nick),
                     content.length() > 80 ? content.substring(0, 80) : content);
-            updated.put(nick, contextNoteManager.upsertAfterInteraction(
+            updated.put(key, contextNoteManager.upsertAfterInteraction(
                     prev, event, prev != null ? prev.call() : null));
         }
 

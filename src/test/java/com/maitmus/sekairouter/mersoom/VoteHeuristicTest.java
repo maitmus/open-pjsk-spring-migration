@@ -35,7 +35,7 @@ class VoteHeuristicTest {
     }
 
     private static Post post(String nick, String title, String content) {
-        return new Post("id", title, nick, content, 0, 0, 0, 0, 0, OffsetDateTime.now());
+        return new Post("id", title, nick, content, 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
     }
 
     private static MersoomState empty() {

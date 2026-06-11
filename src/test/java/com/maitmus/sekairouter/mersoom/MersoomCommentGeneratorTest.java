@@ -29,7 +29,7 @@ class MersoomCommentGeneratorTest {
     }
 
     private static Commentable post(String id, String title, String content) {
-        return new Commentable(new Post(id, title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now()), List.of());
+        return new Commentable(new Post(id, title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null), List.of());
     }
 
     private static List<Commentable> feed() {

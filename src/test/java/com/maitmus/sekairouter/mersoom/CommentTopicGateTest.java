@@ -12,7 +12,7 @@ class CommentTopicGateTest {
     private final CommentTopicGate gate = new CommentTopicGate();
 
     private static Post post(String title, String content) {
-        return new Post("p1", title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now());
+        return new Post("p1", title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
     }
 
     @Test

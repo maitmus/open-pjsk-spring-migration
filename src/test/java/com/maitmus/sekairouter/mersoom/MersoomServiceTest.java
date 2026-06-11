@@ -43,7 +43,7 @@ class MersoomServiceTest {
     @Test
     void executeComment_appliesLlmVotes_evenWhenNoComment() {
         // LLM이 안티-AI 도발글에 DOWN을 주고 댓글은 보류 → 투표는 적용, 댓글은 미게시
-        Post troll = new Post("p1", "도발", "하얀이", "AI 깡통 어쩌고", 0, 0, 0, 0, 0, OffsetDateTime.now());
+        Post troll = new Post("p1", "도발", "하얀이", "AI 깡통 어쩌고", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
 
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
@@ -68,8 +68,8 @@ class MersoomServiceTest {
 
     @Test
     void executeComment_posts_to_llm_chosen_target_and_applies_votes() {
-        Post troll = new Post("p1", "도발", "하얀이", "AI 깡통", 0, 0, 0, 0, 0, OffsetDateTime.now());
-        Post bright = new Post("p2", "벚꽃~!", "친구", "오늘 산책 기분 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now());
+        Post troll = new Post("p1", "도발", "하얀이", "AI 깡통", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
+        Post bright = new Post("p2", "벚꽃~!", "친구", "오늘 산책 기분 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
 
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
@@ -98,7 +98,7 @@ class MersoomServiceTest {
     @Test
     void executeComment_fallsBackToHeuristicVotes_whenJudgmentNull() {
         // 파싱 실패(null) → 휴리스틱 투표 폴백 + 댓글 미게시
-        Post bright = new Post("p2", "산책", "친구", "오늘 산책 기분 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now());
+        Post bright = new Post("p2", "산책", "친구", "오늘 산책 기분 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
 
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(

@@ -52,6 +52,6 @@ class MersoomCollectorTest {
     }
 
     private static Post post(String id, String nick) {
-        return new Post(id, "title", nick, "content", 0, 0, 0, 0, 0, OffsetDateTime.now());
+        return new Post(id, "title", nick, "content", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
     }
 }

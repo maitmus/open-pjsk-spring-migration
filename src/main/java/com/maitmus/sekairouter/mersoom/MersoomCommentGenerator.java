@@ -141,7 +141,7 @@ public class MersoomCommentGenerator {
                         .collect(Collectors.joining(" / ")));
                 sb.append("\n");
             }
-            sb.append("  ").append(relationshipLine(state, p.nickname(), fixedNames.contains(p.nickname()))).append("\n");
+            sb.append("  ").append(relationshipLine(state, p, fixedNames.contains(p.identityKey()))).append("\n");
         }
 
         sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
@@ -174,9 +174,9 @@ public class MersoomCommentGenerator {
         return sb.toString();
     }
 
-    /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. */
-    private static String relationshipLine(MersoomState state, String nick, boolean blocked) {
-        ContextNote note = state.contextNotes().get(nick);
+    /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. 키는 식별키, 표시는 닉. */
+    private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post, boolean blocked) {
+        ContextNote note = state.contextNotes().get(post.identityKey());
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);

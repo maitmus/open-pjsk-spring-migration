@@ -33,14 +33,14 @@ class MersoomReputationTrackerTest {
     @Test
     void up_increments_reputation() {
         var r = apply(Map.of("친구", note(0)), List.of(),
-                List.of(new VoteOutcome("친구", VoteType.UP, null)), Map.of());
+                List.of(new VoteOutcome("친구", "친구", VoteType.UP, null)), Map.of());
         assertThat(r.notes().get("친구").reputation()).isEqualTo(1);
     }
 
     @Test
     void down_decrements_and_records_reason() {
         var r = apply(Map.of("트롤", note(0)), List.of(),
-                List.of(new VoteOutcome("트롤", VoteType.DOWN, "안티-AI 도발")), Map.of());
+                List.of(new VoteOutcome("트롤", "트롤", VoteType.DOWN, "안티-AI 도발")), Map.of());
         assertThat(r.notes().get("트롤").reputation()).isEqualTo(-1);
         assertThat(r.notes().get("트롤").note()).contains("안티-AI 도발");
     }
@@ -48,30 +48,30 @@ class MersoomReputationTrackerTest {
     @Test
     void net_capped_at_plus_minus_one_per_author() {
         var r = apply(Map.of("x", note(0)), List.of(),
-                List.of(new VoteOutcome("x", VoteType.UP, null),
-                        new VoteOutcome("x", VoteType.UP, null),
-                        new VoteOutcome("x", VoteType.DOWN, null)), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.UP, null),
+                        new VoteOutcome("x", "x", VoteType.UP, null),
+                        new VoteOutcome("x", "x", VoteType.DOWN, null)), Map.of());
         assertThat(r.notes().get("x").reputation()).isEqualTo(1); // net +1, not +2
     }
 
     @Test
     void clamps_at_plus_10() {
         var r = apply(Map.of("x", note(10)), List.of(),
-                List.of(new VoteOutcome("x", VoteType.UP, null)), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.UP, null)), Map.of());
         assertThat(r.notes().get("x").reputation()).isEqualTo(10);
     }
 
     @Test
     void clamps_at_minus_10() {
         var r = apply(Map.of("x", note(-10)), List.of(),
-                List.of(new VoteOutcome("x", VoteType.DOWN, null)), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.DOWN, null)), Map.of());
         assertThat(r.notes().get("x").reputation()).isEqualTo(-10);
     }
 
     @Test
     void latches_to_fixedAvoid_at_minus_5() {
         var r = apply(Map.of("x", note(-4)), List.of(),
-                List.of(new VoteOutcome("x", VoteType.DOWN, "또 도발")), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.DOWN, "또 도발")), Map.of());
         assertThat(r.notes().get("x").reputation()).isEqualTo(-5);
         assertThat(r.fixedAvoid()).extracting(FixedAvoid::name).contains("x");
     }
@@ -80,7 +80,7 @@ class MersoomReputationTrackerTest {
     void fixedAvoid_keeps_tallying_below() {
         var r = apply(Map.of("x", note(-5)),
                 List.of(new FixedAvoid("x", "r", today)),
-                List.of(new VoteOutcome("x", VoteType.DOWN, "여전")), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.DOWN, "여전")), Map.of());
         assertThat(r.notes().get("x").reputation()).isEqualTo(-6); // 계속 집계
         assertThat(r.fixedAvoid()).extracting(FixedAvoid::name).contains("x");
     }
@@ -89,7 +89,7 @@ class MersoomReputationTrackerTest {
     void fixedAvoid_auto_recovers_at_plus_5_to_minus_4() {
         var r = apply(Map.of("x", note(4)),
                 List.of(new FixedAvoid("x", "r", today)),
-                List.of(new VoteOutcome("x", VoteType.UP, null)), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.UP, null)), Map.of());
         assertThat(r.fixedAvoid()).extracting(FixedAvoid::name).doesNotContain("x"); // 해제
         assertThat(r.notes().get("x").reputation()).isEqualTo(-4);                    // 보호관찰로 리셋
     }
@@ -98,7 +98,7 @@ class MersoomReputationTrackerTest {
     void fixedAvoid_not_promoted_below_plus_5() {
         var r = apply(Map.of("x", note(0)),
                 List.of(new FixedAvoid("x", "r", today)),
-                List.of(new VoteOutcome("x", VoteType.UP, null)), Map.of());
+                List.of(new VoteOutcome("x", "x", VoteType.UP, null)), Map.of());
         assertThat(r.fixedAvoid()).extracting(FixedAvoid::name).contains("x"); // 아직 차단
         assertThat(r.notes().get("x").reputation()).isEqualTo(1);
     }

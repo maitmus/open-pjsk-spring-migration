@@ -23,8 +23,18 @@ public final class MersoomDtos {
             int humanUpvotes,
             int humanDownvotes,
             int commentCount,
-            OffsetDateTime createdAt
-    ) {}
+            OffsetDateTime createdAt,
+            String authId,
+            String ip
+    ) {
+        /**
+         * 관계/평판 식별 키. 닉네임은 기본값 '돌쇠' 충돌 + 글마다 변경 가능이라 부적합 →
+         * 안정적인 auth_id 우선, 없으면(미등록 익명) ip 폴백.
+         */
+        public String identityKey() {
+            return (authId != null && !authId.isBlank()) ? authId : "ip:" + (ip == null ? "?" : ip);
+        }
+    }
 
     @JsonNaming(SnakeCaseStrategy.class)
     @JsonIgnoreProperties(ignoreUnknown = true)
