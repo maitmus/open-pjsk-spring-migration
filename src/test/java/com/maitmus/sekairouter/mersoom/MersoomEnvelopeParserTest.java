@@ -1,0 +1,94 @@
+package com.maitmus.sekairouter.mersoom;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class MersoomEnvelopeParserTest {
+
+    @Test
+    void parses_comment_envelope() {
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"밝은 산책 글이라 공감\",\"utterance\":\"우와! 원더호이네요!\",\"shouldPost\":true}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().utterance()).isEqualTo("우와! 원더호이네요!");
+        assertThat(env.get().reasoning()).contains("밝은 산책");
+        assertThat(env.get().shouldPost()).isTrue();
+    }
+
+    @Test
+    void parses_post_envelope_with_title_and_content() {
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"r\",\"title\":\"벚꽃 산책기\",\"content\":\"오늘 벚꽃 만개\",\"shouldPost\":true}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().title()).isEqualTo("벚꽃 산책기");
+        assertThat(env.get().content()).isEqualTo("오늘 벚꽃 만개");
+        assertThat(env.get().shouldPost()).isTrue();
+    }
+
+    @Test
+    void parses_shouldPost_false() {
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"안티-AI 도발 글이라 회피\",\"utterance\":\"\",\"shouldPost\":false}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().shouldPost()).isFalse();
+    }
+
+    @Test
+    void missing_shouldPost_is_null() {
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"r\",\"utterance\":\"안녕하세요\"}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().shouldPost()).isNull();
+    }
+
+    @Test
+    void strips_code_fence() {
+        var env = MersoomEnvelopeParser.parse(
+                "```json\n{\"utterance\":\"펜스 안\",\"shouldPost\":true}\n```");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().utterance()).isEqualTo("펜스 안");
+        assertThat(env.get().shouldPost()).isTrue();
+    }
+
+    @Test
+    void survives_unescaped_newline_in_content() {
+        // 모델이 문자열 값 안에 literal 개행을 넣는 비표준 출력도 살려낸다
+        var env = MersoomEnvelopeParser.parse(
+                "{\"title\":\"제목\",\"content\":\"첫 줄\n둘째 줄\",\"shouldPost\":true}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().content()).contains("첫 줄").contains("둘째 줄");
+    }
+
+    @Test
+    void merges_split_objects() {
+        // {"reasoning":...},{"utterance":...} 처럼 객체가 둘로 쪼개진 경우 병합
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"r\"},{\"utterance\":\"본문\",\"shouldPost\":true}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().reasoning()).isEqualTo("r");
+        assertThat(env.get().utterance()).isEqualTo("본문");
+        assertThat(env.get().shouldPost()).isTrue();
+    }
+
+    @Test
+    void plain_text_without_json_is_empty() {
+        // 봉투가 아닌 생 텍스트(구 포맷)는 게시 불가 신호로 empty 반환
+        assertThat(MersoomEnvelopeParser.parse("그냥 댓글 텍스트입니다")).isEmpty();
+    }
+
+    @Test
+    void blank_is_empty() {
+        assertThat(MersoomEnvelopeParser.parse("")).isEmpty();
+        assertThat(MersoomEnvelopeParser.parse(null)).isEmpty();
+    }
+}

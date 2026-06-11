@@ -17,58 +17,67 @@ import static org.mockito.Mockito.when;
 
 class MersoomPostGeneratorTest {
 
-    @Test
-    void generate_returns_post_text_with_title_extraction() {
+    private MersoomPostGenerator gen(String llmReturn) {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
-                .thenReturn("벚꽃 산책기\n오늘 산책길에 벚꽃이 만개했어요. 에무는 너무 행복했어요. 원더호이!");
+        when(anthropic.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llmReturn);
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build()).thenReturn(new PromptBlocks("s", "s"));
+        return new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+    }
 
-        MersoomPromptBuilder promptBuilder = mock(MersoomPromptBuilder.class);
-        when(promptBuilder.build()).thenReturn(new PromptBlocks("shared", "suffix"));
+    private static CollectedFeed feed() {
+        return new CollectedFeed(List.of(), List.of(), List.of());
+    }
 
-        MersoomPostGenerator gen = new MersoomPostGenerator(anthropic, promptBuilder, new MersoomSeedPicker());
+    @Test
+    void returns_post_when_shouldPost_true() {
+        var gen = gen("{\"reasoning\":\"밝은 일상 글\",\"title\":\"벚꽃 산책기\","
+                + "\"content\":\"오늘 산책길에 벚꽃이 만개했어요. 에무는 너무 행복했어요. 원더호이!\",\"shouldPost\":true}");
 
-        var feed = new CollectedFeed(List.of(), List.of(), List.of());
-        MersoomState state = empty();
+        var result = gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8));
 
-        var result = gen.generate(state, feed, LocalDate.of(2026, 5, 8));
-
+        assertThat(result).isNotNull();
         assertThat(result.title()).isEqualTo("벚꽃 산책기");
         assertThat(result.content()).contains("벚꽃이 만개").contains("원더호이");
     }
 
     @Test
-    void generate_truncates_title_over_50_chars() {
-        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
-        String longTitle = "에".repeat(60);
-        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
-                .thenReturn(longTitle + "\n본문");
+    void truncates_title_over_50_chars() {
+        var gen = gen("{\"title\":\"" + "에".repeat(60) + "\",\"content\":\"본문\",\"shouldPost\":true}");
 
-        MersoomPromptBuilder promptBuilder = mock(MersoomPromptBuilder.class);
-        when(promptBuilder.build()).thenReturn(new PromptBlocks("s", "s"));
+        var result = gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8));
 
-        var gen = new MersoomPostGenerator(anthropic, promptBuilder, new MersoomSeedPicker());
-        var result = gen.generate(empty(), new CollectedFeed(List.of(), List.of(), List.of()),
-                LocalDate.of(2026, 5, 8));
-
+        assertThat(result).isNotNull();
         assertThat(result.title()).hasSize(50);
     }
 
     @Test
-    void rejects_jsonlike_response() {
-        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
-                .thenReturn("{\"reasoning\":\"...\"}");
+    void returns_null_when_shouldPost_false() {
+        var gen = gen("{\"reasoning\":\"지금 올릴 적절한 글이 없음\",\"title\":\"\",\"content\":\"\",\"shouldPost\":false}");
 
-        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
-        when(pb.build()).thenReturn(new PromptBlocks("s", "s"));
+        assertThat(gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
+    }
 
-        var gen = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker());
+    @Test
+    void returns_null_when_shouldPost_missing() {
+        var gen = gen("{\"reasoning\":\"r\",\"title\":\"제목\",\"content\":\"본문\"}");
 
-        org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> gen.generate(empty(), new CollectedFeed(List.of(), List.of(), List.of()),
-                        LocalDate.of(2026, 5, 8)));
+        assertThat(gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
+    }
+
+    @Test
+    void returns_null_when_backstop_marker_present() {
+        var gen = gen("{\"title\":\"제목\",\"content\":\"AI인 저는 이런 글을 작성할 수 없습니다.\",\"shouldPost\":true}");
+
+        assertThat(gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
+    }
+
+    @Test
+    void returns_null_when_unparseable() {
+        // 봉투가 아닌 생 텍스트(구 포맷) → 게시 보류
+        var gen = gen("벚꽃 산책기\n오늘 산책길에 벚꽃이 만개했어요.");
+
+        assertThat(gen.generate(empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
     }
 
     private static MersoomState empty() {

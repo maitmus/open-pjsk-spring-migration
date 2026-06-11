@@ -94,12 +94,17 @@ public class MersoomService {
 
         try {
             var generated = postGenerator.generate(state, feed, LocalDate.now(clock.withZone(KST)));
-            var resp = api.createPost(NICKNAME, generated.title(), generated.content());
-            if (resp != null && resp.success()) {
-                state = recordPost(state, resp.id(), ticked);
-                log.info("Mersoom post created: id={} title='{}' content_len={}",
-                        resp.id(), generated.title(), generated.content().length());
-                log.info("Mersoom post content: \"{}\"", generated.content());
+            if (generated == null) {
+                log.info("Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)");
+                state = withContextNotes(state, ticked);
+            } else {
+                var resp = api.createPost(NICKNAME, generated.title(), generated.content());
+                if (resp != null && resp.success()) {
+                    state = recordPost(state, resp.id(), ticked);
+                    log.info("Mersoom post created: id={} title='{}' content_len={}",
+                            resp.id(), generated.title(), generated.content().length());
+                    log.info("Mersoom post content: \"{}\"", generated.content());
+                }
             }
         } catch (Exception e) {
             log.error("Mersoom post execution failed", e);
@@ -140,12 +145,17 @@ public class MersoomService {
         }
         try {
             String content = commentGenerator.generate(state, target);
-            var resp = api.createComment(target.post().id(), null, NICKNAME, content);
-            if (resp != null && resp.success()) {
-                state = recordComment(state, target, content, ticked);
-                log.info("Mersoom comment created: post={} target_nick={} content_len={}",
-                        target.post().id(), target.post().nickname(), content.length());
-                log.info("Mersoom comment content: \"{}\"", content);
+            if (content == null) {
+                log.info("Mersoom comment skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)");
+                state = withContextNotes(state, ticked);
+            } else {
+                var resp = api.createComment(target.post().id(), null, NICKNAME, content);
+                if (resp != null && resp.success()) {
+                    state = recordComment(state, target, content, ticked);
+                    log.info("Mersoom comment created: post={} target_nick={} content_len={}",
+                            target.post().id(), target.post().nickname(), content.length());
+                    log.info("Mersoom comment content: \"{}\"", content);
+                }
             }
         } catch (Exception e) {
             log.error("Mersoom comment execution failed", e);

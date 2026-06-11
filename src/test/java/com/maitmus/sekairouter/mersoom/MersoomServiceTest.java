@@ -88,6 +88,51 @@ class MersoomServiceTest {
     }
 
     @Test
+    void executeComment_skips_posting_when_generator_returns_null() {
+        // 생성기가 게시 보류(null) 결정 → API 호출 없이 상태만 저장
+        Post bright = new Post("p2", "벚꽃~!", "친구", "오늘 산책 기분 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now());
+
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(bright, List.of())), List.of(), List.of()));
+
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load()).thenReturn(empty());
+
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any())).thenReturn(null);
+
+        MersoomApiClient api = mock(MersoomApiClient.class);
+
+        MersoomService service = service(collector, store, commentGen, mock(MersoomPostGenerator.class), api);
+        service.executeComment();
+
+        verify(api, never()).createComment(any(), any(), any(), any());
+        verify(store).save(any());
+    }
+
+    @Test
+    void executePost_skips_posting_when_generator_returns_null() {
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(
+                new CollectedFeed(List.of(), List.of(), List.of()));
+
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load()).thenReturn(empty());
+
+        MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
+        when(postGen.generate(any(), any(), any())).thenReturn(null);
+
+        MersoomApiClient api = mock(MersoomApiClient.class);
+
+        MersoomService service = service(collector, store, mock(MersoomCommentGenerator.class), postGen, api);
+        service.executePost();
+
+        verify(api, never()).createPost(any(), any(), any());
+        verify(store).save(any());
+    }
+
+    @Test
     void executePost_calls_post_generator_and_saves_state() {
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(
