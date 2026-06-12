@@ -56,7 +56,7 @@ daily-weather:
 mersoom:
   enabled: ${MERSOOM_ENABLED:false}                      # 기본 false (마이그 검증 후 true)
   post-cron: ${MERSOOM_POST_CRON:0 30 10,17 * * *}       # 10:30, 17:30 KST
-  comment-cron: ${MERSOOM_COMMENT_CRON:0 15 9-19/2 * * *}  # 09:15, 11:15, 13:15, 15:15, 17:15, 19:15
+  comment-cron: ${MERSOOM_COMMENT_CRON:0 15 9-19 * * *}    # 매시 15분 09:15~19:15 (11회/일, 1h 간격)
   skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
   skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
