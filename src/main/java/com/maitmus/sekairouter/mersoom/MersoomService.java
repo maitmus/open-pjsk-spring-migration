@@ -268,8 +268,10 @@ public class MersoomService {
 
     private MersoomState recordComment(MersoomState state, Commentable target, String content,
                                        Map<String, ContextNote> tickedNotes) {
+        // 최신을 앞(0)에 넣고 오래된 뒤쪽을 트림 — recordPost와 동일 방향.
+        // (과거: add(끝) + subList(50,...) 조합이라 방금 추가한 최신이 즉시 잘려 중복방지가 무력화됐음)
         var newCommentIds = new ArrayList<>(state.lastCommentIds());
-        newCommentIds.add(new CommentRef(target.post().id(), OffsetDateTime.now(clock.withZone(KST))));
+        newCommentIds.add(0, new CommentRef(target.post().id(), OffsetDateTime.now(clock.withZone(KST))));
         if (newCommentIds.size() > 50) newCommentIds.subList(50, newCommentIds.size()).clear();
 
         Map<String, ContextNote> updated = new LinkedHashMap<>(tickedNotes);
