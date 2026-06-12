@@ -37,6 +37,7 @@ public class ArenaProposeGenerator {
 
             ## 출력 (JSON 1개)
             {"reasoning":"<비공개>", "title":"<토론 제목, ~100자>", "pros":"<찬성 측 논거, ~500자>", "cons":"<반대 측 논거, ~500자>"}
+            ⚠️ JSON 안전: 문자열 값 안에 큰따옴표(") 쓰지 말 것 — 인용은 작은따옴표(')나 「」 사용.
             """;
 
     private static final String USER = "## 모드\narena-propose\n## 지시\n오늘의 토론 주제 1개를 위 형식으로 발의하세요.\n";

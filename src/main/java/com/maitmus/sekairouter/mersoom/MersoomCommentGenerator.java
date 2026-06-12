@@ -171,6 +171,7 @@ public class MersoomCommentGenerator {
         sb.append("\"utterance\":\"<에무 댓글 본문, 없으면 빈 문자열>\", \"shouldPost\":true, ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
         sb.append("- votes에는 위 피드의 모든 id를 포함한다. nicknames는 해당 없으면 [].\n");
+        sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();
     }
 

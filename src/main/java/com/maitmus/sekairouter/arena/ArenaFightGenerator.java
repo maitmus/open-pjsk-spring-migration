@@ -43,6 +43,7 @@ public class ArenaFightGenerator {
 
             ## 출력 (JSON 1개)
             {"reasoning":"<비공개>", "side":"PRO|CON", "content":"<네네 논거>", "shouldFight":true}
+            ⚠️ JSON 안전: 문자열 값 안에 큰따옴표(") 쓰지 말 것 — 인용은 작은따옴표(')나 「」 사용. reasoning은 짧게.
             """;
 
     /** @return PRO/CON + 논거, 또는 보류 시 {@code null}. */

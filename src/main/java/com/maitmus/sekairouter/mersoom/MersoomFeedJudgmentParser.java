@@ -6,8 +6,12 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.maitmus.sekairouter.routing.JsonExtractor;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 머슴 댓글 크론의 통합 판단 봉투 파서.
@@ -58,8 +62,24 @@ public final class MersoomFeedJudgmentParser {
                             .toList();
             return Optional.of(new Judgment(r.reasoning, votes, r.targetId, r.utterance, r.shouldPost, nicknames));
         } catch (Exception e) {
-            return Optional.empty();
+            // LLM이 문자열 값에 escape 안 된 큰따옴표를 넣으면 readValue가 깨진다(흔함).
+            // votes는 단순 토큰이라 정규식으로 살려 투표·평판을 보존하고, 댓글은 안전하게 스킵한다.
+            return fallbackVotesOnly(JsonExtractor.extract(raw));
         }
+    }
+
+    private static final Pattern VOTE_PATTERN = Pattern.compile(
+            "\"id\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"vote\"\\s*:\\s*\"(up|down)\"", Pattern.CASE_INSENSITIVE);
+
+    private static Optional<Judgment> fallbackVotesOnly(String json) {
+        List<Vote> votes = new ArrayList<>();
+        Matcher m = VOTE_PATTERN.matcher(json);
+        while (m.find()) {
+            votes.add(new Vote(m.group(1), m.group(2).toLowerCase(Locale.ROOT), null));
+        }
+        if (votes.isEmpty()) return Optional.empty();
+        // 댓글/별명은 깨진 JSON에서 신뢰 불가 → 스킵(shouldPost=false). 투표만 반환.
+        return Optional.of(new Judgment(null, votes, "", "", Boolean.FALSE, List.of()));
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

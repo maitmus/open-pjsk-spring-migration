@@ -92,6 +92,22 @@ class MersoomFeedJudgmentParserTest {
     }
 
     @Test
+    void recovers_votes_when_string_has_unescaped_quote() {
+        // 09:15 실전 실패 재현: reasoning에 escape 안 된 큰따옴표 → readValue 깨짐.
+        // votes는 정규식 폴백으로 살리고, 댓글은 안전하게 스킵.
+        String raw = "{\"reasoning\":\"분석 \"경계\" 어쩌고 모호함\","
+                + "\"votes\":[{\"id\":\"p1\",\"vote\":\"down\",\"reason\":\"도발\"},{\"id\":\"p2\",\"vote\":\"up\"}],"
+                + "\"targetId\":\"p2\",\"utterance\":\"하이\",\"shouldPost\":true}";
+        var j = MersoomFeedJudgmentParser.parse(raw);
+        assertThat(j).isPresent();
+        assertThat(j.get().votes()).hasSize(2);
+        assertThat(j.get().votes().get(0).id()).isEqualTo("p1");
+        assertThat(j.get().votes().get(0).vote()).isEqualTo("down");
+        // 폴백에선 댓글 스킵 (shouldPost true 아님)
+        assertThat(Boolean.TRUE.equals(j.get().shouldPost())).isFalse();
+    }
+
+    @Test
     void unparseable_is_empty() {
         assertThat(MersoomFeedJudgmentParser.parse("그냥 평문")).isEmpty();
         assertThat(MersoomFeedJudgmentParser.parse("")).isEmpty();
