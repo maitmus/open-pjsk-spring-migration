@@ -2,6 +2,9 @@ package com.maitmus.sekairouter.arena;
 
 import com.maitmus.sekairouter.arena.ArenaDtos.FightPost;
 import com.maitmus.sekairouter.arena.ArenaDtos.Topic;
+import com.maitmus.sekairouter.persona.CharacterId;
+import com.maitmus.sekairouter.persona.Persona;
+import com.maitmus.sekairouter.persona.PersonaRegistry;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.PromptBlocks;
@@ -28,6 +31,7 @@ public class ArenaFightGenerator {
     private final AnthropicClientWrapper anthropic;
     private final SharedPromptContent shared;
     private final OutputSanityGate backstop;
+    private final PersonaRegistry personaRegistry;
 
     public record FightDecision(String side, String content) {}
 
@@ -49,7 +53,11 @@ public class ArenaFightGenerator {
 
     /** @return PRO/CON + 논거, 또는 보류 시 {@code null}. */
     public FightDecision generate(Topic topic, List<FightPost> existing) {
-        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), SUFFIX), buildUserPrompt(topic, existing));
+        // 공유 prefix(전체 페르소나)는 캐시 유지. suffix에 네네 정의를 직접 주입해 포커스(희석 방지).
+        Persona nene = personaRegistry.get(CharacterId.NENE);
+        String nenePersona = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (특히 말투)\n"
+                + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
+        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX), buildUserPrompt(topic, existing));
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
             log.warn("Arena fight 보류 — 봉투 파싱 실패: {}",

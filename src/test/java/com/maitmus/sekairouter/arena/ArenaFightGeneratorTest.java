@@ -24,7 +24,8 @@ class ArenaFightGeneratorTest {
         when(a.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llm);
         SharedPromptContent s = mock(SharedPromptContent.class);
         when(s.build()).thenReturn("shared");
-        return new ArenaFightGenerator(a, s, new OutputSanityGate());
+        return new ArenaFightGenerator(a, s, new OutputSanityGate(),
+                mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
     }
 
     @Test
