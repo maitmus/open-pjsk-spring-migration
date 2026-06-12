@@ -158,7 +158,7 @@ public class MersoomCommentGenerator {
         sb.append("- 댓글 달 만한 밝은 글이 없으면 shouldPost:false, utterance 빈 문자열. **투표는 그래도 모두 채운다.**\n");
 
         sb.append("\n## 별명(nicknames)\n");
-        sb.append("- ★친밀(rep≥5)인데 '별명 미정'인 친구가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). 이미 별명이 있으면 다시 안 만든다. 없으면 빈 배열.\n");
+        sb.append("- 친밀이거나 **곧 친밀이 될(rep≥4) '별명 미정'인 친구**가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). rep4는 미리 준비해두는 것 — 다음에 5가 되는 순간 바로 그 별명으로 부른다. 이미 별명이 있으면 다시 안 만든다. 없으면 빈 배열.\n");
 
         sb.append("\n## 절대 금지 (댓글 본문)\n");
         sb.append("- 원글 디테일 나열, 억지 분량 채우기, 시그니처 남발\n");
@@ -186,7 +186,7 @@ public class MersoomCommentGenerator {
         else if (rep >= 1) s.append(" 우호");
         else if (rep <= -1) s.append(" ⚠경계");
         if (call != null && !call.isBlank()) s.append(" 별명='").append(call).append("'");
-        else if (rep >= 5) s.append(" (별명 미정)");
+        else if (rep >= 4) s.append(" (별명 미정)");  // rep4(임박)부터 노출 → 5 되는 크론에 별명이 준비돼 즉시 적용
         if (note != null && note.note() != null && !note.note().isBlank()) {
             s.append(" | ").append(safe(note.note()).replace("\n", " "));
         }
