@@ -48,6 +48,17 @@ class MersoomReputationTrackerTest {
     }
 
     @Test
+    void multiple_pending_nicknames_all_applied_in_one_cycle() {
+        // rep≥5 별명미정 친구가 여럿이면 한 크론에 전부 부여(라쿵 같은 누락 케이스 일괄 커버).
+        var notes = new java.util.HashMap<String, ContextNote>();
+        notes.put("a", note(5, null));
+        notes.put("b", note(6, null));
+        var r = apply(notes, List.of(), List.of(), Map.of("a", "에이찌", "b", "비찌"));
+        assertThat(r.notes().get("a").call()).isEqualTo("에이찌");
+        assertThat(r.notes().get("b").call()).isEqualTo("비찌");
+    }
+
+    @Test
     void coined_nickname_not_applied_below_5() {
         // rep5 미만이면 제안이 와도 적용 안 함(준비만 — 5 도달 시 적용).
         var r = apply(Map.of("x", note(3, null)), List.of(),
