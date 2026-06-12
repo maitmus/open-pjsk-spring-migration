@@ -14,6 +14,7 @@ public record ArenaProperties(
         @NotBlank String proposeCron,
         @NotBlank String fightCron,
         @NotBlank String apiBaseUrl,
+        @NotBlank String stateFile,
         Account propose,
         Account fight
 ) {

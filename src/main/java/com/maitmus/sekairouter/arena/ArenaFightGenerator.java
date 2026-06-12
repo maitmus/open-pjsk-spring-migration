@@ -51,13 +51,19 @@ public class ArenaFightGenerator {
             ⚠️ JSON 안전: 문자열 값 안에 큰따옴표(") 쓰지 말 것 — 인용은 작은따옴표(')나 「」 사용. reasoning은 짧게.
             """;
 
-    /** @return PRO/CON + 논거, 또는 보류 시 {@code null}. */
-    public FightDecision generate(Topic topic, List<FightPost> existing) {
+    /**
+     * @param lockedSide   이미 이 토픽에 고정한 입장(PRO/CON). null이면 첫 턴 — 자유 선택.
+     * @param selfNickname 네네 자신의 닉(자기 이전 글 식별용).
+     * @return PRO/CON + 논거, 또는 보류 시 {@code null}. 락이 걸렸으면 side는 항상 lockedSide.
+     */
+    public FightDecision generate(Topic topic, List<FightPost> existing, String lockedSide, String selfNickname) {
         // 공유 prefix(전체 페르소나)는 캐시 유지. suffix에 네네 정의를 직접 주입해 포커스(희석 방지).
         Persona nene = personaRegistry.get(CharacterId.NENE);
         String nenePersona = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (특히 말투)\n"
                 + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
-        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX), buildUserPrompt(topic, existing));
+        String lockedNorm = normalizeSide(lockedSide);
+        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX),
+                buildUserPrompt(topic, existing, lockedNorm, selfNickname));
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
             log.warn("Arena fight 보류 — 봉투 파싱 실패: {}",
@@ -72,7 +78,8 @@ public class ArenaFightGenerator {
             log.info("Arena fight 보류 — shouldFight={} (극단 부적합)", e.shouldFight());
             return null;
         }
-        String side = normalizeSide(e.side());
+        // 락이 걸렸으면 LLM이 낸 side는 무시하고 고정 입장 유지(전향 방지).
+        String side = lockedNorm != null ? lockedNorm : normalizeSide(e.side());
         String content = e.content() == null ? "" : e.content().strip();
         if (side == null) {
             log.info("Arena fight 보류 — side 무효: '{}'", e.side());
@@ -98,23 +105,43 @@ public class ArenaFightGenerator {
         };
     }
 
-    private String buildUserPrompt(Topic topic, List<FightPost> existing) {
+    private String buildUserPrompt(Topic topic, List<FightPost> existing, String lockedSide, String selfNickname) {
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\narena-fight\n");
         sb.append("## 오늘의 토론 주제\n");
         sb.append("제목: ").append(safe(topic.title())).append("\n");
         sb.append("PRO(찬성): ").append(safe(topic.pros())).append("\n");
         sb.append("CON(반대): ").append(safe(topic.cons())).append("\n\n");
-        if (existing != null && !existing.isEmpty()) {
-            sb.append("## 이미 올라온 논거 (반박 참고)\n");
+
+        // 자기 이전 글(닉 일치)은 '내 논거'로, 나머지는 '반박 참고'로 분리.
+        StringBuilder mine = new StringBuilder();
+        StringBuilder others = new StringBuilder();
+        if (existing != null) {
             for (FightPost p : existing) {
                 if (p.isBlinded()) continue;
-                sb.append("- [").append(safe(p.side())).append("] @").append(safe(p.nickname()))
+                boolean isMine = selfNickname != null && selfNickname.equals(p.nickname());
+                (isMine ? mine : others)
+                        .append("- [").append(safe(p.side())).append("] @").append(safe(p.nickname()))
                         .append(": ").append(safe(p.content())).append("\n");
             }
-            sb.append("\n");
         }
-        sb.append("## 지시\n네네로서 PRO/CON 중 한쪽을 골라 논거를 위 형식으로 작성하세요.\n");
+        if (mine.length() > 0) {
+            sb.append("## 너의 이전 논거 (네가 쓴 글 — 반박 대상 아님, 이어서 보강)\n").append(mine).append("\n");
+        }
+        if (others.length() > 0) {
+            sb.append("## 상대·기타 논거 (반박 참고)\n").append(others).append("\n");
+        }
+
+        sb.append("## 지시\n");
+        if (lockedSide != null) {
+            sb.append("★ 너의 고정 입장: **").append(lockedSide).append("**. 이 토픽에서 이미 ")
+                    .append(lockedSide).append(" 쪽에 섰어. **절대 반대편으로 안 넘어가** — ")
+                    .append(lockedSide).append(" 입장을 유지하면서 새 논거를 더하거나 상대 반박만 해. ")
+                    .append("상대 지적 중 맞는 건 인정해도 되지만 입장 자체는 안 뒤집어. side는 ")
+                    .append(lockedSide).append("로 고정해서 출력해.\n");
+        } else {
+            sb.append("네네로서 PRO/CON 중 한쪽을 골라 논거를 위 형식으로 작성하세요. 한번 고른 입장은 이후로도 유지할 거야.\n");
+        }
         return sb.toString();
     }
 

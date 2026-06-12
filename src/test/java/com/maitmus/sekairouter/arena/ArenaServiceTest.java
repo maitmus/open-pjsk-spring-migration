@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -24,13 +25,15 @@ class ArenaServiceTest {
     private ArenaApiClient api = mock(ArenaApiClient.class);
     private ArenaProposeGenerator proposeGen = mock(ArenaProposeGenerator.class);
     private ArenaFightGenerator fightGen = mock(ArenaFightGenerator.class);
+    private ArenaStateStore stateStore = mock(ArenaStateStore.class);
 
     private ArenaService service() {
         ArenaProperties p = mock(ArenaProperties.class);
         when(p.enabled()).thenReturn(true);
         when(p.propose()).thenReturn(emu);
         when(p.fight()).thenReturn(nene);
-        return new ArenaService(p, api, proposeGen, fightGen, clock);
+        when(stateStore.lockedSide(any(), any())).thenReturn(Optional.empty());
+        return new ArenaService(p, api, proposeGen, fightGen, stateStore, clock);
     }
 
     @Test
@@ -64,7 +67,7 @@ class ArenaServiceTest {
     void fight_skips_when_not_BATTLE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "PROPOSE", null));
         service().executeFight();
-        verify(fightGen, never()).generate(any(), any());
+        verify(fightGen, never()).generate(any(), any(), any(), any());
         verify(api, never()).fight(any(), any(), any());
     }
 
@@ -72,19 +75,20 @@ class ArenaServiceTest {
     void fight_posts_in_BATTLE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
         when(api.fightPosts(any())).thenReturn(List.of());
-        when(fightGen.generate(any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거임"));
+        when(fightGen.generate(any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거임"));
         when(api.fight(any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
 
         service().executeFight();
 
         verify(api).fight(eq(nene), eq("CON"), eq("논거임"));
+        verify(stateStore).recordSide(any(), eq("t1"), eq("CON"));
     }
 
     @Test
     void fight_skips_when_generator_null() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
         when(api.fightPosts(any())).thenReturn(List.of());
-        when(fightGen.generate(any(), any())).thenReturn(null);
+        when(fightGen.generate(any(), any(), any(), any())).thenReturn(null);
         service().executeFight();
         verify(api, never()).fight(any(), any(), any());
     }
@@ -93,7 +97,7 @@ class ArenaServiceTest {
     void disabled_does_nothing() {
         ArenaProperties p = mock(ArenaProperties.class);
         when(p.enabled()).thenReturn(false);
-        new ArenaService(p, api, proposeGen, fightGen, clock).executePropose();
+        new ArenaService(p, api, proposeGen, fightGen, stateStore, clock).executePropose();
         verify(api, never()).status();
     }
 }

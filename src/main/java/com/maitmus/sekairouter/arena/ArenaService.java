@@ -27,6 +27,7 @@ public class ArenaService {
     private final ArenaApiClient api;
     private final ArenaProposeGenerator proposeGenerator;
     private final ArenaFightGenerator fightGenerator;
+    private final ArenaStateStore stateStore;
     private final Clock clock;
     private final Object lock = new Object();
 
@@ -71,21 +72,29 @@ public class ArenaService {
             log.info("Arena fight skip — phase={}", status == null ? null : status.phase());
             return;
         }
+        LocalDate today = LocalDate.now(clock.withZone(KST));
+        String topicId = status.topic().id();
         List<FightPost> existing;
         try {
-            existing = api.fightPosts(LocalDate.now(clock.withZone(KST)));
+            existing = api.fightPosts(today);
         } catch (Exception e) {
             existing = List.of();
         }
-        var decision = fightGenerator.generate(status.topic(), existing);
+        String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
+        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, properties.fight().nickname());
         if (decision == null) {
             log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
             return;
         }
         try {
             var resp = api.fight(properties.fight(), decision.side(), decision.content());
-            log.info("Arena fight created: success={} side={} len={}",
-                    resp != null && resp.success(), decision.side(), decision.content().length());
+            boolean ok = resp != null && resp.success();
+            log.info("Arena fight created: success={} side={} len={} locked={}",
+                    ok, decision.side(), decision.content().length(), lockedSide != null);
+            // 첫 성공 시 입장 고정 — 이후 턴은 이 side로 락(같은 값 재기록은 무해).
+            if (ok) {
+                stateStore.recordSide(today, topicId, decision.side());
+            }
         } catch (Exception e) {
             log.warn("Arena fight 실패 (쿨다운 등) — 스킵: {}", e.getMessage());
         }
