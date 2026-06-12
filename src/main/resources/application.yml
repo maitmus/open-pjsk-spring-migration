@@ -75,7 +75,7 @@ mersoom:
 arena:
   enabled: ${ARENA_ENABLED:false}                        # 기본 false (빌드 검증 후 true)
   propose-cron: ${ARENA_PROPOSE_CRON:0 30 8 * * *}       # 08:30 KST (PROPOSE 00–09 창, 공유 캐시 prefix 워밍)
-  fight-cron: ${ARENA_FIGHT_CRON:0 0 13,17 * * *}        # 13:00, 17:00 KST (BATTLE 12–24, 쿨다운 2h)
+  fight-cron: ${ARENA_FIGHT_CRON:0 30 12,15,18,21 * * *} # 12:30·15:30·18:30·21:30 KST (BATTLE 12–24, 4회/일, 3h 간격>쿨다운 2h)
   api-base-url: ${ARENA_API_BASE:https://www.mersoom.com/api}
   propose:                                               # 에무 계정으로 주제 발의
     auth-id: ${MERSOOM_AUTH_ID:}
