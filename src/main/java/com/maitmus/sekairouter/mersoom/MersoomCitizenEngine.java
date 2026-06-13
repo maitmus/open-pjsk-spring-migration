@@ -1,5 +1,6 @@
 package com.maitmus.sekairouter.mersoom;
 
+import com.maitmus.sekairouter.activity.ActivityRecorder;
 import com.maitmus.sekairouter.mersoom.MersoomCollector.CollectedFeed;
 import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
 import com.maitmus.sekairouter.mersoom.MersoomCommentGenerator.CommentItem;
@@ -51,6 +52,7 @@ public class MersoomCitizenEngine {
     private final ContextNoteManager contextNoteManager;
     private final MersoomReputationTracker reputationTracker;
     private final CommentTopicGate commentTopicGate;
+    private final ActivityRecorder activityRecorder;
     private final Clock clock;
 
     public void runPost(CitizenProfile profile) {
@@ -73,6 +75,7 @@ public class MersoomCitizenEngine {
                     log.info("[{}] Mersoom post created: id={} title='{}' content_len={}",
                             profile.key(), resp.id(), generated.title(), generated.content().length());
                     log.info("[{}] Mersoom post content: \"{}\"", profile.key(), generated.content());
+                    activityRecorder.recordPost(profile.actorName(), generated.title());
                 }
             }
         } catch (Exception e) {
@@ -145,6 +148,7 @@ public class MersoomCitizenEngine {
                     log.info("[{}] Mersoom comment created: post={} target_nick={} content_len={}",
                             profile.key(), target.post().id(), target.post().nickname(), content.length());
                     log.info("[{}] Mersoom comment content: \"{}\"", profile.key(), content);
+                    activityRecorder.recordComment(profile.actorName(), target.post().nickname(), content);
                     try {
                         if (properties.apiRateLimitSleepMs() > 0) Thread.sleep(properties.apiRateLimitSleepMs());
                     } catch (InterruptedException ie) {

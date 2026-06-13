@@ -96,3 +96,7 @@ arena:
     auth-id: ${NENE_MERSOOM_AUTH_ID:}
     password: ${NENE_MERSOOM_PASSWORD:}
     nickname: 쿠사나기 네네
+
+# 대시보드 활동 피드 — 봇이 댓글·글·발화 이벤트를 구조화로 영속(대시보드가 ro로 읽음, 로그 역파싱 대체)
+activity:
+  feed-file: ${ACTIVITY_FEED_FILE:/app/activity-feed.json}

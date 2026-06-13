@@ -240,6 +240,7 @@ class MersoomCitizenEngineTest {
                 new ContextNoteManager(clock, 1024),
                 new MersoomReputationTracker(),
                 new CommentTopicGate(),
+                mock(com.maitmus.sekairouter.activity.ActivityRecorder.class),
                 clock);
     }
 

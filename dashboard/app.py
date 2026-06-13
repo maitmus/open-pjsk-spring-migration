@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 STATE = os.environ.get("MERSOOM_STATE", "/data/mersoom-state.json")
 NENE_STATE = os.environ.get("NENE_MERSOOM_STATE", "/data/nene-mersoom-state.json")
 ARENA_STATE = os.environ.get("ARENA_STATE", "/data/arena-state.json")
+ACTIVITY = os.environ.get("ACTIVITY_FEED", "/data/activity-feed.json")
 LOG_DIR = os.environ.get("LOG_DIR", "/logs")
 LOG = os.path.join(LOG_DIR, "sekai-router.log")
 ARENA_API = os.environ.get("ARENA_API", "https://www.mersoom.com/api/arena")
@@ -87,32 +88,43 @@ def arena():
     return out
 
 
-_CMT = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}).*comment content: \"(.+)\"")
-_CMT_META = re.compile(r"(\d{2}:\d{2}:\d{2}).*comment created: post=\S+ target_nick=(\S+) content_len=(\d+)")
-_UTT = re.compile(r"(\d{2}:\d{2}:\d{2}).*Sent as (\w+) on \S+(?:\s\[reply[^\]]*\])?: (.+)")
+def _activity_events():
+    # 봇이 영속한 활동 피드(최신순). 로그 역파싱 대신 소스 오브 트루스 → 재시작/자정 롤오버에도 안 비워짐.
+    d = _read_json(ACTIVITY) or {}
+    evs = d.get("events", [])
+    return evs if isinstance(evs, list) else []
 
 
-def recent_comments(n=10):
-    lines = _tail(LOG, 96)
+def _hhmmss(ts):
+    return ts[11:19] if ts and len(ts) >= 19 else (ts or "")
+
+
+def recent_comments(n=12):
+    # 머슴 활동: 댓글 + 글 (작성자·대상·요약). 피드는 이미 최신순.
     out = []
-    for line in lines:
-        m = _CMT_META.search(line)
-        if not m:
-            continue
-        who = "네네" if "[nene]" in line else ("에무" if "[emu]" in line else "·")
-        t, nick, ln = m.groups()
-        out.append({"time": t, "nick": nick, "len": ln, "who": who})
-    return out[-n:][::-1]
+    for e in _activity_events():
+        k = e.get("kind")
+        if k == "comment":
+            out.append({"time": _hhmmss(e.get("ts")), "who": e.get("actor") or "·",
+                        "kind": "댓글", "detail": "→ " + (e.get("target") or "?"),
+                        "text": (e.get("text") or "")[:120]})
+        elif k == "post":
+            out.append({"time": _hhmmss(e.get("ts")), "who": e.get("actor") or "·",
+                        "kind": "글", "detail": "", "text": (e.get("text") or "")[:120]})
+        if len(out) >= n:
+            break
+    return out
 
 
 def recent_utterances(n=10):
-    lines = _tail(LOG, 64)
     out = []
-    for line in lines:
-        m = _UTT.search(line)
-        if m:
-            out.append({"time": m.group(1), "char": m.group(2), "msg": m.group(3)[:90]})
-    return out[-n:][::-1]
+    for e in _activity_events():
+        if e.get("kind") == "utterance":
+            out.append({"time": _hhmmss(e.get("ts")), "char": e.get("actor") or "·",
+                        "msg": (e.get("text") or "")[:90]})
+        if len(out) >= n:
+            break
+    return out
 
 
 def health():
@@ -162,7 +174,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  <div class=card><h2>헬스</h2><div id=health></div></div>
  <div class=card><h2>아레나 토론</h2><div id=arena></div></div>
  <div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div>
- <div class=card><h2>최근 댓글 <span class=muted>에무/네네</span></h2><div id=cmt></div></div>
+ <div class=card><h2>최근 머슴 활동 <span class=muted>댓글·글</span></h2><div id=cmt></div></div>
  <div class=card><h2>최근 발화</h2><div id=utt></div></div>
 </div>
 <script>
@@ -185,7 +197,7 @@ async function load(){
   const rep=d.reputation||{};
   document.getElementById('rep').innerHTML=repBlock('에무',rep.emu)+repBlock('네네',rep.nene)||'<div class=muted>없음</div>';
   document.getElementById('cmt').innerHTML=
-   d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> → ${esc(c.nick)}</span><span class=muted>${esc(c.time)} · ${c.len}자</span></div>`).join('')||'<div class=muted>없음</div>';
+   d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
  }catch(e){console.error(e)}

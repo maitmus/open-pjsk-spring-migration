@@ -1,5 +1,6 @@
 package com.maitmus.sekairouter.proxy;
 
+import com.maitmus.sekairouter.activity.ActivityRecorder;
 import com.maitmus.sekairouter.discord.PersonaBotRegistry;
 import com.maitmus.sekairouter.persona.CharacterId;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ public class ProxySpeechService {
 
     private final PersonaBotRegistry registry;
     private final TypingIndicatorService typing;
+    private final ActivityRecorder activityRecorder;
 
     public boolean send(CharacterId character, String channelId, String message) {
         return sendWithReply(character, channelId, message, null).isPresent();
@@ -45,6 +47,7 @@ public class ProxySpeechService {
             } else {
                 log.info("Sent as {} on {}: {}", character, channelId, abbreviate(message));
             }
+            activityRecorder.recordUtterance(character.name().toLowerCase(), channelId, message);
             return Optional.of(sent.getId());
         } catch (Exception e) {
             log.error("Failed to send as {} on {}: {}", character, channelId, e.getMessage());
