@@ -131,6 +131,9 @@ public class MersoomCommentGenerator {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
+        Set<String> siblingIds = profile.siblingAuthIds() == null ? Set.of() : profile.siblingAuthIds();
+        // 형제 봇(원더쇼 동료)의 짧은 이름 — GRADES.md 원더랜즈×쇼타임 호칭표 조회용. 봇은 에무·네네 둘뿐.
+        String siblingShort = nene ? "에무" : "네네";
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
@@ -150,7 +153,9 @@ public class MersoomCommentGenerator {
                         .collect(Collectors.joining(" / ")));
                 sb.append("\n");
             }
-            sb.append("  ").append(relationshipLine(state, p, fixedNames.contains(p.identityKey()))).append("\n");
+            boolean isSibling = siblingIds.contains(p.identityKey());
+            sb.append("  ").append(relationshipLine(state, p, fixedNames.contains(p.identityKey()),
+                    isSibling, siblingShort)).append("\n");
         }
 
         sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
@@ -178,6 +183,7 @@ public class MersoomCommentGenerator {
         }
         sb.append("- **'별명 미정'인 친구가 여러 명이면 이번에 모두 짓는다(한 명만 하고 미루지 말 것).** 특히 **이미 rep≥5인데 별명이 없는 친구는 예외 없이 이번 크론에 반드시 부여** — 미루면 계속 누락된다.\n");
         sb.append("- 이미 별명이 있으면 다시 안 만든다. 해당 친구가 없으면 빈 배열.\n");
+        sb.append("- **원더쇼 동료(에무·네네) 본인에겐 별명을 짓지 않는다** — 이미 아는 사이라 GRADES.md 호칭으로 부른다.\n");
 
         sb.append("\n## 절대 금지 (댓글 본문)\n");
         sb.append("- 원글 디테일 나열, 억지 분량 채우기, 시그니처 남발\n");
@@ -194,10 +200,18 @@ public class MersoomCommentGenerator {
     }
 
     /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. 키는 식별키, 표시는 닉. */
-    private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post, boolean blocked) {
+    private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post,
+                                           boolean blocked, boolean isSibling, String siblingShort) {
         ContextNote note = state.contextNotes().get(post.identityKey());
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
+        if (isSibling) {
+            // 형제 봇(원더쇼 동료) 본인 — 처음부터 아는 사이. 머슴 닉네임/존댓말 기본값·별명 전부 무시하고
+            // GRADES.md 원더랜즈×쇼타임 호칭표의 '너→상대' 호칭·말투(반말 포함) 그대로.
+            return ("[관계] rep=" + rep + " · 이건 " + siblingShort + " 본인(네 원더랜즈×쇼타임 동료, 원래 아는 사이)"
+                    + " — **머슴 사용자 존댓말 기본값·닉네임을 적용하지 말 것.** GRADES.md '원더랜즈×쇼타임' 호칭표의"
+                    + " 너→" + siblingShort + " 칸(호칭·말투, 반말 포함) 그대로 부른다. **별명 짓지 말 것**(이미 아는 사이).");
+        }
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
         if (blocked) {
             // 차단(fixedAvoid) 작성자엔 과거 도발 note를 주입하지 않는다 — LLM이 이력에 앵커돼

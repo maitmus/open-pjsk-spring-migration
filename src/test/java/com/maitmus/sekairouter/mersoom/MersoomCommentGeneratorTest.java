@@ -7,10 +7,12 @@ import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +40,32 @@ class MersoomCommentGeneratorTest {
 
     private static List<Commentable> feed() {
         return List.of(post("p1", "도발", "AI 깡통 어쩌고"), post("p2", "벚꽃~!", "산책 최고에요!"));
+    }
+
+    @Test
+    void sibling_post_gets_GRADES_addressing_and_no_petname() {
+        // 에무가 형제봇 네네(nene_wonder) 글을 볼 때 — GRADES 호칭 지시 + 별명 금지가 프롬프트에 들어가야 함
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        CitizenProfile emuWithSibling = new CitizenProfile("emu", "에무",
+                new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
+                com.maitmus.sekairouter.persona.CharacterId.EMU, Set.of("nene_wonder"));
+        Commentable nenePost = new Commentable(
+                new Post("p1", "노래 연습", "네네", "오늘 고음 잘 나왔다", 0, 0, 0, 0, 0,
+                        OffsetDateTime.now(), "nene_wonder", null), List.of());
+
+        g.generate(emuWithSibling, empty(), List.of(nenePost));
+
+        String prompt = userPrompt.getValue();
+        // 형제봇 라인에 GRADES 호칭 지시 + 별명 금지가 들어가야 함 (존댓말 기본값 무시)
+        assertThat(prompt).contains("원더랜즈×쇼타임").contains("너→네네").contains("별명 짓지 말 것")
+                .contains("존댓말 기본값");
     }
 
     private static List<Commentable> feed4() {

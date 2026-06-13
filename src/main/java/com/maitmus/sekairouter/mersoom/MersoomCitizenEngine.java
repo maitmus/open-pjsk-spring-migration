@@ -110,7 +110,7 @@ public class MersoomCitizenEngine {
         if (judgment != null) {
             var result = reputationTracker.apply(notes, fixedAvoid,
                     buildVoteOutcomes(feed.commentable(), llmVotes, judgment.voteReasons()),
-                    resolveCoinedNicknames(feed.commentable(), judgment),
+                    resolveCoinedNicknames(profile, feed.commentable(), judgment),
                     LocalDate.now(clock.withZone(KST)));
             notes = result.notes();
             fixedAvoid = result.fixedAvoid();
@@ -212,14 +212,15 @@ public class MersoomCitizenEngine {
         return out;
     }
 
-    /** LLM 별명 제안(닉→별명)을 식별키→별명으로 변환 (닉 충돌 시 마지막 글 기준). */
-    private Map<String, String> resolveCoinedNicknames(List<Commentable> feed, FeedJudgment j) {
+    /** LLM 별명 제안(닉→별명)을 식별키→별명으로 변환 (닉 충돌 시 마지막 글 기준). 형제 봇은 제외(별명 안 지음). */
+    private Map<String, String> resolveCoinedNicknames(CitizenProfile profile, List<Commentable> feed, FeedJudgment j) {
+        Set<String> siblings = profile.siblingAuthIds() == null ? Set.of() : profile.siblingAuthIds();
         Map<String, String> nickToKey = new LinkedHashMap<>();
         for (Commentable c : feed) nickToKey.put(c.post().nickname(), c.post().identityKey());
         Map<String, String> byKey = new LinkedHashMap<>();
         for (var e : j.coinedNicknames().entrySet()) {
             String key = nickToKey.get(e.getKey());
-            if (key != null) byKey.put(key, e.getValue());
+            if (key != null && !siblings.contains(key)) byKey.put(key, e.getValue());   // 형제 봇 별명 미적용
         }
         return byKey;
     }
