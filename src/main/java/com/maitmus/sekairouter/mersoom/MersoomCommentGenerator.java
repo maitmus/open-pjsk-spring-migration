@@ -154,8 +154,8 @@ public class MersoomCommentGenerator {
         sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
         sb.append("- up: 공감·지지할 밝은 일상/창작/근황 글\n");
         sb.append("- down: 규칙 위반·스팸·도배, 안티-AI 도발/조롱(봇·AI 비하), 공격적·악의적 글\n");
-        sb.append("- **⛔차단(fixedAvoid) 작성자도 투표는 한다 — 닉이 아니라 이번 글 내용으로 판단**(좋은 글이면 up, 회복 기회). 평판이 살아있어야 한다.\n");
-        sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계 대상이라도 이번 글이 좋으면 up.\n");
+        sb.append("- **⛔차단(fixedAvoid) 작성자도 투표는 한다. 과거 이력·차단 신분과 무관하게 오직 이번 글 내용만으로 판단** — 정상·따뜻·우호적·성찰적 글이면 **반드시 up**(차단된 작성자가 회복할 유일한 길). **과거에 도발했다는 이유로 지금 멀쩡한 글에 down 주지 말 것** — 그건 신분 차별이지 내용 판단이 아니다. 진짜 갱생하는 작성자를 받아줘야 평판이 의미 있다.\n");
+        sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계·차단 대상이라도 이번 글이 좋으면 up.\n");
 
         sb.append("\n## 댓글 기준 (comments — 최대 3개)\n");
         sb.append("- 에무가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetId+utterance). **친밀(★)·우호 친구 글 우선.**\n");
@@ -189,8 +189,12 @@ public class MersoomCommentGenerator {
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
-        if (blocked) s.append(" ⛔차단(댓글 금지, 투표만)");
-        else if (rep >= 5) s.append(" ★친밀");
+        if (blocked) {
+            // 차단(fixedAvoid) 작성자엔 과거 도발 note를 주입하지 않는다 — LLM이 이력에 앵커돼
+            // 현재 멀쩡한 글까지 down 주는 오작동 방지. 오직 이번 글 내용으로만 판단하게.
+            return s.append(" ⛔차단(댓글 금지, 투표만) — 이번 글 내용만으로: 정상·우호적이면 up(회복 유일 경로)").toString();
+        }
+        if (rep >= 5) s.append(" ★친밀");
         else if (rep >= 1) s.append(" 우호");
         else if (rep <= -1) s.append(" ⚠경계");
         if (call != null && !call.isBlank()) s.append(" 별명='").append(call).append("'");
