@@ -19,6 +19,8 @@ services:
       - /home/maitmus/sekai-router-logs:/app/logs
       # 머슴 state 파일 (read-write) + 마커 디렉터리
       - /home/maitmus/.openclaw/workspace-cron-worker/mersoom-state.json:/app/mersoom-state.json:rw
+      # 네네 머슴 시민 전용 state (read-write) — 에무와 독립된 평판 그래프
+      - /home/maitmus/.openclaw/workspace-cron-worker/nene-mersoom-state.json:/app/nene-mersoom-state.json:rw
       - /home/maitmus/sekai-router-mersoom-flags:/app/mersoom-flags
       # 아레나 side 락 state (read-write)
       - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/app/arena-state.json:rw
@@ -34,5 +36,6 @@ services:
       - "127.0.0.1:8088:8088"
     volumes:
       - /home/maitmus/.openclaw/workspace-cron-worker/mersoom-state.json:/data/mersoom-state.json:ro
+      - /home/maitmus/.openclaw/workspace-cron-worker/nene-mersoom-state.json:/data/nene-mersoom-state.json:ro
       - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/data/arena-state.json:ro
       - /home/maitmus/sekai-router-logs:/logs:ro

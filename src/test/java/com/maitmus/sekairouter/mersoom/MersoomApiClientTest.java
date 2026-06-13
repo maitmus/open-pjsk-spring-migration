@@ -68,7 +68,8 @@ class MersoomApiClientTest {
                         {"success":true,"id":"new-post-id"}
                         """)));
 
-        var resp = client.createPost("에무", "테스트", "에무 본문");
+        var resp = client.createPost(new MersoomProperties.Auth("emu_wonder", "wonderhoi2026!"),
+                "에무", "테스트", "에무 본문");
 
         assertThat(resp.id()).isEqualTo("new-post-id");
         assertThat(resp.success()).isTrue();
@@ -88,7 +89,7 @@ class MersoomApiClientTest {
                         {"success":true}
                         """)));
 
-        client.vote("abc", MersoomDtos.VoteType.UP);
+        client.vote(new MersoomProperties.Auth("emu_wonder", "wonderhoi2026!"), "abc", MersoomDtos.VoteType.UP);
 
         server.verify(postRequestedFor(urlPathEqualTo("/api/posts/abc/vote")));
     }

@@ -20,11 +20,15 @@ import static org.mockito.Mockito.when;
 
 class MersoomCommentGeneratorTest {
 
+    private static final CitizenProfile EMU = new CitizenProfile("emu", "에무",
+            new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
+            com.maitmus.sekairouter.persona.CharacterId.EMU, java.util.Set.of());
+
     private MersoomCommentGenerator gen(String llmReturn) {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         when(anthropic.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llmReturn);
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
-        when(pb.build()).thenReturn(new PromptBlocks("s", "s"));
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
         return new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
     }
 
@@ -49,7 +53,7 @@ class MersoomCommentGeneratorTest {
                  "comments":[{"targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!"}]}
                 """);
 
-        var j = gen.generate(empty(), feed());
+        var j = gen.generate(EMU, empty(), feed());
 
         assertThat(j.votes()).containsEntry("p1", VoteType.DOWN).containsEntry("p2", VoteType.UP);
         assertThat(j.hasComment()).isTrue();
@@ -66,7 +70,7 @@ class MersoomCommentGeneratorTest {
                              {"targetId":"p3","utterance":"노을 예뻐요!"},
                              {"targetId":"p4","utterance":"붕어빵 최고!"}]}
                 """);
-        var j = gen.generate(empty(), feed4());
+        var j = gen.generate(EMU, empty(), feed4());
         assertThat(j.comments()).hasSize(3);
     }
 
@@ -77,7 +81,7 @@ class MersoomCommentGeneratorTest {
                  "comments":[{"targetId":"p1","utterance":"하나"},{"targetId":"p2","utterance":"둘"},
                              {"targetId":"p3","utterance":"셋"},{"targetId":"p4","utterance":"넷"}]}
                 """);
-        assertThat(gen.generate(empty(), feed4()).comments()).hasSize(3);   // 4개 줘도 3개로
+        assertThat(gen.generate(EMU, empty(), feed4()).comments()).hasSize(3);   // 4개 줘도 3개로
     }
 
     @Test
@@ -86,7 +90,7 @@ class MersoomCommentGeneratorTest {
                 {"votes":[{"id":"p2","vote":"up"}],
                  "comments":[{"targetId":"p2","utterance":"첫 댓글"},{"targetId":"p2","utterance":"같은 글 또"}]}
                 """);
-        assertThat(gen.generate(empty(), feed()).comments()).hasSize(1);    // 같은 글 중복 제거
+        assertThat(gen.generate(EMU, empty(), feed()).comments()).hasSize(1);    // 같은 글 중복 제거
     }
 
     @Test
@@ -97,7 +101,7 @@ class MersoomCommentGeneratorTest {
                  "comments":[]}
                 """);
 
-        var j = gen.generate(empty(), feed());
+        var j = gen.generate(EMU, empty(), feed());
 
         assertThat(j.votes()).containsEntry("p1", VoteType.DOWN).containsEntry("p2", VoteType.DOWN);
         assertThat(j.hasComment()).isFalse();
@@ -109,7 +113,7 @@ class MersoomCommentGeneratorTest {
                 {"votes":[{"id":"p1","vote":"up"},{"id":"ghost","vote":"down"}],"comments":[]}
                 """);
 
-        assertThat(gen.generate(empty(), feed()).votes()).containsOnlyKeys("p1");
+        assertThat(gen.generate(EMU, empty(), feed()).votes()).containsOnlyKeys("p1");
     }
 
     @Test
@@ -120,7 +124,7 @@ class MersoomCommentGeneratorTest {
                              {"targetId":"p2","utterance":"산책 정말 좋았겠어요!"}]}
                 """);
 
-        var j = gen.generate(empty(), feed());
+        var j = gen.generate(EMU, empty(), feed());
 
         assertThat(j.votes()).hasSize(2);
         assertThat(j.comments()).hasSize(1);                          // 누수 항목만 제거
@@ -132,12 +136,12 @@ class MersoomCommentGeneratorTest {
         var gen = gen("""
                 {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetId":"ghost","utterance":"하이"}]}
                 """);
-        assertThat(gen.generate(empty(), feed()).hasComment()).isFalse();
+        assertThat(gen.generate(EMU, empty(), feed()).hasComment()).isFalse();
     }
 
     @Test
     void parseFailure_returnsNull() {
-        assertThat(gen("그냥 평문 응답").generate(empty(), feed())).isNull();
+        assertThat(gen("그냥 평문 응답").generate(EMU, empty(), feed())).isNull();
     }
 
     @Test
@@ -145,13 +149,13 @@ class MersoomCommentGeneratorTest {
         var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"comments\":[{\"targetId\":\"p2\",\"utterance\":\""
                 + "아".repeat(600) + "\"}]}");
 
-        assertThat(gen.generate(empty(), feed()).comments().get(0).text()).hasSize(500);
+        assertThat(gen.generate(EMU, empty(), feed()).comments().get(0).text()).hasSize(500);
     }
 
     @Test
     void emptyFeed_returnsNoVotesNoComment() {
         var gen = gen("irrelevant");
-        var j = gen.generate(empty(), List.of());
+        var j = gen.generate(EMU, empty(), List.of());
         assertThat(j.votes()).isEmpty();
         assertThat(j.hasComment()).isFalse();
     }

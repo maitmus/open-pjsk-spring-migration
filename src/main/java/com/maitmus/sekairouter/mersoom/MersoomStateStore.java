@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 /**
@@ -24,11 +23,10 @@ import java.nio.file.StandardCopyOption;
 @RequiredArgsConstructor
 public class MersoomStateStore {
 
-    private final MersoomProperties properties;
     private final ObjectMapper objectMapper;
 
-    public MersoomState load() {
-        Path file = Paths.get(properties.stateFile());
+    /** 페르소나별 state 파일 경로를 받아 로드 (에무/네네 각자 다른 파일). */
+    public MersoomState load(Path file) {
         if (!Files.isRegularFile(file)) {
             throw new IllegalStateException("Mersoom state file missing: " + file);
         }
@@ -39,8 +37,7 @@ public class MersoomStateStore {
         }
     }
 
-    public void save(MersoomState state) {
-        Path file = Paths.get(properties.stateFile());
+    public void save(Path file, MersoomState state) {
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try {
             String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(state);

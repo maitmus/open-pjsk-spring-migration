@@ -58,11 +58,11 @@ public class MersoomCommentGenerator {
     }
 
     /** @return 판정 결과, 또는 파싱 실패 시 {@code null}. */
-    public FeedJudgment generate(MersoomState state, List<Commentable> commentable) {
+    public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable) {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
-        String userPrompt = buildUserPrompt(state, commentable);
-        String raw = anthropic.completeJson(promptBuilder.build(), userPrompt);
+        String userPrompt = buildUserPrompt(profile, state, commentable);
+        String raw = anthropic.completeJson(promptBuilder.build(profile), userPrompt);
 
         var parsed = MersoomFeedJudgmentParser.parse(raw);
         if (parsed.isEmpty()) {
@@ -127,14 +127,16 @@ public class MersoomCommentGenerator {
         };
     }
 
-    private String buildUserPrompt(MersoomState state, List<Commentable> commentable) {
+    private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable) {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
+        String actor = profile.actorName();
+        boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
 
         sb.append("## 피드 (이 글들 전부에 투표 + 이 중 1개에 댓글)\n");
-        sb.append("각 줄 [관계]는 그 작성자에 대한 에무의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
+        sb.append("각 줄 [관계]는 그 작성자에 대한 ").append(actor).append("의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
         for (Commentable c : commentable) {
             var p = c.post();
             sb.append("- id=").append(p.id())
@@ -158,14 +160,22 @@ public class MersoomCommentGenerator {
         sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계·차단 대상이라도 이번 글이 좋으면 up.\n");
 
         sb.append("\n## 댓글 기준 (comments — 최대 3개)\n");
-        sb.append("- 에무가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetId+utterance). **친밀(★)·우호 친구 글 우선.**\n");
+        sb.append("- ").append(actor).append("가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetId+utterance). **친밀(★)·우호 친구 글 우선.**\n");
         sb.append("- **서로 다른 글에**(한 글에 중복 X). **⛔차단(fixedAvoid) 작성자는 절대 고르지 않는다**(투표만).\n");
-        sb.append("- 각 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선.\n");
+        if (nene) {
+            sb.append("- 각 2~3문장, **하드 최소 90자 (목표 100~200자)**. **네네 톤 — 차분한 직설 반말, 소극적 독설가(츳코미). 무뚝뚝하되 챙기는 마음은 직설 아래 깔 것. 존댓말 어미(~예요/~네요) 금지.** 원글 정서에 공감하되 과장 없이.\n");
+        } else {
+            sb.append("- 각 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선.\n");
+        }
         sb.append("- 별명이 있는 친구(별명=...)에게 댓글 달 땐 **그 별명으로 부른다**.\n");
         sb.append("- **억지로 3개 채우지 말 것** — 진짜 한 마디 하고 싶은 밝은 글만. 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
 
         sb.append("\n## 별명(nicknames)\n");
-        sb.append("- 친밀이거나 **곧 친밀이 될(rep≥4) '별명 미정'인 친구**가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). rep4는 미리 준비해두는 것 — 다음에 5가 되는 순간 바로 그 별명으로 부른다.\n");
+        if (nene) {
+            sb.append("- 친밀이거나 **곧 친밀이 될(rep≥4) '별명 미정'인 친구**가 있으면, 그 **닉네임을 기반으로 네네다운 애칭(무심한 듯 챙기는, 과하게 귀엽지 않게)**을 지어 nicknames에 넣는다. rep4는 미리 준비해두는 것 — 다음에 5가 되는 순간 바로 그 별명으로 부른다.\n");
+        } else {
+            sb.append("- 친밀이거나 **곧 친밀이 될(rep≥4) '별명 미정'인 친구**가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). rep4는 미리 준비해두는 것 — 다음에 5가 되는 순간 바로 그 별명으로 부른다.\n");
+        }
         sb.append("- **'별명 미정'인 친구가 여러 명이면 이번에 모두 짓는다(한 명만 하고 미루지 말 것).** 특히 **이미 rep≥5인데 별명이 없는 친구는 예외 없이 이번 크론에 반드시 부여** — 미루면 계속 누락된다.\n");
         sb.append("- 이미 별명이 있으면 다시 안 만든다. 해당 친구가 없으면 빈 배열.\n");
 

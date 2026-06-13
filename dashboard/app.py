@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 STATE = os.environ.get("MERSOOM_STATE", "/data/mersoom-state.json")
+NENE_STATE = os.environ.get("NENE_MERSOOM_STATE", "/data/nene-mersoom-state.json")
 ARENA_STATE = os.environ.get("ARENA_STATE", "/data/arena-state.json")
 LOG_DIR = os.environ.get("LOG_DIR", "/logs")
 LOG = os.path.join(LOG_DIR, "sekai-router.log")
@@ -43,8 +44,8 @@ def _tail(path, kb=64):
         return []
 
 
-def reputation():
-    s = _read_json(STATE) or {}
+def reputation_for(path):
+    s = _read_json(path) or {}
     notes = s.get("context_notes", {})
     fa = s.get("fixed_avoid", [])
     rows = []
@@ -56,6 +57,11 @@ def reputation():
                      "last": last[-1][:80] if last else ""})
     rows.sort(key=lambda r: -r["rep"])
     return {"count": len(rows), "fixed_avoid": [f.get("name") for f in fa], "rows": rows}
+
+
+def reputation():
+    # 에무·네네 각자의 독립 평판 그래프 (별도 state 파일)
+    return {"emu": reputation_for(STATE), "nene": reputation_for(NENE_STATE)}
 
 
 def arena():
@@ -86,10 +92,17 @@ _CMT_META = re.compile(r"(\d{2}:\d{2}:\d{2}).*comment created: post=\S+ target_n
 _UTT = re.compile(r"(\d{2}:\d{2}:\d{2}).*Sent as (\w+) on \S+(?:\s\[reply[^\]]*\])?: (.+)")
 
 
-def recent_comments(n=8):
+def recent_comments(n=10):
     lines = _tail(LOG, 96)
-    metas = [m.groups() for line in lines if (m := _CMT_META.search(line))]
-    return [{"time": t, "nick": nick, "len": ln} for (t, nick, ln) in metas[-n:]][::-1]
+    out = []
+    for line in lines:
+        m = _CMT_META.search(line)
+        if not m:
+            continue
+        who = "네네" if "[nene]" in line else ("에무" if "[emu]" in line else "·")
+        t, nick, ln = m.groups()
+        out.append({"time": t, "nick": nick, "len": ln, "who": who})
+    return out[-n:][::-1]
 
 
 def recent_utterances(n=10):
@@ -142,13 +155,14 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  .친밀{background:#2b4a2b;color:#9f9} .우호{background:#26384d;color:#9cf} .경계{background:#4d2626;color:#f99} .중립{background:#333;color:#bbb}
  .ok{color:#7e7} .warn{color:#f96} .small{font-size:12px;color:#c8cee0}
  .nene{border-left:3px solid #b59;padding-left:8px;margin:6px 0}
+ .repsec{margin-bottom:12px}
 </style></head><body>
 <h1>🎌 sekai-router 대시보드 <span id=now class=muted></span></h1>
 <div class=grid>
  <div class=card><h2>헬스</h2><div id=health></div></div>
  <div class=card><h2>아레나 토론</h2><div id=arena></div></div>
- <div class=card><h2>평판 랭킹</h2><div id=rep></div></div>
- <div class=card><h2>최근 댓글</h2><div id=cmt></div></div>
+ <div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div>
+ <div class=card><h2>최근 댓글 <span class=muted>에무/네네</span></h2><div id=cmt></div></div>
  <div class=card><h2>최근 발화</h2><div id=utt></div></div>
 </div>
 <script>
@@ -165,12 +179,13 @@ async function load(){
    `<div class=row><span>토픽</span><span class=small>${esc(a.topic||'-')}</span></div>`+
    `<div class=row><span>side 락</span><span class=pill>${esc(lk.side||'-')}</span></div>`+
    a.nene_posts.map(p=>`<div class=nene><b>[${esc(p.side)}]</b> ↑${p.up} ↓${p.dn}<br><span class=small>${esc(p.content)}</span></div>`).join('');
-  const r=d.reputation;
-  document.getElementById('rep').innerHTML=
-   `<div class=muted>${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</div>`+
-   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.tier}">${x.tier}</span></div>`).join('');
+  const repBlock=(label,r)=>r?
+   `<div class=repsec><div class=muted><b>${label}</b> · ${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</div>`+
+   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.tier}">${x.tier}</span></div>`).join('')+`</div>`:'';
+  const rep=d.reputation||{};
+  document.getElementById('rep').innerHTML=repBlock('에무',rep.emu)+repBlock('네네',rep.nene)||'<div class=muted>없음</div>';
   document.getElementById('cmt').innerHTML=
-   d.comments.map(c=>`<div class=row><span>${esc(c.nick)}</span><span class=muted>${esc(c.time)} · ${c.len}자</span></div>`).join('')||'<div class=muted>없음</div>';
+   d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> → ${esc(c.nick)}</span><span class=muted>${esc(c.time)} · ${c.len}자</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
  }catch(e){console.error(e)}

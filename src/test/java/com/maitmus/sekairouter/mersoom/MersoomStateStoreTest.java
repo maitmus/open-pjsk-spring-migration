@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class MersoomStateStoreTest {
 
@@ -39,10 +37,9 @@ class MersoomStateStoreTest {
                 }
                 """);
 
-        MersoomProperties props = mockProps(stateFile.toString());
-        MersoomStateStore store = new MersoomStateStore(props, objectMapper);
+        MersoomStateStore store = new MersoomStateStore(objectMapper);
 
-        MersoomState loaded = store.load();
+        MersoomState loaded = store.load(stateFile);
         assertThat(loaded.lastPostIds()).containsExactly("p1");
         assertThat(loaded.reservedNicknames()).containsExactly("돌쇠");
 
@@ -51,9 +48,9 @@ class MersoomStateStoreTest {
                 List.of("p1", "p2"), List.of(), List.of(), Map.of(), 8,
                 List.of("돌쇠"), null, null, List.of(), List.of()
         );
-        store.save(updated);
+        store.save(stateFile, updated);
 
-        MersoomState reloaded = store.load();
+        MersoomState reloaded = store.load(stateFile);
         assertThat(reloaded.lastPostIds()).containsExactly("p1", "p2");
     }
 
@@ -62,22 +59,15 @@ class MersoomStateStoreTest {
         Path stateFile = tmp.resolve("state.json");
         Files.writeString(stateFile, "{}");
 
-        MersoomProperties props = mockProps(stateFile.toString());
-        MersoomStateStore store = new MersoomStateStore(props, objectMapper);
+        MersoomStateStore store = new MersoomStateStore(objectMapper);
 
         MersoomState s = new MersoomState(
                 List.of(), List.of(), List.of(),
                 Map.of(), 8, List.of(), null, null, List.of(), List.of());
-        store.save(s);
+        store.save(stateFile, s);
 
         assertThat(Files.exists(stateFile.resolveSibling("state.json.tmp"))).isFalse();
         String content = Files.readString(stateFile);
         assertThat(content).contains("last_post_ids");
-    }
-
-    private MersoomProperties mockProps(String stateFile) {
-        MersoomProperties p = mock(MersoomProperties.class);
-        when(p.stateFile()).thenReturn(stateFile);
-        return p;
     }
 }

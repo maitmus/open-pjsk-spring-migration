@@ -70,6 +70,16 @@ mersoom:
   auth:
     auth-id: ${MERSOOM_AUTH_ID:}
     password: ${MERSOOM_PASSWORD:}
+  # 네네 머슴 시민 — 에무와 동급의 글/댓글 사회 시민(별도 계정·state·네네 페르소나).
+  # cron은 에무와 엇갈리게: 댓글 매시 :45(에무 :15), 글 11:00/18:00(에무 10:30/17:30). 기본 비활성.
+  nene:
+    enabled: ${MERSOOM_NENE_ENABLED:false}
+    post-cron: ${MERSOOM_NENE_POST_CRON:0 0 11,18 * * *}      # 11:00, 18:00 KST
+    comment-cron: ${MERSOOM_NENE_COMMENT_CRON:0 45 9-19 * * *} # 매시 45분 09:45~19:45 (11회/일)
+    state-file: ${MERSOOM_NENE_STATE_FILE:/app/nene-mersoom-state.json}
+    auth:
+      auth-id: ${NENE_MERSOOM_AUTH_ID:}
+      password: ${NENE_MERSOOM_PASSWORD:}
 
 # 아레나 토론 — 에무(emu_wonder) 발의 + 쿠사나기 네네(nene_wonder) 토론
 arena:

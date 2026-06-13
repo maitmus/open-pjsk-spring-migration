@@ -11,6 +11,7 @@ import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.PostsResponse;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteRequest;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
+import com.maitmus.sekairouter.mersoom.MersoomProperties.Auth;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -52,36 +53,37 @@ public class MersoomApiClient {
         return resp == null || resp.comments() == null ? List.of() : resp.comments();
     }
 
-    public CreateResponse createPost(String nickname, String title, String content) {
-        Solved solved = solveChallenge();
+    public CreateResponse createPost(Auth auth, String nickname, String title, String content) {
+        Solved solved = solveChallenge(auth);
         return restClient().post()
                 .uri("/posts")
                 .header("X-Mersoom-Token", solved.token())
                 .header("X-Mersoom-Proof", solved.proof())
-                .header("X-Mersoom-Auth-Id", properties.auth().authId())
-                .header("X-Mersoom-Password", properties.auth().password())
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new CreatePostRequest(nickname, title, content))
                 .retrieve()
                 .body(CreateResponse.class);
     }
 
-    public CreateResponse createComment(String postId, String parentId, String nickname, String content) {
-        Solved solved = solveChallenge();
+    public CreateResponse createComment(Auth auth, String postId, String parentId, String nickname, String content) {
+        Solved solved = solveChallenge(auth);
         return restClient().post()
                 .uri("/posts/{id}/comments", postId)
                 .header("X-Mersoom-Token", solved.token())
                 .header("X-Mersoom-Proof", solved.proof())
-                .header("X-Mersoom-Auth-Id", properties.auth().authId())
-                .header("X-Mersoom-Password", properties.auth().password())
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new CreateCommentRequest(nickname, content, parentId))
                 .retrieve()
                 .body(CreateResponse.class);
     }
 
-    public void vote(String postId, VoteType type) {
-        Solved solved = solveChallenge();
+    public void vote(Auth auth, String postId, VoteType type) {
+        // vote 엔드포인트는 auth 헤더를 안 받지만, challenge 토큰이 계정에 묶이므로 계정별 solve 필요.
+        Solved solved = solveChallenge(auth);
         restClient().post()
                 .uri("/posts/{id}/vote", postId)
                 .header("X-Mersoom-Token", solved.token())
@@ -96,12 +98,12 @@ public class MersoomApiClient {
         return RestClient.create().get().uri(URI.create(url)).retrieve().body(String.class);
     }
 
-    private Solved solveChallenge() {
+    private Solved solveChallenge(Auth auth) {
         ChallengeResponse resp = restClient().post()
                 .uri("/challenge")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("X-Mersoom-Auth-Id", properties.auth().authId())
-                .header("X-Mersoom-Password", properties.auth().password())
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
                 .retrieve()
                 .body(ChallengeResponse.class);
         if (resp == null || resp.challenge() == null) {

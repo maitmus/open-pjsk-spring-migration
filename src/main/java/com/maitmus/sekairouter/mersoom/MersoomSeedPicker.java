@@ -1,5 +1,6 @@
 package com.maitmus.sekairouter.mersoom;
 
+import com.maitmus.sekairouter.persona.CharacterId;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -10,7 +11,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 시스템 프롬프트의 자유 선택에 맡기면 LLM이 직전 글 토픽(특히 동아리)을 자기 강화로
  * 반복 픽하는 경향이 있어, 매 글마다 독립 시드를 박아서 분포를 평준화한다.
  *
- * EMU 단일 캐릭터 전용이므로 PersonaType 필터링은 없다.
+ * 페르소나별 풀: EMU(기본)와 NENE. 각 풀 전체가 해당 페르소나에서 도출 가능한 각도여야 한다.
  */
 @Component
 public class MersoomSeedPicker {
@@ -54,12 +55,54 @@ public class MersoomSeedPicker {
             "회상감: 어제·옛날 일 한 조각 떠올리기"
     );
 
+    /** 네네 토픽 시드 풀 — 노래·게임·자몽·관찰형 츳코미 등 네네 페르소나 도출 각도. */
+    private static final List<String> NENE_TOPIC_SEEDS = List.of(
+            "방금 끝낸 / 시작한 노래 연습 — 가창 한 토막, 잘 된 부분·안 된 고음 (노래 화제엔 자신감)",
+            "대전 게임 한 판 — 서바이벌 결과, 토우야와의 라이벌 구도 한 마디",
+            "자몽 한 마디 — 그 쓴맛이 좋은 이유 / 또는 민트 거부(치약 맛) 한 컷",
+            "본 영화·뮤지컬 감상 한 조각 — 인상 깊은 장면·곡",
+            "기계 조작·네네 로봇 손질 한 토막",
+            "원더쇼 연습 중 동료(에무·츠카사)의 과한 에너지에 차분한 츳코미",
+            "사람 많은 곳을 피한 하루 / 낯가림 한 토막 — 담담하게",
+            "옷·롱스커트·레이스 취향 한 마디 — 오늘 입은 것·발견한 것",
+            "머슴 친구 글에서 떠오른 생각 — 무심한 듯 한 마디",
+            "노래 가르치기 한 토막 (에무·이치카에게) — 가르치는 시선",
+            "옛 무대·트라우마 극복 추억 한 조각 — 과장 없이 담담히",
+            "오늘 사소한 자랑 — 잘 된 한 가지 (노래·게임이면 단정적으로)",
+            "오늘 사소한 실패·민망 — 무심한 듯 인정",
+            "날씨·바다·물 한 마디 — 인어공주 모티브, 잔잔한 관찰",
+            "머리에 맴도는 멜로디 한 소절",
+            "다음 계획·작은 약속 — 무심한 듯, 별 기대 안 하는 척",
+            "방금 본 풍경·소리 한 조각 — 짧은 관찰",
+            "갑자기 든 사소한 깨달음 — 직설적으로 한 줄"
+    );
+
+    /** 네네 톤·도입 패턴 풀 — 무심·직설·츤데레 결. */
+    private static final List<String> NENE_TONE_SEEDS = List.of(
+            "무심감: \"...별로 대단한 건 아닌데\" 식으로 슬쩍 도입",
+            "직설감: 핵심부터 툭 던지고 뒤에 부연",
+            "츳코미감: 누군가의 과한 행동에 차분한 일침",
+            "자신감(노래·게임): 이 화제만은 단정적으로",
+            "회피·완곡감: \"...뭐\", \"...그렇긴 해\" 로 여운 남기기",
+            "회상감: 옛 무대·추억 한 조각 담담히"
+    );
+
     public String pickTopic() {
-        return TOPIC_SEEDS.get(ThreadLocalRandom.current().nextInt(TOPIC_SEEDS.size()));
+        return pickTopic(CharacterId.EMU);
     }
 
     public String pickTone() {
-        return TONE_SEEDS.get(ThreadLocalRandom.current().nextInt(TONE_SEEDS.size()));
+        return pickTone(CharacterId.EMU);
+    }
+
+    public String pickTopic(CharacterId persona) {
+        List<String> pool = persona == CharacterId.NENE ? NENE_TOPIC_SEEDS : TOPIC_SEEDS;
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+    }
+
+    public String pickTone(CharacterId persona) {
+        List<String> pool = persona == CharacterId.NENE ? NENE_TONE_SEEDS : TONE_SEEDS;
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
     public List<String> topicSeeds() {
