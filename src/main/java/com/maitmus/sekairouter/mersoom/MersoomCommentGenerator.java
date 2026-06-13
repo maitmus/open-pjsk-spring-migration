@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +34,7 @@ import java.util.stream.Collectors;
 public class MersoomCommentGenerator {
 
     private static final int MAX_CONTENT = 500;
+    private static final int MAX_COMMENTS = 3;   // 한 크론 댓글 상한 (머슴 권장 2~3, 한도 30분 20개)
 
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
@@ -45,16 +48,18 @@ public class MersoomCommentGenerator {
      * @param commentText     게시할 댓글 본문, 또는 보류 시 {@code null}
      * @param coinedNicknames 닉네임 → LLM이 제안한 별명(친밀 친구 대상)
      */
+    public record CommentItem(String targetId, String text) {}
+
     public record FeedJudgment(Map<String, VoteType> votes, Map<String, String> voteReasons,
-                               String commentTargetId, String commentText, Map<String, String> coinedNicknames) {
+                               List<CommentItem> comments, Map<String, String> coinedNicknames) {
         public boolean hasComment() {
-            return commentTargetId != null && commentText != null;
+            return comments != null && !comments.isEmpty();
         }
     }
 
     /** @return 판정 결과, 또는 파싱 실패 시 {@code null}. */
     public FeedJudgment generate(MersoomState state, List<Commentable> commentable) {
-        if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), null, null, Map.of());
+        if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
         String userPrompt = buildUserPrompt(state, commentable);
         String raw = anthropic.completeJson(promptBuilder.build(), userPrompt);
@@ -90,25 +95,27 @@ public class MersoomCommentGenerator {
             if (feedNicks.contains(np.name())) coinedNicknames.put(np.name(), np.alias());
         }
 
-        // 3) 댓글 — 보수 평가 + 백스톱
-        String targetId = j.targetId() == null ? "" : j.targetId().strip();
-        String text = j.utterance() == null ? "" : j.utterance().strip();
-        String comment = null;
-        String chosenTarget = null;
-        if (!Boolean.TRUE.equals(j.shouldPost())) {
-            log.info("Mersoom comment 보류 — shouldPost={} (투표는 적용)", j.shouldPost());
-        } else if (targetId.isBlank() || !feedIds.contains(targetId)) {
-            log.info("Mersoom comment 보류 — targetId 무효: '{}'", targetId);
-        } else if (text.isBlank()) {
-            log.info("Mersoom comment 보류 — utterance 비어있음");
-        } else if (!outputSanityGate.isClean(text)) {
-            log.warn("Mersoom comment 보류 — 백스톱 누수 마커 감지: {}",
-                    text.substring(0, Math.min(60, text.length())));
-        } else {
-            chosenTarget = targetId;
-            comment = text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text;
+        // 3) 댓글 — 최대 MAX_COMMENTS개. 각 글마다 유효성·중복글·백스톱 검사.
+        List<CommentItem> comments = new ArrayList<>();
+        Set<String> usedTargets = new HashSet<>();
+        for (var c : j.comments()) {
+            if (comments.size() >= MAX_COMMENTS) break;
+            String targetId = c.targetId() == null ? "" : c.targetId().strip();
+            String text = c.utterance() == null ? "" : c.utterance().strip();
+            if (targetId.isBlank() || !feedIds.contains(targetId)) {
+                log.info("Mersoom comment 항목 보류 — targetId 무효: '{}'", targetId);
+                continue;
+            }
+            if (!usedTargets.add(targetId)) continue;   // 같은 글 중복 제거
+            if (text.isBlank()) continue;
+            if (!outputSanityGate.isClean(text)) {
+                log.warn("Mersoom comment 항목 보류 — 백스톱 누수 마커 감지: {}",
+                        text.substring(0, Math.min(60, text.length())));
+                continue;
+            }
+            comments.add(new CommentItem(targetId, text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text));
         }
-        return new FeedJudgment(votes, voteReasons, chosenTarget, comment, coinedNicknames);
+        return new FeedJudgment(votes, voteReasons, comments, coinedNicknames);
     }
 
     private static VoteType toVoteType(String s) {
@@ -150,12 +157,12 @@ public class MersoomCommentGenerator {
         sb.append("- **⛔차단(fixedAvoid) 작성자도 투표는 한다 — 닉이 아니라 이번 글 내용으로 판단**(좋은 글이면 up, 회복 기회). 평판이 살아있어야 한다.\n");
         sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계 대상이라도 이번 글이 좋으면 up.\n");
 
-        sb.append("\n## 댓글 기준 (1개만)\n");
-        sb.append("- 에무가 자연스럽게 한 마디 할 **가장 밝은 글 1개**를 targetId로. 친밀(★)한 친구 글을 우선 고려해도 좋다.\n");
-        sb.append("- **⛔차단(fixedAvoid) 작성자는 targetId로 절대 고르지 않는다**(투표만).\n");
-        sb.append("- 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선.\n");
+        sb.append("\n## 댓글 기준 (comments — 최대 3개)\n");
+        sb.append("- 에무가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetId+utterance). **친밀(★)·우호 친구 글 우선.**\n");
+        sb.append("- **서로 다른 글에**(한 글에 중복 X). **⛔차단(fixedAvoid) 작성자는 절대 고르지 않는다**(투표만).\n");
+        sb.append("- 각 2~3문장, **하드 최소 90자 (목표 100~200자)**. 에무 톤. 원글 정서에 공감 우선.\n");
         sb.append("- 별명이 있는 친구(별명=...)에게 댓글 달 땐 **그 별명으로 부른다**.\n");
-        sb.append("- 댓글 달 만한 밝은 글이 없으면 shouldPost:false, utterance 빈 문자열. **투표는 그래도 모두 채운다.**\n");
+        sb.append("- **억지로 3개 채우지 말 것** — 진짜 한 마디 하고 싶은 밝은 글만. 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
 
         sb.append("\n## 별명(nicknames)\n");
         sb.append("- 친밀이거나 **곧 친밀이 될(rep≥4) '별명 미정'인 친구**가 있으면, 그 **닉네임을 기반으로 에무다운 다정한 애칭**을 지어 nicknames에 넣는다(예: 오호돌쇠→오호찌). rep4는 미리 준비해두는 것 — 다음에 5가 되는 순간 바로 그 별명으로 부른다.\n");
@@ -169,10 +176,9 @@ public class MersoomCommentGenerator {
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
         sb.append("{\"reasoning\":\"<판단 근거 — 비공개, 발행 안 됨>\", ");
         sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
-        sb.append("\"targetId\":\"<댓글 달 글 id, 없으면 빈 문자열>\", ");
-        sb.append("\"utterance\":\"<에무 댓글 본문, 없으면 빈 문자열>\", \"shouldPost\":true, ");
+        sb.append("\"comments\":[{\"targetId\":\"<댓글 달 글 id>\",\"utterance\":\"<에무 댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
-        sb.append("- votes에는 위 피드의 모든 id를 포함한다. nicknames는 해당 없으면 [].\n");
+        sb.append("- votes에는 위 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();
     }

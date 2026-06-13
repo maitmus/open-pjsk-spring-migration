@@ -16,13 +16,13 @@ import java.util.regex.Pattern;
 /**
  * 머슴 댓글 크론의 통합 판단 봉투 파서.
  *
- * 댓글 크론 LLM 호출은 피드 전체를 보고 (1) 글마다 up/down 투표(+사유) (2) 댓글 대상·본문·게시여부
+ * 댓글 크론 LLM 호출은 피드 전체를 보고 (1) 글마다 up/down 투표(+사유) (2) 댓글 대상·본문(최대 3개)
  * (3) 친밀 친구 별명 제안 을 한 번에 판단한다. 투표·댓글·관계가 같은 판단을 공유한다.
  *
  * 스키마(중첩 회피, 평탄):
  *   {"reasoning":"...",
  *    "votes":[{"id":"p1","vote":"down","reason":"안티-AI 도발"}],
- *    "targetId":"p2", "utterance":"...", "shouldPost":true,
+ *    "comments":[{"targetId":"p2","utterance":"..."}],   // 최대 3개, 없으면 []
  *    "nicknames":[{"name":"오호돌쇠","alias":"오호찌"}]}
  *
  * reasoning은 비공개. 발행 누수 방지는 호출측(생성기) 백스톱이 담당.
@@ -30,9 +30,9 @@ import java.util.regex.Pattern;
 public final class MersoomFeedJudgmentParser {
 
     public record Vote(String id, String vote, String reason) {}
+    public record Comment(String targetId, String utterance) {}
     public record NickProposal(String name, String alias) {}
-    public record Judgment(String reasoning, List<Vote> votes, String targetId, String utterance,
-                           Boolean shouldPost, List<NickProposal> nicknames) {}
+    public record Judgment(String reasoning, List<Vote> votes, List<Comment> comments, List<NickProposal> nicknames) {}
 
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
@@ -60,7 +60,13 @@ public final class MersoomFeedJudgmentParser {
                                     && n.alias != null && !n.alias.isBlank())
                             .map(n -> new NickProposal(n.name.strip(), n.alias.strip()))
                             .toList();
-            return Optional.of(new Judgment(r.reasoning, votes, r.targetId, r.utterance, r.shouldPost, nicknames));
+            List<Comment> comments = r.comments == null ? List.of()
+                    : r.comments.stream()
+                            .filter(c -> c != null && c.targetId != null && !c.targetId.isBlank()
+                                    && c.utterance != null && !c.utterance.isBlank())
+                            .map(c -> new Comment(c.targetId.strip(), c.utterance.strip()))
+                            .toList();
+            return Optional.of(new Judgment(r.reasoning, votes, comments, nicknames));
         } catch (Exception e) {
             // LLM이 문자열 값에 escape 안 된 큰따옴표를 넣으면 readValue가 깨진다(흔함).
             // votes는 단순 토큰이라 정규식으로 살려 투표·평판을 보존하고, 댓글은 안전하게 스킵한다.
@@ -78,16 +84,18 @@ public final class MersoomFeedJudgmentParser {
             votes.add(new Vote(m.group(1), m.group(2).toLowerCase(Locale.ROOT), null));
         }
         if (votes.isEmpty()) return Optional.empty();
-        // 댓글/별명은 깨진 JSON에서 신뢰 불가 → 스킵(shouldPost=false). 투표만 반환.
-        return Optional.of(new Judgment(null, votes, "", "", Boolean.FALSE, List.of()));
+        // 댓글/별명은 깨진 JSON에서 신뢰 불가 → 스킵(빈 댓글). 투표만 반환.
+        return Optional.of(new Judgment(null, votes, List.of(), List.of()));
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record Raw(String reasoning, List<RawVote> votes, String targetId, String utterance,
-                       Boolean shouldPost, List<RawNick> nicknames) {}
+    private record Raw(String reasoning, List<RawVote> votes, List<RawComment> comments, List<RawNick> nicknames) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RawVote(String id, String vote, String reason) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record RawComment(String targetId, String utterance) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RawNick(String name, String alias) {}

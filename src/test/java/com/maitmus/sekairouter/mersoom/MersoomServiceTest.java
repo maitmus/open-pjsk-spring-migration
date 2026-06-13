@@ -59,7 +59,7 @@ class MersoomServiceTest {
 
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
         when(commentGen.generate(any(), any()))
-                .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN), Map.of(), null, null, Map.of()));
+                .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN), Map.of(), List.of(), Map.of()));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -86,7 +86,8 @@ class MersoomServiceTest {
 
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
         when(commentGen.generate(any(), any())).thenReturn(new FeedJudgment(
-                Map.of("p1", VoteType.DOWN, "p2", VoteType.UP), Map.of(), "p2", "원더호~이 산책 좋았겠어요!", Map.of()));
+                Map.of("p1", VoteType.DOWN, "p2", VoteType.UP), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 산책 좋았겠어요!")), Map.of()));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createComment(any(), any(), any(), any()))
@@ -98,6 +99,34 @@ class MersoomServiceTest {
         verify(api).vote("p1", VoteType.DOWN);   // 도발글 비추
         verify(api).vote("p2", VoteType.UP);     // 밝은 글 추천
         verify(api).createComment(eq("p2"), any(), any(), any()); // LLM이 고른 target에 댓글
+    }
+
+    @Test
+    void executeComment_posts_multiple_comments() {
+        Post p2 = new Post("p2", "벚꽃", "친구", "산책 최고에요!", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
+        Post p3 = new Post("p3", "노을", "친구2", "노을이 예뻐요!", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(p2, List.of()), new Commentable(p3, List.of())),
+                List.of(), List.of(p2, p3)));
+
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load()).thenReturn(empty());
+
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any())).thenReturn(new FeedJudgment(
+                Map.of("p2", VoteType.UP, "p3", VoteType.UP), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("p2", "산책 좋았겠어요!"),
+                        new MersoomCommentGenerator.CommentItem("p3", "노을 예뻐요!")), Map.of()));
+
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createComment(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "c"));
+
+        MersoomService service = service(collector, store, commentGen, mock(MersoomPostGenerator.class), api);
+        service.executeComment();
+
+        verify(api).createComment(eq("p2"), any(), any(), any());   // 두 글 모두 댓글
+        verify(api).createComment(eq("p3"), any(), any(), any());
     }
 
     @Test
@@ -192,7 +221,8 @@ class MersoomServiceTest {
 
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
         when(commentGen.generate(any(), any())).thenReturn(new FeedJudgment(
-                Map.of("p2", VoteType.UP), Map.of(), "p2", "원더호~이 산책 좋았겠어요!", Map.of()));
+                Map.of("p2", VoteType.UP), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 산책 좋았겠어요!")), Map.of()));
 
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createComment(any(), any(), any(), any()))

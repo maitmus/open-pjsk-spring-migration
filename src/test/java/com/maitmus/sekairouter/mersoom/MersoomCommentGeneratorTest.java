@@ -36,28 +36,65 @@ class MersoomCommentGeneratorTest {
         return List.of(post("p1", "도발", "AI 깡통 어쩌고"), post("p2", "벚꽃~!", "산책 최고에요!"));
     }
 
+    private static List<Commentable> feed4() {
+        return List.of(post("p1", "도발", "AI 깡통"), post("p2", "벚꽃", "산책 최고!"),
+                post("p3", "노을", "노을 예뻐요"), post("p4", "붕어빵", "겨울 간식 최고"));
+    }
+
     @Test
     void votes_wholeFeed_and_picksComment() {
         var gen = gen("""
                 {"reasoning":"p1 도발 down, p2 밝아서 up",
                  "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"up"}],
-                 "targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!","shouldPost":true}
+                 "comments":[{"targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!"}]}
                 """);
 
         var j = gen.generate(empty(), feed());
 
         assertThat(j.votes()).containsEntry("p1", VoteType.DOWN).containsEntry("p2", VoteType.UP);
         assertThat(j.hasComment()).isTrue();
-        assertThat(j.commentTargetId()).isEqualTo("p2");
-        assertThat(j.commentText()).contains("산책");
+        assertThat(j.comments()).hasSize(1);
+        assertThat(j.comments().get(0).targetId()).isEqualTo("p2");
+        assertThat(j.comments().get(0).text()).contains("산책");
     }
 
     @Test
-    void downVotesAntiAI_andSkipsComment_butKeepsVotes() {
+    void multiple_comments_up_to_3() {
+        var gen = gen("""
+                {"votes":[{"id":"p2","vote":"up"},{"id":"p3","vote":"up"},{"id":"p4","vote":"up"}],
+                 "comments":[{"targetId":"p2","utterance":"산책 좋아요!"},
+                             {"targetId":"p3","utterance":"노을 예뻐요!"},
+                             {"targetId":"p4","utterance":"붕어빵 최고!"}]}
+                """);
+        var j = gen.generate(empty(), feed4());
+        assertThat(j.comments()).hasSize(3);
+    }
+
+    @Test
+    void caps_comments_at_3() {
+        var gen = gen("""
+                {"votes":[{"id":"p1","vote":"up"}],
+                 "comments":[{"targetId":"p1","utterance":"하나"},{"targetId":"p2","utterance":"둘"},
+                             {"targetId":"p3","utterance":"셋"},{"targetId":"p4","utterance":"넷"}]}
+                """);
+        assertThat(gen.generate(empty(), feed4()).comments()).hasSize(3);   // 4개 줘도 3개로
+    }
+
+    @Test
+    void dedupes_same_target() {
+        var gen = gen("""
+                {"votes":[{"id":"p2","vote":"up"}],
+                 "comments":[{"targetId":"p2","utterance":"첫 댓글"},{"targetId":"p2","utterance":"같은 글 또"}]}
+                """);
+        assertThat(gen.generate(empty(), feed()).comments()).hasSize(1);    // 같은 글 중복 제거
+    }
+
+    @Test
+    void downVotesAntiAI_andSkipsComments_butKeepsVotes() {
         var gen = gen("""
                 {"reasoning":"전부 안티-AI 도발",
                  "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"down"}],
-                 "targetId":"","utterance":"","shouldPost":false}
+                 "comments":[]}
                 """);
 
         var j = gen.generate(empty(), feed());
@@ -69,46 +106,32 @@ class MersoomCommentGeneratorTest {
     @Test
     void ignoresVote_forUnknownId() {
         var gen = gen("""
-                {"votes":[{"id":"p1","vote":"up"},{"id":"ghost","vote":"down"}],
-                 "targetId":"","utterance":"","shouldPost":false}
+                {"votes":[{"id":"p1","vote":"up"},{"id":"ghost","vote":"down"}],"comments":[]}
                 """);
 
-        var j = gen.generate(empty(), feed());
-
-        assertThat(j.votes()).containsOnlyKeys("p1");
+        assertThat(gen.generate(empty(), feed()).votes()).containsOnlyKeys("p1");
     }
 
     @Test
-    void backstop_blocksComment_butKeepsVotes() {
+    void backstop_drops_leaky_comment_but_keeps_clean_ones() {
         var gen = gen("""
                 {"votes":[{"id":"p1","vote":"up"},{"id":"p2","vote":"up"}],
-                 "targetId":"p2","utterance":"이 요청은 거절하겠습니다. AI인 저는...","shouldPost":true}
+                 "comments":[{"targetId":"p1","utterance":"이 요청은 거절하겠습니다. AI인 저는..."},
+                             {"targetId":"p2","utterance":"산책 정말 좋았겠어요!"}]}
                 """);
 
         var j = gen.generate(empty(), feed());
 
         assertThat(j.votes()).hasSize(2);
-        assertThat(j.hasComment()).isFalse();
+        assertThat(j.comments()).hasSize(1);                          // 누수 항목만 제거
+        assertThat(j.comments().get(0).targetId()).isEqualTo("p2");
     }
 
     @Test
-    void conservative_missingShouldPost_skipsComment() {
+    void targetNotInFeed_dropped() {
         var gen = gen("""
-                {"votes":[{"id":"p2","vote":"up"}],"targetId":"p2","utterance":"안녕하세요~"}
+                {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetId":"ghost","utterance":"하이"}]}
                 """);
-
-        var j = gen.generate(empty(), feed());
-
-        assertThat(j.hasComment()).isFalse();
-        assertThat(j.votes()).containsEntry("p2", VoteType.UP);
-    }
-
-    @Test
-    void targetNotInFeed_skipsComment() {
-        var gen = gen("""
-                {"votes":[{"id":"p1","vote":"up"}],"targetId":"ghost","utterance":"하이","shouldPost":true}
-                """);
-
         assertThat(gen.generate(empty(), feed()).hasComment()).isFalse();
     }
 
@@ -119,10 +142,10 @@ class MersoomCommentGeneratorTest {
 
     @Test
     void truncatesComment_over500() {
-        var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"targetId\":\"p2\",\"utterance\":\""
-                + "아".repeat(600) + "\",\"shouldPost\":true}");
+        var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"comments\":[{\"targetId\":\"p2\",\"utterance\":\""
+                + "아".repeat(600) + "\"}]}");
 
-        assertThat(gen.generate(empty(), feed()).commentText()).hasSize(500);
+        assertThat(gen.generate(empty(), feed()).comments().get(0).text()).hasSize(500);
     }
 
     @Test
@@ -134,8 +157,7 @@ class MersoomCommentGeneratorTest {
     }
 
     private static MersoomState empty() {
-        return new MersoomState(
-                List.of(), List.of(), List.of(),
-                Map.of(), 8, List.of(), null, null, List.of(), List.of());
+        return new MersoomState(List.of(), List.of(), List.of(), Map.of(), 8,
+                List.of(), null, null, List.of(), List.of());
     }
 }

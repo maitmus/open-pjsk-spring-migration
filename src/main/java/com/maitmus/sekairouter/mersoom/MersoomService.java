@@ -2,6 +2,7 @@ package com.maitmus.sekairouter.mersoom;
 
 import com.maitmus.sekairouter.mersoom.MersoomCollector.CollectedFeed;
 import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
+import com.maitmus.sekairouter.mersoom.MersoomCommentGenerator.CommentItem;
 import com.maitmus.sekairouter.mersoom.MersoomCommentGenerator.FeedJudgment;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
@@ -30,7 +31,7 @@ import java.util.Set;
 public class MersoomService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final int FETCH_LIMIT = 8;
+    private static final int FETCH_LIMIT = 10;   // 한 크론에 읽는 피드 글 수 (그 중 최대 3개 댓글)
     private static final String NICKNAME = "에무";
 
     private final MersoomProperties properties;
@@ -145,40 +146,50 @@ public class MersoomService {
         }
         state = withRelationship(state, notes, fixedAvoid);
 
-        // 댓글 eligibility: LLM 채택 + 밝은 주제 + fixedAvoid 작성자 ❌ + 이미 댓글 단 글 ❌
-        Commentable target = (judgment != null && judgment.hasComment())
-                ? feed.commentable().stream()
-                        .filter(c -> c.post().id().equals(judgment.commentTargetId()))
-                        .findFirst().orElse(null)
-                : null;
+        // 댓글 — 최대 3개. 각 글마다 eligibility: 밝은 주제 + fixedAvoid 작성자 ❌ + 이미 댓글 단 글 ❌
         Set<String> fixedNames = new java.util.HashSet<>();
         for (FixedAvoid fa : fixedAvoid) fixedNames.add(fa.name());
         Set<String> commentedIds = new java.util.HashSet<>();
         for (CommentRef ref : state.lastCommentIds()) commentedIds.add(ref.postId());
 
-        boolean eligible = target != null
-                && commentTopicGate.isBrightEnough(target.post())
-                && !fixedNames.contains(target.post().identityKey())
-                && !commentedIds.contains(target.post().id());
-
-        if (eligible) {
+        List<CommentItem> items = (judgment != null) ? judgment.comments() : List.of();
+        int posted = 0;
+        for (CommentItem item : items) {
+            Commentable target = feed.commentable().stream()
+                    .filter(c -> c.post().id().equals(item.targetId()))
+                    .findFirst().orElse(null);
+            if (target == null) continue;
+            boolean eligible = commentTopicGate.isBrightEnough(target.post())
+                    && !fixedNames.contains(target.post().identityKey())
+                    && !commentedIds.contains(target.post().id());   // 같은 크론·과거 중복 글 제외
+            if (!eligible) {
+                log.info("Mersoom comment skip — eligibility 탈락 (post={}, nick={})",
+                        target.post().id(), target.post().nickname());
+                continue;
+            }
             try {
-                String content = judgment.commentText();
+                String content = item.text();
                 var resp = api.createComment(target.post().id(), null, NICKNAME, content);
                 if (resp != null && resp.success()) {
                     state = recordComment(state, target, content, state.contextNotes());
+                    commentedIds.add(target.post().id());   // 같은 크론 내 같은 글 재댓글 방지
+                    posted++;
                     log.info("Mersoom comment created: post={} target_nick={} content_len={}",
                             target.post().id(), target.post().nickname(), content.length());
                     log.info("Mersoom comment content: \"{}\"", content);
+                    try {
+                        if (properties.apiRateLimitSleepMs() > 0) Thread.sleep(properties.apiRateLimitSleepMs());
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 log.error("Mersoom comment execution failed", e);
             }
-        } else if (target != null) {
-            log.info("Mersoom comment skip — eligibility 탈락 (post={}, nick={})",
-                    target.post().id(), target.post().nickname());
-        } else {
-            log.info("Mersoom comment skip — 게시할 댓글 없음 (LLM 보류 또는 commentable 없음)");
+        }
+        if (posted == 0) {
+            log.info("Mersoom comment — 게시 0건 (보류/중복/부적합 또는 commentable 없음)");
         }
 
         store.save(state);
