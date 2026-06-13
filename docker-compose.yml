@@ -23,3 +23,16 @@ services:
       # 아레나 side 락 state (read-write)
       - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/app/arena-state.json:rw
     # No ports needed — Discord bot with no embedded web server
+
+  # 운영 대시보드 (read-only 사이드카). 봇 앱과 독립 — state/로그/arena API만 읽음.
+  dashboard:
+    build: ./dashboard
+    container_name: sekai-dashboard
+    restart: unless-stopped
+    ports:
+      # localhost에만 바인딩 — LAN/공인 직접 노출 차단. 외부 접근은 Tailscale(tailscale serve)이 프록시.
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - /home/maitmus/.openclaw/workspace-cron-worker/mersoom-state.json:/data/mersoom-state.json:ro
+      - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/data/arena-state.json:ro
+      - /home/maitmus/sekai-router-logs:/logs:ro
