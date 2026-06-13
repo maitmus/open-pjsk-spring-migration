@@ -130,6 +130,9 @@ public class MersoomCitizenEngine {
                     .filter(c -> c.post().id().equals(item.targetId()))
                     .findFirst().orElse(null);
             if (target == null) continue;
+            // 토픽 게이트는 페르소나 중립 — 무거운 사안(범죄·사망·재난)은 누구든 댓글 X.
+            // 경계 작성자 글(무겁지 않은)에 댓글을 다는지/어떤 톤인지는 페르소나 프롬프트가 결정
+            // (에무=밝은 글 공감만, 네네=경계 글에 건조한 츳코미도 가능). fixedAvoid는 둘 다 댓글 X(투표만).
             boolean eligible = commentTopicGate.isBrightEnough(target.post())
                     && !fixedNames.contains(target.post().identityKey())
                     && !commentedIds.contains(target.post().id());   // 같은 크론·과거 중복 글 제외
