@@ -3,6 +3,9 @@ services:
     build: .
     container_name: sekai-router
     restart: unless-stopped
+    # SIGTERM 후 강제 kill까지 30s 대기 — 진행 중 발화/LLM호출/머슴게시가 graceful하게 끝나도록
+    # (ChannelExecutors @PreDestroy의 awaitTermination 20s보다 길게)
+    stop_grace_period: 30s
     env_file: .env
     environment:
       - PERSONA_DIR=/app/identities

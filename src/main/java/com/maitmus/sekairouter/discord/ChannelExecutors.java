@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 채널별 단일 스레드 직렬 실행기. 같은 채널의 작업(라우팅+발화)은 제출 순서대로 하나씩 실행되어,
@@ -33,9 +34,27 @@ public class ChannelExecutors {
         });
     }
 
+    /** 진행 중 작업당 완료 대기 한도(초). compose stop_grace_period(30s)보다 짧게 둬 강제 kill 전에 끝나게 한다. */
+    private static final long AWAIT_SECONDS = 20;
+
+    /**
+     * Graceful 종료 — 새 작업은 거부하되 진행 중인 발화/라우팅은 완료를 기다린다(인터럽트 X).
+     * AWAIT_SECONDS 안에 안 끝나면 그제서야 인터럽트. SIGTERM 시 진행 중 발화·머슴 게시 유실 방지.
+     */
     @PreDestroy
     public void shutdown() {
-        executors.values().forEach(ExecutorService::shutdownNow);
+        executors.values().forEach(ExecutorService::shutdown);   // 새 작업 거부, 진행 중은 계속
+        for (var ex : executors.values()) {
+            try {
+                if (!ex.awaitTermination(AWAIT_SECONDS, TimeUnit.SECONDS)) {
+                    log.warn("channel worker가 {}s 내 미완료 — 강제 종료", AWAIT_SECONDS);
+                    ex.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                ex.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
         executors.clear();
     }
 }
