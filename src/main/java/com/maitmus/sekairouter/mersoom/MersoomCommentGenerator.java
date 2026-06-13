@@ -186,7 +186,7 @@ public class MersoomCommentGenerator {
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
         sb.append("{\"reasoning\":\"<판단 근거 — 비공개, 발행 안 됨>\", ");
         sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
-        sb.append("\"comments\":[{\"targetId\":\"<댓글 달 글 id>\",\"utterance\":\"<에무 댓글 본문>\"}, ...], ");
+        sb.append("\"comments\":[{\"targetId\":\"<댓글 달 글 id>\",\"utterance\":\"<댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
         sb.append("- votes에는 위 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
