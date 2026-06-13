@@ -21,7 +21,8 @@ import java.util.Set;
 public class NeneMersoomService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final String NICKNAME = "쿠사나기 네네";
+    // 머슴 피드 닉네임은 짧게 "네네" (에무가 "에무" 쓰는 것과 동일 결). 아레나는 "쿠사나기 네네"(풀네임) 별도.
+    private static final String NICKNAME = "네네";
 
     private final MersoomProperties properties;
     private final MersoomCitizenEngine engine;

@@ -20,3 +20,4 @@ HELP.md
 # OS
 .DS_Store
 __pycache__/
+.env.bak*
