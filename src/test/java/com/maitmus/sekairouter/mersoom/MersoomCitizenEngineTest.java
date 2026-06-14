@@ -164,6 +164,34 @@ class MersoomCitizenEngineTest {
     }
 
     @Test
+    void nene_skips_api_vote_but_still_tracks_reputation() {
+        // 네네는 투표 API 미호출(IP당 1표 = 에무 담당) — 단 평판은 LLM 판정으로 갱신돼야 함
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), Path.of("/tmp/nene.json"),
+                CharacterId.NENE, Set.of("emu_wonder"));
+        Post bright = post("p2", "벚꽃", "친구", "오늘 산책 기분 최고에요!", "friend1");
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(bright, List.of())), List.of(), List.of(bright)));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any(), any())).thenReturn(new FeedJudgment(
+                Map.of("p2", VoteType.UP), Map.of("p2", "밝은 글"), List.of(), Map.of()));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+
+        engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(nene);
+
+        verify(api, never()).vote(any(), any(), any());   // 투표 API 미호출
+        ArgumentCaptor<MersoomState> cap = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), cap.capture());
+        // 평판은 갱신됨 (friend1 UP → rep +1)
+        var note = cap.getValue().contextNotes().get("friend1");
+        assertThat(note).isNotNull();
+        assertThat(note.reputation()).isEqualTo(1);
+    }
+
+    @Test
     void runPost_skips_posting_when_generator_returns_null() {
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(List.of(), List.of(), List.of()));

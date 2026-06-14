@@ -159,8 +159,9 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
 <title>sekai-router 대시보드</title>
 <style>
  body{background:#0f1116;color:#e6e6e6;font:14px/1.5 system-ui,sans-serif;margin:0;padding:16px}
- h1{font-size:18px;margin:0 0 12px} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px}
- .card{background:#1a1d27;border:1px solid #2a2f3d;border-radius:12px;padding:14px}
+ h1{font-size:18px;margin:0 0 12px} .grid{position:relative}
+ .item{position:absolute;top:0;left:0;display:flex;flex-direction:column;gap:14px}
+ .card{background:#1a1d27;border:1px solid #2a2f3d;border-radius:12px;padding:14px;box-sizing:border-box}
  .card h2{font-size:14px;margin:0 0 10px;color:#9ad}
  .muted{color:#8b93a7;font-size:12px} .row{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid #232734}
  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600}
@@ -171,11 +172,13 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
 </style></head><body>
 <h1>🎌 sekai-router 대시보드 <span id=now class=muted></span></h1>
 <div class=grid>
- <div class=card><h2>헬스</h2><div id=health></div></div>
- <div class=card><h2>아레나 토론</h2><div id=arena></div></div>
- <div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div>
- <div class=card><h2>최근 머슴 활동 <span class=muted>댓글·글</span></h2><div id=cmt></div></div>
- <div class=card><h2>최근 발화</h2><div id=utt></div></div>
+ <div class=item>
+  <div class=card><h2>헬스</h2><div id=health></div></div>
+  <div class=card><h2>최근 발화</h2><div id=utt></div></div>
+ </div>
+ <div class=item><div class=card><h2>아레나 토론</h2><div id=arena></div></div></div>
+ <div class=item><div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div></div>
+ <div class=item><div class=card><h2>최근 머슴 활동 <span class=muted>댓글·글</span></h2><div id=cmt></div></div></div>
 </div>
 <script>
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -200,7 +203,23 @@ async function load(){
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
+  layout();
  }catch(e){console.error(e)}
 }
+// JS masonry — 카드를 문서 순서대로 가장 짧은 열에 배치(순서 유지 + 갭 0 + 가로 공간 활용).
+function layout(){
+ const grid=document.querySelector('.grid'); if(!grid) return;
+ const gap=14, min=330, W=grid.clientWidth;
+ const cols=Math.max(1, Math.floor((W+gap)/(min+gap)));
+ const colW=(W-gap*(cols-1))/cols, colH=new Array(cols).fill(0);
+ for(const card of grid.children){
+  card.style.width=colW+'px';
+  let c=0; for(let i=1;i<cols;i++) if(colH[i]<colH[c]) c=i;
+  card.style.left=c*(colW+gap)+'px'; card.style.top=colH[c]+'px';
+  colH[c]+=card.offsetHeight+gap;
+ }
+ grid.style.height=Math.max(...colH)+'px';
+}
+window.addEventListener('resize', layout);
 load(); setInterval(load, 15000);
 </script></body></html>"""

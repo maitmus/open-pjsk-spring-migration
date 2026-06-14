@@ -23,12 +23,15 @@ public class MersoomCollector {
         Set<String> myPostIds = new HashSet<>(state.lastPostIds());
 
         // 내 글만 제외하고 전부 LLM 판정 대상(투표). fixedAvoid·이미 댓글 단 글의 '댓글 대상' 제외는
-        // MersoomService의 후처리 eligibility에서 — fixedAvoid도 투표는 받아야 평판이 계속 집계되므로.
+        // 후처리 eligibility에서 — fixedAvoid도 투표는 받아야 평판이 계속 집계되므로.
+        // **commentsOf는 피드 글마다 호출하지 않는다(lazy)** — 크론 시작 시 글 10개의 댓글을 연타로
+        // 당기면 IP 요청 스파이크 → 차단(댓글 유실)이 나서. 댓글 작성엔 본문·관계로 충분.
         List<Commentable> commentable = recent.stream()
                 .filter(p -> !myPostIds.contains(p.id()))
-                .map(p -> new Commentable(p, api.commentsOf(p.id())))
+                .map(p -> new Commentable(p, List.of()))
                 .toList();
 
+        // 내 글의 답글(reply)은 유지 — ≤3개라 호출 적고, 글 생성 시 내 글 반응 참고에 가치 큼.
         List<Commentable> myTracked = recent.stream()
                 .filter(p -> myPostIds.contains(p.id()))
                 .limit(3)

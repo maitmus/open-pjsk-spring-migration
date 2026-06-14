@@ -238,6 +238,12 @@ public class MersoomCitizenEngine {
 
     /** votable 글에 vote 적용 — LLM 판단(llmVotes) 우선, 없으면 휴리스틱 폴백. 형제 봇 DOWN은 스킵. 새 votedPostIds 반환. */
     private List<String> castVotes(CitizenProfile profile, MersoomState state, List<Post> votable, Map<String, VoteType> llmVotes) {
+        // 투표 미담당 봇(네네)은 실제 API 투표를 건너뛴다 — 투표는 IP당 1표라 에무 것만 반영되고,
+        // 네네 평판은 (호출측의) LLM 판정으로 갱신되므로 투표 호출 없이도 그대로 쌓인다.
+        if (!profile.castsVotes()) {
+            log.info("[{}] Mersoom 투표 스킵 — IP 대표 봇만 투표(중복투표·요청폭주 방지), 평판은 LLM 판정으로 갱신", profile.key());
+            return new ArrayList<>(state.votedPostIds());
+        }
         var voted = new LinkedHashSet<>(state.votedPostIds());
         for (Post p : votable) {
             if (voted.contains(p.id())) continue;

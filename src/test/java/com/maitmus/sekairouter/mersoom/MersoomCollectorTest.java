@@ -12,6 +12,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MersoomCollectorTest {
@@ -49,6 +51,12 @@ class MersoomCollectorTest {
         assertThat(feed.myTracked().get(0).post().id()).isEqualTo("p1");
         assertThat(feed.votable()).hasSize(4);
         assertThat(feed.votable()).extracting(Post::id).doesNotContain("p1");
+
+        // lazy commentsOf — 내 글(p1, myTracked)에만 호출, 피드 글엔 호출 안 함(IP 스파이크 방지)
+        verify(api).commentsOf("p1");
+        verify(api, never()).commentsOf("p2");
+        verify(api, never()).commentsOf("p5");
+        assertThat(feed.commentable()).allSatisfy(c -> assertThat(c.comments()).isEmpty());
     }
 
     private static Post post(String id, String nick) {
