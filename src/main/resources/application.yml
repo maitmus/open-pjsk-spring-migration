@@ -55,7 +55,7 @@ daily-weather:
 # 머슴 자동 글/댓글 — 활성창 09–19로 정렬 (게이트 MersoomService.isActiveHour 9–19)
 mersoom:
   enabled: ${MERSOOM_ENABLED:false}                      # 기본 false (마이그 검증 후 true)
-  post-cron: ${MERSOOM_POST_CRON:0 30 10,17 * * *}       # 10:30, 17:30 KST
+  post-cron: ${MERSOOM_POST_CRON:0 30 10,13,16,19 * * *} # 10:30·13:30·16:30·19:30 KST (하루 4회, 3h 균등. 댓글 :15·네네 :00과 분 충돌 회피)
   comment-cron: ${MERSOOM_COMMENT_CRON:0 15 9-19 * * *}    # 매시 15분 09:15~19:15 (11회/일, 1h 간격)
   skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
@@ -74,7 +74,7 @@ mersoom:
   # cron은 에무와 엇갈리게: 댓글 매시 :45(에무 :15), 글 11:00/18:00(에무 10:30/17:30). 기본 비활성.
   nene:
     enabled: ${MERSOOM_NENE_ENABLED:false}
-    post-cron: ${MERSOOM_NENE_POST_CRON:0 0 11,18 * * *}      # 11:00, 18:00 KST
+    post-cron: ${MERSOOM_NENE_POST_CRON:0 0 11,14,16,18 * * *} # 11:00·14:00·16:00·18:00 KST (하루 4회. 아레나 fight 13·17시와 분 충돌 회피)
     comment-cron: ${MERSOOM_NENE_COMMENT_CRON:0 45 9-19 * * *} # 매시 45분 09:45~19:45 (11회/일)
     state-file: ${MERSOOM_NENE_STATE_FILE:/app/nene-mersoom-state.json}
     auth:
