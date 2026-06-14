@@ -132,8 +132,10 @@ public class MersoomCommentGenerator {
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
         Set<String> siblingIds = profile.siblingAuthIds() == null ? Set.of() : profile.siblingAuthIds();
-        // 형제 봇(원더쇼 동료)의 짧은 이름 — GRADES.md 원더랜즈×쇼타임 호칭표 조회용. 봇은 에무·네네 둘뿐.
+        // 형제 봇(원더쇼 동료)의 짧은 이름 + GRADES.md 원더랜즈×쇼타임 호칭(반말). 봇은 에무·네네 둘뿐이라 상수로 직접 박는다
+        // (GRADES 룩업을 모델에 맡기면 에무 기본 존댓말 디폴트가 이겨 말투가 새므로, 호칭·말투를 명시).
         String siblingShort = nene ? "에무" : "네네";
+        String siblingCall = nene ? "에무" : "네네쨩";   // 네네→에무="에무"(반말) / 에무→네네="네네쨩"(반말)
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
@@ -155,7 +157,7 @@ public class MersoomCommentGenerator {
             }
             boolean isSibling = siblingIds.contains(p.identityKey());
             sb.append("  ").append(relationshipLine(state, p, fixedNames.contains(p.identityKey()),
-                    isSibling, siblingShort)).append("\n");
+                    isSibling, siblingShort, siblingCall)).append("\n");
         }
 
         sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
@@ -209,16 +211,16 @@ public class MersoomCommentGenerator {
 
     /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. 키는 식별키, 표시는 닉. */
     private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post,
-                                           boolean blocked, boolean isSibling, String siblingShort) {
+                                           boolean blocked, boolean isSibling, String siblingShort, String siblingCall) {
         ContextNote note = state.contextNotes().get(post.identityKey());
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
         if (isSibling) {
             // 형제 봇(원더쇼 동료) 본인 — 처음부터 아는 사이. 머슴 닉네임/존댓말 기본값·별명 전부 무시하고
-            // GRADES.md 원더랜즈×쇼타임 호칭표의 '너→상대' 호칭·말투(반말 포함) 그대로.
+            // 원더랜즈×쇼타임 호칭(반말)을 직접 명시 — GRADES 룩업에 맡기면 에무 기본 존댓말이 이겨 말투가 샌다.
             return ("[관계] rep=" + rep + " · 이건 " + siblingShort + " 본인(네 원더랜즈×쇼타임 동료, 원래 아는 사이)"
-                    + " — **머슴 사용자 존댓말 기본값·닉네임을 적용하지 말 것.** GRADES.md '원더랜즈×쇼타임' 호칭표의"
-                    + " 너→" + siblingShort + " 칸(호칭·말투, 반말 포함) 그대로 부른다. **별명 짓지 말 것**(이미 아는 사이).");
+                    + " — **머슴 사용자 존댓말 기본값·닉네임·별명 적용 금지.** 반드시 **'" + siblingCall + "'로 부르고 반말**로 쓴다"
+                    + "(원더쇼 유닛 내 전원 반말). **존댓말 어미(~요/~예요/~네요/~거에요) 금지, 반말 어미(~어/~지/~네/~거든/~잖아)로.** 별명 짓지 말 것.");
         }
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
         if (blocked) {

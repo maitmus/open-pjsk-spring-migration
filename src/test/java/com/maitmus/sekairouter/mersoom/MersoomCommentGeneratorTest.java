@@ -63,9 +63,10 @@ class MersoomCommentGeneratorTest {
         g.generate(emuWithSibling, empty(), List.of(nenePost));
 
         String prompt = userPrompt.getValue();
-        // 형제봇 라인에 GRADES 호칭 지시 + 별명 금지가 들어가야 함 (존댓말 기본값 무시)
-        assertThat(prompt).contains("원더랜즈×쇼타임").contains("너→네네").contains("별명 짓지 말 것")
-                .contains("존댓말 기본값");
+        // 형제봇 라인 — 명시 호칭('네네쨩')·반말 강제·별명 금지가 들어가야 함 (에무 기본 존댓말 디폴트 무시).
+        // GRADES 룩업 간접지시('너→네네')로는 에무 존댓말이 이겨 말투가 새서, 호칭·말투를 직접 박는다.
+        assertThat(prompt).contains("원더랜즈×쇼타임").contains("네네쨩").contains("반말")
+                .contains("별명 짓지 말 것").contains("존댓말 기본값");
     }
 
     @Test
