@@ -257,13 +257,68 @@ class MersoomCitizenEngineTest {
         assertThat(ids).doesNotContain("old49");
     }
 
+    @Test
+    void runPost_registers_ad_when_points_above_buffer_and_under_cap() {
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.points(any())).thenReturn(500);
+        when(api.activeAdCount(any())).thenReturn(2);
+        when(api.createAd(any(), any(), anyInt()))
+                .thenReturn(new MersoomDtos.CreateAdResponse(true, "ad1", 1000, 100));
+        MersoomAdGenerator adGen = mock(MersoomAdGenerator.class);
+        when(adGen.generate(any())).thenReturn("재밌는 글 보면 에무가 달려가요! 원더호이~!");
+        MersoomProperties p = adProps(new MersoomProperties.Ad(true, 300, 5, 100));
+
+        adEngine(api, adGen, p).runPost(EMU);
+
+        verify(api).createAd(any(), eq("재밌는 글 보면 에무가 달려가요! 원더호이~!"), eq(100));
+    }
+
+    @Test
+    void runPost_skips_ad_below_buffer_or_at_cap() {
+        MersoomAdGenerator adGen = mock(MersoomAdGenerator.class);
+        when(adGen.generate(any())).thenReturn("광고");
+        MersoomProperties p = adProps(new MersoomProperties.Ad(true, 300, 5, 100));
+
+        MersoomApiClient low = mock(MersoomApiClient.class);          // 포인트 부족
+        when(low.points(any())).thenReturn(100);
+        when(low.activeAdCount(any())).thenReturn(0);
+        adEngine(low, adGen, p).runPost(EMU);
+        verify(low, never()).createAd(any(), any(), anyInt());
+
+        MersoomApiClient capped = mock(MersoomApiClient.class);       // 동시상한 도달
+        when(capped.points(any())).thenReturn(999);
+        when(capped.activeAdCount(any())).thenReturn(5);
+        adEngine(capped, adGen, p).runPost(EMU);
+        verify(capped, never()).createAd(any(), any(), anyInt());
+    }
+
+    private MersoomProperties adProps(MersoomProperties.Ad ad) {
+        MersoomProperties p = mock(MersoomProperties.class);
+        when(p.votedPostIdsLimit()).thenReturn(100);
+        when(p.apiRateLimitSleepMs()).thenReturn(0);
+        when(p.ad()).thenReturn(ad);
+        return p;
+    }
+
+    private MersoomCitizenEngine adEngine(MersoomApiClient api, MersoomAdGenerator adGen, MersoomProperties p) {
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(List.of(), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomPostGenerator pg = mock(MersoomPostGenerator.class);
+        when(pg.generate(any(), any(), any(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
+        return new MersoomCitizenEngine(p, store, collector, api, pg, adGen, mock(MersoomCommentGenerator.class),
+                new VoteHeuristic(), new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
+                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), clock);
+    }
+
     private MersoomCitizenEngine engine(MersoomCollector collector, MersoomStateStore store,
                                         MersoomCommentGenerator cg, MersoomPostGenerator pg, MersoomApiClient api) {
         MersoomProperties p = mock(MersoomProperties.class);
         when(p.votedPostIdsLimit()).thenReturn(100);
         when(p.apiRateLimitSleepMs()).thenReturn(0);
         return new MersoomCitizenEngine(
-                p, store, collector, api, pg, cg,
+                p, store, collector, api, pg, mock(MersoomAdGenerator.class), cg,
                 new VoteHeuristic(),
                 new ContextNoteManager(clock, 1024),
                 new MersoomReputationTracker(),

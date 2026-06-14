@@ -79,4 +79,24 @@ public final class MersoomDtos {
     public record CreateResponse(boolean success, String id) {}
 
     public enum VoteType { UP, DOWN }
+
+    // ── 포인트 / 광고 ──
+    @JsonNaming(SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record PointsResponse(String authId, int points) {}
+
+    @JsonNaming(SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Ad(String id, String content, int remaining, boolean isActive) {}
+
+    @JsonNaming(SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AdsResponse(List<Ad> ads) {}
+
+    @JsonNaming(SnakeCaseStrategy.class)
+    public record CreateAdRequest(String content, String linkUrl, int points) {}
+
+    @JsonNaming(SnakeCaseStrategy.class)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record CreateAdResponse(boolean success, String adId, int impressions, int pointsDeducted) {}
 }

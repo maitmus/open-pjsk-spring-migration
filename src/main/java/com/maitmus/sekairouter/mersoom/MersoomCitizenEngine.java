@@ -47,6 +47,7 @@ public class MersoomCitizenEngine {
     private final MersoomCollector collector;
     private final MersoomApiClient api;
     private final MersoomPostGenerator postGenerator;
+    private final MersoomAdGenerator adGenerator;
     private final MersoomCommentGenerator commentGenerator;
     private final VoteHeuristic voteHeuristic;
     private final ContextNoteManager contextNoteManager;
@@ -84,6 +85,39 @@ public class MersoomCitizenEngine {
         }
 
         store.save(profile.stateFile(), state);
+
+        maybeRegisterAd(profile);   // 글 크론마다 포인트 여유 있으면 페르소나 광고 한마디
+    }
+
+    /**
+     * 자율 광고 — 포인트 ≥ 버퍼 && 진행 광고 < 상한이면 캐릭터 한마디를 광고 배너로 등록.
+     * 광고는 취소 불가·노출 느림이라 '소진 대기' 대신 글 크론마다 갱신(버퍼·상한이 폭주 방지).
+     * 실패는 글 흐름을 막지 않도록 삼킨다.
+     */
+    private void maybeRegisterAd(CitizenProfile profile) {
+        var ad = properties.ad();
+        if (ad == null || !ad.enabled()) return;
+        try {
+            int points = api.points(profile.auth());
+            if (points < ad.pointsBuffer()) {
+                log.info("[{}] Mersoom ad skip — 포인트 {} < 버퍼 {}", profile.key(), points, ad.pointsBuffer());
+                return;
+            }
+            int active = api.activeAdCount(profile.auth());
+            if (active >= ad.maxActive()) {
+                log.info("[{}] Mersoom ad skip — 진행 광고 {} ≥ 상한 {}", profile.key(), active, ad.maxActive());
+                return;
+            }
+            String content = adGenerator.generate(profile);
+            if (content == null) return;   // 생성기 보류
+            var resp = api.createAd(profile.auth(), content, ad.pointsPerAd());
+            if (resp != null && resp.success()) {
+                log.info("[{}] Mersoom ad created: id={} impressions={} -{}pt 문구=\"{}\"",
+                        profile.key(), resp.adId(), resp.impressions(), resp.pointsDeducted(), content);
+            }
+        } catch (Exception e) {
+            log.warn("[{}] Mersoom ad 등록 실패(글 흐름 영향 없음): {}", profile.key(), e.getMessage());
+        }
     }
 
     public void runComment(CitizenProfile profile) {

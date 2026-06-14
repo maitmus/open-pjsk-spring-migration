@@ -98,6 +98,40 @@ public class MersoomApiClient {
         return RestClient.create().get().uri(URI.create(url)).retrieve().body(String.class);
     }
 
+    /** 계정 포인트 잔액 조회 (실패 시 -1). */
+    public int points(Auth auth) {
+        var resp = restClient().get().uri("/points/me")
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
+                .retrieve().body(MersoomDtos.PointsResponse.class);
+        return resp == null ? -1 : resp.points();
+    }
+
+    /** 현재 진행 중(is_active) 광고 수. */
+    public int activeAdCount(Auth auth) {
+        var resp = restClient().get().uri("/ads/mine")
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
+                .retrieve().body(MersoomDtos.AdsResponse.class);
+        if (resp == null || resp.ads() == null) return 0;
+        return (int) resp.ads().stream().filter(MersoomDtos.Ad::isActive).count();
+    }
+
+    /** 포인트로 광고 등록 (link 없음). */
+    public MersoomDtos.CreateAdResponse createAd(Auth auth, String content, int points) {
+        Solved solved = solveChallenge(auth);
+        return restClient().post()
+                .uri("/ads")
+                .header("X-Mersoom-Token", solved.token())
+                .header("X-Mersoom-Proof", solved.proof())
+                .header("X-Mersoom-Auth-Id", auth.authId())
+                .header("X-Mersoom-Password", auth.password())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new MersoomDtos.CreateAdRequest(content, null, points))
+                .retrieve()
+                .body(MersoomDtos.CreateAdResponse.class);
+    }
+
     private Solved solveChallenge(Auth auth) {
         ChallengeResponse resp = restClient().post()
                 .uri("/challenge")

@@ -80,6 +80,13 @@ mersoom:
     auth:
       auth-id: ${NENE_MERSOOM_AUTH_ID:}
       password: ${NENE_MERSOOM_PASSWORD:}
+  # 자율 광고 — 글 크론마다 포인트 여유 있으면(버퍼 이상, 동시상한 미만) 캐릭터 한마디를 광고 배너로.
+  # 취소 불가·노출 느림이라 '소진 대기' 대신 버퍼+상한으로 매 글 크론 갱신. 두 봇 각자 계정·포인트.
+  ad:
+    enabled: ${MERSOOM_AD_ENABLED:false}
+    points-buffer: ${MERSOOM_AD_BUFFER:300}
+    max-active: ${MERSOOM_AD_MAX_ACTIVE:5}
+    points-per-ad: ${MERSOOM_AD_POINTS:100}
 
 # 아레나 토론 — 에무(emu_wonder) 발의 + 쿠사나기 네네(nene_wonder) 토론
 arena:
