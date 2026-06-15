@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -71,7 +72,7 @@ class HeartbeatServiceTest {
         when(randomSelector.pickOne(any())).thenReturn(CharacterId.EMU);
         when(state.lastSpeaker()).thenReturn(Optional.empty());
         when(state.recentUtterances()).thenReturn(List.of());
-        when(seedPicker.pickTopic(any(PersonaType.class))).thenReturn("test-topic");
+        when(seedPicker.pickTopic(any(PersonaType.class), anyBoolean())).thenReturn("test-topic");
         when(seedPicker.pickDialoguePattern()).thenReturn("test-pattern");
         when(events.todayOverride()).thenReturn(Optional.empty());
         // Persona lookups — default 모든 캐릭터 HUMAN_SEKAI
@@ -190,7 +191,7 @@ class HeartbeatServiceTest {
         verify(state).recordLastSpeaker(CharacterId.AIRI);
         // utterance 필드만 기록 — reasoning은 새지 않음
         verify(state).recordUtterance(CharacterId.AIRI, "오늘 날씨 좋다~");
-        verify(seedPicker).pickTopic(PersonaType.HUMAN_SEKAI);
+        verify(seedPicker).pickTopic(eq(PersonaType.HUMAN_SEKAI), anyBoolean());
         ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
         verify(anthropic).generateUtterance(any(), userPromptCaptor.capture());
         assertThat(userPromptCaptor.getValue()).contains("오늘의 토픽 시드");
@@ -267,7 +268,7 @@ class HeartbeatServiceTest {
         HeartbeatService service = buildService(enabledProps(0.0), clockAt(14, 10));
         service.heartbeatCheck();
 
-        verify(seedPicker).pickTopic(PersonaType.VIRTUAL_SINGER);
+        verify(seedPicker).pickTopic(eq(PersonaType.VIRTUAL_SINGER), anyBoolean());
     }
 
     @Test

@@ -145,9 +145,10 @@ public class HeartbeatService {
         PromptBlocks systemPrompt = promptBuilder.build();
         LocalDateTime now = LocalDateTime.now(clock);
         String timeBlock = timeOfDayLabeler.promptBlock(now);
+        boolean weekend = timeOfDayLabeler.isWeekend(now);   // 주말/평일 토픽 시드 분기
 
         if (!dialogue) {
-            String topicSeed = seedPicker.pickTopic(speakerType);
+            String topicSeed = seedPicker.pickTopic(speakerType, weekend);
             String userPrompt = "## 모드\n자율 발화 (솔로)\n## 발화자\n" + speaker.name().toLowerCase()
                     + "\n" + timeBlock
                     + "\n## 오늘의 토픽 시드 (이 각도에서 발화)\n" + topicSeed
@@ -166,7 +167,7 @@ public class HeartbeatService {
 
         // 2-character dialogue
         CharacterId partner = randomSelector.pickOne(speaker);
-        String topicSeed = seedPicker.pickTopic(speakerType);
+        String topicSeed = seedPicker.pickTopic(speakerType, weekend);
         String dialoguePattern = seedPicker.pickDialoguePattern();
         String firstUser = "## 모드\n자율 발화 (2인 대화 — 첫 발화)\n## 발화자\n" + speaker.name().toLowerCase()
                 + "\n## 동료\n" + partner.name().toLowerCase()

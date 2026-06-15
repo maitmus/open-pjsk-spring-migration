@@ -36,6 +36,12 @@ public class TimeOfDayLabeler {
         return "밤 휴식";
     }
 
+    /** 토픽 시드 평일/주말 분기용 — 토·일이면 true. */
+    public boolean isWeekend(LocalDateTime now) {
+        DayOfWeek dow = now.getDayOfWeek();
+        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
+    }
+
     public String promptBlock(LocalDateTime now) {
         return "## 현재 시각 (KST)\n"
                 + now.format(DATE_FMT)
