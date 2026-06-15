@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -113,23 +115,40 @@ public class ArenaFightGenerator {
         sb.append("PRO(찬성): ").append(safe(topic.pros())).append("\n");
         sb.append("CON(반대): ").append(safe(topic.cons())).append("\n\n");
 
-        // 자기 이전 글(닉 일치)은 '내 논거'로, 나머지는 '반박 참고'로 분리.
+        // 내 마지막 글 시각 — 이 이후의 상대 주장만 '새 주장'(반박 대상). 이전 상대 주장은 이미 다뤘으니 재반박 금지.
+        OffsetDateTime myLast = (existing == null || selfNickname == null) ? null : existing.stream()
+                .filter(p -> selfNickname.equals(p.nickname()) && p.createdAt() != null)
+                .map(FightPost::createdAt).max(Comparator.naturalOrder()).orElse(null);
+        String opposing = lockedSide == null ? null : ("CON".equals(lockedSide) ? "PRO" : "CON");
+
+        // 내 글 / (락이 있으면) 새 상대 주장·이미 다룬 상대 주장·같은편기타 / (첫 턴이면) 상대·기타 묶음
         StringBuilder mine = new StringBuilder();
-        StringBuilder others = new StringBuilder();
+        StringBuilder oppNew = new StringBuilder();
+        StringBuilder oppOld = new StringBuilder();
+        StringBuilder ctx = new StringBuilder();   // 첫 턴=상대·기타 전부 / 락=같은 편 등
         if (existing != null) {
             for (FightPost p : existing) {
                 if (p.isBlinded()) continue;
-                boolean isMine = selfNickname != null && selfNickname.equals(p.nickname());
-                (isMine ? mine : others)
-                        .append("- [").append(safe(p.side())).append("] @").append(safe(p.nickname()))
-                        .append(": ").append(safe(p.content())).append("\n");
+                if (selfNickname != null && selfNickname.equals(p.nickname())) { mine.append(line(p)); continue; }
+                if (opposing != null && opposing.equalsIgnoreCase(p.side())) {
+                    boolean isNew = myLast == null || p.createdAt() == null || p.createdAt().isAfter(myLast);
+                    (isNew ? oppNew : oppOld).append(line(p));
+                } else {
+                    ctx.append(line(p));   // 첫 턴이면 상대 포함 전부, 락이면 같은 편·기타
+                }
             }
         }
         if (mine.length() > 0) {
             sb.append("## 너의 이전 논거 (네가 쓴 글 — 반박 대상 아님, 이어서 보강)\n").append(mine).append("\n");
         }
-        if (others.length() > 0) {
-            sb.append("## 상대·기타 논거 (반박 참고)\n").append(others).append("\n");
+        if (oppNew.length() > 0) {
+            sb.append("## 새 상대 주장 (내 마지막 글 이후 올라옴 — 이번에 이것만 반박)\n").append(oppNew).append("\n");
+        }
+        if (oppOld.length() > 0) {
+            sb.append("## 이미 다룬 상대 주장 (재반박 금지 — 맥락 참고만, 다시 받아치지 말 것)\n").append(oppOld).append("\n");
+        }
+        if (ctx.length() > 0) {
+            sb.append(lockedSide == null ? "## 상대·기타 논거 (반박 참고)\n" : "## 같은 편·기타 논거 (참고)\n").append(ctx).append("\n");
         }
 
         sb.append("## 지시\n");
@@ -139,10 +158,16 @@ public class ArenaFightGenerator {
                     .append(lockedSide).append(" 입장을 유지하면서 새 논거를 더하거나 상대 반박만 해. ")
                     .append("상대 지적 중 맞는 건 인정해도 되지만 입장 자체는 안 뒤집어. side는 ")
                     .append(lockedSide).append("로 고정해서 출력해.\n");
+            sb.append("**위 '이미 다룬 상대 주장'은 다시 반박하지 말 것** — 이미 받아친 논점을 재차 반박하면 같은 말 반복이 돼. ")
+                    .append("'새 상대 주장'에만 응수하고(없으면 네 입장 보강만), 이전에 한 반박을 되풀이하지 마.\n");
         } else {
             sb.append("네네로서 PRO/CON 중 한쪽을 골라 논거를 위 형식으로 작성하세요. 한번 고른 입장은 이후로도 유지할 거야.\n");
         }
         return sb.toString();
+    }
+
+    private static String line(FightPost p) {
+        return "- [" + safe(p.side()) + "] @" + safe(p.nickname()) + ": " + safe(p.content()) + "\n";
     }
 
     private static String safe(String s) {

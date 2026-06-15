@@ -1,12 +1,15 @@
 package com.maitmus.sekairouter.arena;
 
+import com.maitmus.sekairouter.arena.ArenaDtos.FightPost;
 import com.maitmus.sekairouter.arena.ArenaDtos.Topic;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.SharedPromptContent;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,5 +82,34 @@ class ArenaFightGeneratorTest {
         var d = gen("{\"side\":\"PRO\",\"content\":\"맞는 말이긴 한데\",\"shouldFight\":true}")
                 .generate(TOPIC, List.of(), "con", "쿠사나기 네네");
         assertThat(d.side()).isEqualTo("CON");
+    }
+
+    @Test
+    void already_addressed_opposing_is_locked_only_new_opposing_is_rebutted() {
+        // 내 마지막 글(T2) 이전 상대(PRO) 주장은 '이미 다룸 — 재반박 금지', 이후 상대 주장은 '새 — 이번에 반박'.
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(a.completeJson(any(PromptBlocks.class), up.capture()))
+                .thenReturn("{\"side\":\"CON\",\"content\":\"\",\"shouldFight\":false}");
+        SharedPromptContent s = mock(SharedPromptContent.class);
+        when(s.build()).thenReturn("shared");
+        ArenaFightGenerator g = new ArenaFightGenerator(a, s, new OutputSanityGate(),
+                mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
+
+        OffsetDateTime t1 = OffsetDateTime.parse("2026-06-15T01:00:00Z");
+        OffsetDateTime t2 = OffsetDateTime.parse("2026-06-15T02:00:00Z");
+        OffsetDateTime t3 = OffsetDateTime.parse("2026-06-15T03:00:00Z");
+        List<FightPost> posts = List.of(
+                new FightPost("o1", "특붕이", "PRO", "옛찬성논거", 0, 0, false, t1),   // 내 글 전
+                new FightPost("m1", "쿠사나기 네네", "CON", "내반박", 0, 0, false, t2), // 내 마지막
+                new FightPost("o2", "히후미", "PRO", "새찬성논거", 0, 0, false, t3));   // 내 글 후
+
+        g.generate(TOPIC, posts, "CON", "쿠사나기 네네");
+
+        String p = up.getValue();
+        assertThat(p).contains("재반박 금지");
+        // 옛 주장은 '이미 다룬' 섹션, 새 주장은 '새 상대 주장' 섹션에 배치
+        assertThat(p.indexOf("옛찬성논거")).isGreaterThan(p.indexOf("이미 다룬 상대 주장"));
+        assertThat(p.indexOf("새찬성논거")).isGreaterThan(p.indexOf("새 상대 주장"));
     }
 }
