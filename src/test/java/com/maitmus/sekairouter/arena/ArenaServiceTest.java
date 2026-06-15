@@ -1,5 +1,6 @@
 package com.maitmus.sekairouter.arena;
 
+import com.maitmus.sekairouter.arena.ArenaDtos.FightPost;
 import com.maitmus.sekairouter.arena.ArenaDtos.StatusResponse;
 import com.maitmus.sekairouter.arena.ArenaDtos.Topic;
 import com.maitmus.sekairouter.arena.ArenaProperties.Account;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -82,6 +84,58 @@ class ArenaServiceTest {
 
         verify(api).fight(eq(nene), eq("CON"), eq("논거임"));
         verify(stateStore).recordSide(any(), eq("t1"), eq("CON"));
+    }
+
+    private static final OffsetDateTime T1 = OffsetDateTime.parse("2026-06-12T10:00:00Z");
+    private static final OffsetDateTime T2 = OffsetDateTime.parse("2026-06-12T11:00:00Z");
+
+    @Test
+    void fight_skips_when_no_opposing_opinion_since_my_last_post() {
+        // 내 마지막 글(CON, T2) 이후 상대(PRO) 신규 글 없음 → 그 턴 스킵(일방 도배 방지)
+        when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
+        when(api.fightPosts(any())).thenReturn(List.of(
+                new FightPost("a", "어떤찬성러", "PRO", "찬성", 0, 0, false, T1),
+                new FightPost("b", "쿠사나기 네네", "CON", "반대", 0, 0, false, T2)));
+        ArenaService svc = service();
+        when(stateStore.lockedSide(any(), any())).thenReturn(Optional.of("CON"));
+
+        svc.executeFight();
+
+        verify(fightGen, never()).generate(any(), any(), any(), any());
+        verify(api, never()).fight(any(), any(), any());
+    }
+
+    @Test
+    void fight_posts_when_opposing_replied_since_my_last_post() {
+        // 내 마지막 글(CON, T1) 이후 상대(PRO)가 T2에 재반박 → 응답할 새 의견 있으니 게시
+        when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
+        when(api.fightPosts(any())).thenReturn(List.of(
+                new FightPost("b", "쿠사나기 네네", "CON", "반대", 0, 0, false, T1),
+                new FightPost("c", "어떤찬성러", "PRO", "재반박", 0, 0, false, T2)));
+        when(fightGen.generate(any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거"));
+        when(api.fight(any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
+        ArenaService svc = service();
+        when(stateStore.lockedSide(any(), any())).thenReturn(Optional.of("CON"));
+
+        svc.executeFight();
+
+        verify(api).fight(eq(nene), eq("CON"), eq("논거"));
+    }
+
+    @Test
+    void fight_skips_when_only_opposing_post_after_mine_is_blinded() {
+        // 내 마지막(T1) 이후 PRO 글이 있지만 블라인드 처리됨 → 유효 신규 의견 아님 → 스킵
+        when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
+        when(api.fightPosts(any())).thenReturn(List.of(
+                new FightPost("b", "쿠사나기 네네", "CON", "반대", 0, 0, false, T1),
+                new FightPost("c", "도배러", "PRO", "도발", 0, 0, true, T2)));
+        ArenaService svc = service();
+        when(stateStore.lockedSide(any(), any())).thenReturn(Optional.of("CON"));
+
+        svc.executeFight();
+
+        verify(fightGen, never()).generate(any(), any(), any(), any());
+        verify(api, never()).fight(any(), any(), any());
     }
 
     @Test

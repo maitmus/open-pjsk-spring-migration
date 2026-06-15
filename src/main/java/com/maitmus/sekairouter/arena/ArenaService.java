@@ -9,7 +9,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -81,6 +83,10 @@ public class ArenaService {
             existing = List.of();
         }
         String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
+        if (noOpposingSinceMyLastPost(existing, lockedSide, properties.fight().nickname())) {
+            log.info("Arena fight skip — 내 마지막 글 이후 상대편 신규 의견 없음 (일방 도배 방지)");
+            return;
+        }
         var decision = fightGenerator.generate(status.topic(), existing, lockedSide, properties.fight().nickname());
         if (decision == null) {
             log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
@@ -98,6 +104,24 @@ public class ArenaService {
         } catch (Exception e) {
             log.warn("Arena fight 실패 (쿨다운 등) — 스킵: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 내가 마지막으로 글 쓴 이후 상대편(반대 side) 신규 의견이 없으면 true → 이번 토론 턴 스킵(일방 도배 방지).
+     * 첫 턴(입장 미확정=lockedSide null)이거나 아직 내 글이 없으면 스킵하지 않는다. 블라인드된 상대 글은 유효 의견으로 안 친다.
+     */
+    static boolean noOpposingSinceMyLastPost(List<FightPost> existing, String lockedSide, String selfNickname) {
+        if (existing == null || lockedSide == null || selfNickname == null) return false;
+        OffsetDateTime myLast = existing.stream()
+                .filter(p -> selfNickname.equals(p.nickname()) && p.createdAt() != null)
+                .map(FightPost::createdAt)
+                .max(Comparator.naturalOrder()).orElse(null);
+        if (myLast == null) return false;   // 아직 내 글 없음 → 스킵 안 함(여는 글)
+        String opposing = "CON".equalsIgnoreCase(lockedSide) ? "PRO" : "CON";
+        boolean opposingNew = existing.stream().anyMatch(p ->
+                opposing.equalsIgnoreCase(p.side()) && !p.isBlinded()
+                        && p.createdAt() != null && p.createdAt().isAfter(myLast));
+        return !opposingNew;
     }
 
     private StatusResponse safeStatus() {
