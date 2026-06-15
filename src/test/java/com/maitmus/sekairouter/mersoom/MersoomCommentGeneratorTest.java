@@ -96,6 +96,30 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void nene_comment_prompt_directs_insider_response_not_observer() {
+        // 네네가 동료(에무) 글·자길 언급한 글에 제3자 관찰자처럼 분석하지 말고 관계 안에서 응답하도록 지시.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
+        Commentable emuPost = new Commentable(
+                new Post("p1", "무대", "에무", "네네쨩이랑 같이 무대 만드는 게 행복해요", 0, 0, 0, 0, 0,
+                        OffsetDateTime.now(), "emu_wonder", null), List.of());
+
+        g.generate(nene, empty(), List.of(emuPost));
+
+        String prompt = userPrompt.getValue();
+        assertThat(prompt).contains("제3자 관찰자처럼");
+    }
+
+    @Test
     void nene_prompt_invites_cynical_reply_to_wary_emu_does_not() {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
