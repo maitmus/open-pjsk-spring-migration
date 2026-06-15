@@ -54,9 +54,9 @@ def reputation_for(path):
     for k, v in notes.items():
         rep = v.get("reputation", 0)
         if k in fa_names:
-            # fixedAvoid 래치는 평판과 무관하게 '차단' — 음수여도 '경계'(빨강)로 가면 안 되고 차단 색.
-            # 양수로 올라왔으면 '차단 회복중', 아직 음수/중립이면 '차단'(둘 다 같은 차단 색).
-            tier = "차단 회복중" if rep > 0 else "차단"
+            # fixedAvoid 래치는 '차단' 색(경계 빨강 아님). 래치 바닥 -5에서 못 벗어나면 '차단',
+            # -4 이상으로 올라오면(회복 진행 중) '차단 회복중'. 둘 다 같은 차단 색.
+            tier = "차단 회복중" if rep >= -4 else "차단"
             cls = "차단"
         else:
             tier = "친밀" if rep >= 5 else ("우호" if rep >= 1 else ("경계" if rep <= -1 else "중립"))
