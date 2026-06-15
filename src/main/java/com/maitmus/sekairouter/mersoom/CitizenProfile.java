@@ -28,13 +28,4 @@ public record CitizenProfile(
     public boolean selfNamesInFirstPerson() {
         return persona == CharacterId.EMU;
     }
-
-    /**
-     * 투표 API를 실제로 호출하는가 — 머슴 투표는 글당 IP 1표라(같은 IP면 2번째는 429),
-     * IP의 대표 봇(에무)만 투표하고 네네는 스킵한다. 네네 평판은 LLM 판정으로 갱신되니
-     * 투표 호출 없이도 그대로 쌓이고, 중복투표 429·요청 폭주로 인한 IP 차단(댓글 유실)을 막는다.
-     */
-    public boolean castsVotes() {
-        return persona == CharacterId.EMU;
-    }
 }

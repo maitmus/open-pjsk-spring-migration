@@ -49,7 +49,6 @@ public class MersoomCitizenEngine {
     private final MersoomPostGenerator postGenerator;
     private final MersoomAdGenerator adGenerator;
     private final MersoomCommentGenerator commentGenerator;
-    private final VoteHeuristic voteHeuristic;
     private final ContextNoteManager contextNoteManager;
     private final MersoomReputationTracker reputationTracker;
     private final CommentTopicGate commentTopicGate;
@@ -59,8 +58,8 @@ public class MersoomCitizenEngine {
     public void runPost(CitizenProfile profile) {
         MersoomState state = store.load(profile.stateFile());
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
-        // 글 크론은 LLM 피드 판정을 하지 않으므로 휴리스틱 투표.
-        List<String> updatedVoted = castVotes(profile, state, feed.votable(), Map.of());
+        // 글 크론은 LLM 피드 판정을 하지 않는다. 공개 투표는 폐지됐으므로 votable을 처리 마커로만 누적.
+        List<String> updatedVoted = castVotes(state, feed.votable());
         state = withVotedPostIds(state, updatedVoted);
         Map<String, ContextNote> ticked = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
@@ -129,13 +128,13 @@ public class MersoomCitizenEngine {
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable());
-        // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 투표·평판 양쪽에서 무마(아래 castVotes/buildVoteOutcomes 모두 이 맵 사용).
+        // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
                 : Map.of();
 
-        // 투표 — LLM 판단 우선, 없는 글은 휴리스틱 폴백.
-        List<String> updatedVoted = castVotes(profile, state, feed.votable(), llmVotes);
+        // 공개 투표는 폐지 — votable을 처리 마커로만 누적(평판은 아래 buildVoteOutcomes로 갱신).
+        List<String> updatedVoted = castVotes(state, feed.votable());
         state = withVotedPostIds(state, updatedVoted);
 
         // 평판 갱신 — LLM 투표(+사유)를 작성자별 카운터로 누적, fixedAvoid 래치/회복, 별명 적용.
@@ -270,39 +269,16 @@ public class MersoomCitizenEngine {
                 state.pendingReports(), state.votedPostIds());
     }
 
-    /** votable 글에 vote 적용 — LLM 판단(llmVotes) 우선, 없으면 휴리스틱 폴백. 형제 봇 DOWN은 스킵. 새 votedPostIds 반환. */
-    private List<String> castVotes(CitizenProfile profile, MersoomState state, List<Post> votable, Map<String, VoteType> llmVotes) {
-        // 투표 미담당 봇(네네)은 실제 API 투표를 건너뛴다 — 투표는 IP당 1표라 에무 것만 반영되고,
-        // 네네 평판은 (호출측의) LLM 판정으로 갱신되므로 투표 호출 없이도 그대로 쌓인다.
-        if (!profile.castsVotes()) {
-            log.info("[{}] Mersoom 투표 스킵 — IP 대표 봇만 투표(중복투표·요청폭주 방지), 평판은 LLM 판정으로 갱신", profile.key());
-            return new ArrayList<>(state.votedPostIds());
-        }
+    /**
+     * 공개 투표 폐지(2026-06-15) — 봇은 더 이상 api.vote를 호출하지 않는다.
+     * 투표 버스트가 IP 분당 한도를 넘겨 직후 댓글 POST를 막던 429의 원천을 제거한다.
+     * 내부 평판은 buildVoteOutcomes(llmVotes)가 별도 경로로 갱신하므로, 여기서는 votable을
+     * '처리 완료' 마커(votedPostIds)로만 누적해 다음 크론의 재판정을 막는다. 새 votedPostIds 반환.
+     */
+    private List<String> castVotes(MersoomState state, List<Post> votable) {
         var voted = new LinkedHashSet<>(state.votedPostIds());
         for (Post p : votable) {
-            if (voted.contains(p.id())) continue;
-            try {
-                boolean fromLlm = llmVotes.containsKey(p.id());
-                VoteType vote = fromLlm ? llmVotes.get(p.id()) : voteHeuristic.decide(p, state);
-                if (isSiblingDown(profile, p, vote)) {
-                    log.info("[{}] Mersoom vote 무마 — 형제 봇 글에 DOWN 스킵: post={} nick={}",
-                            profile.key(), p.id(), p.nickname());
-                    voted.add(p.id());   // 재평가 방지 — 형제 글은 중립 처리
-                    continue;
-                }
-                api.vote(profile.auth(), p.id(), vote);
-                voted.add(p.id());
-                log.info("[{}] Mersoom voted: post={} nick={} type={} src={}", profile.key(), p.id(), p.nickname(), vote,
-                        fromLlm ? "llm" : "heuristic");
-                if (properties.apiRateLimitSleepMs() > 0) {
-                    Thread.sleep(properties.apiRateLimitSleepMs());
-                }
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Exception e) {
-                log.warn("[{}] Mersoom vote failed for post {}: {}", profile.key(), p.id(), e.getMessage());
-            }
+            voted.add(p.id());
         }
         while (voted.size() > properties.votedPostIdsLimit()) {
             String first = voted.iterator().next();

@@ -46,11 +46,9 @@ heartbeat:
   quiet-end-hour: ${HEARTBEAT_QUIET_END_HOUR:9}        # 활성 시작 09시
   dialogue-probability: ${HEARTBEAT_DIALOGUE_PROB:0.5}
 
-# 매일 아침 날씨 발화 — 08:45 KST. 08:30 아레나 발의가 공유 prefix 캐시 생성 → 날씨·첫 발화 전부 cache_read 체인
-daily-weather:
-  enabled: ${DAILY_WEATHER_ENABLED:true}
-  cron: ${DAILY_WEATHER_CRON:0 45 8 * * *}
-  location: ${DAILY_WEATHER_LOCATION:부산 중앙동}
+# 공유 prefix 캐시(1h TTL) 아침 워밍: 08:30 아레나 발의가 캐시 WRITE(매일 첫 호출, cold) →
+# 09:00 하트비트(크론 :00/:30)·09:15 머슴 댓글이 1h 안에 cache_read로 이어받아 하루종일 warm 유지.
+# (날씨 캐스트 크론은 2026-06-15 폐지 — web_search 산발 회귀 + 캐시 워밍에 비필수)
 
 # 머슴 자동 글/댓글 — 활성창 09–19로 정렬 (게이트 MersoomService.isActiveHour 9–19)
 mersoom:

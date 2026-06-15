@@ -39,7 +39,6 @@ public class HeartbeatService {
     private static final long INTER_MESSAGE_BUFFER_MS = 1500;
 
     private final HeartbeatProperties properties;
-    private final DailyWeatherProperties dailyWeatherProperties;
     private final HeartbeatStateStore state;
     private final EventsCalendar events;
     private final HeartbeatPromptBuilder promptBuilder;
@@ -135,47 +134,6 @@ public class HeartbeatService {
             return hour >= start || hour < end;
         }
         return hour >= start && hour < end;
-    }
-
-    /**
-     * Daily scheduled weather cast — fires at 09:30 KST by default so the resulting
-     * cache stays alive (1h TTL) until the first morning heartbeat fires (latest 10:29
-     * after the 10:00 reroll), letting morning calls hit warm cache across paths.
-     *
-     * Bypasses quiet-hours: this is an explicit scheduled event, not autonomous heartbeat.
-     */
-    @Scheduled(cron = "${daily-weather.cron}", zone = "Asia/Seoul")
-    public void dailyWeatherCast() {
-        if (!dailyWeatherProperties.enabled()) return;
-
-        String channelId = discordProperties.sekaiChannelId();
-        PromptBlocks systemPrompt = promptBuilder.build();
-        CharacterId speaker = randomSelector.pickOne(state.lastSpeaker().orElse(null));
-
-        String speakerLower = speaker.name().toLowerCase();
-        String userPrompt = "## 모드\n자율 발화 (일일 날씨 알림)"
-                + "\n## 발화자\n" + speakerLower
-                + "\n## 위치\n" + dailyWeatherProperties.location()
-                + "\n## 오늘 날짜 (KST)\n" + LocalDate.now(clock)
-                + "\n## 절차 (내부, 출력에 노출 금지)\n"
-                + "1. web_search 도구로 '" + dailyWeatherProperties.location() + " 오늘 날씨' 조회\n"
-                + "2. 검색 결과(기온·강수·체감 등)를 " + speakerLower + " 캐릭터의 1인칭 발화로 변환\n"
-                + "## 형식\n"
-                + "- 3~5문장, 100~250자\n"
-                + "- " + speakerLower + " 페르소나의 1인칭·시그니처 어법·어미 그대로 적용\n"
-                + "- 날씨 정보(기온·체감·강수 등)는 캐릭터 톤으로 자연스럽게 녹여 넣되, 본인 일상·관심사도 한두 마디 곁들여 분량 충분히\n"
-                + outputSchemaBlock()
-                + "## 좋은 예시 utterance (shizuku인 경우)\n"
-                + "어머나, 오늘 부산은 22도까지 올라간대. 아침엔 13도라 좀 쌀쌀했지만 오후엔 따뜻해질 거라네. 봄답게 햇살이 부드러워서 산책하기 딱 좋은 날이지~ 나도 두부피 사러 시장 한 바퀴 돌아볼까 싶어."
-                + recentUtterancesBlock();
-
-        String message = callUtterance(systemPrompt, userPrompt);
-        if (message != null) {
-            scheduleProxySend(speaker, channelId, message, 0);
-            state.recordLastSpeaker(speaker);
-            state.recordUtterance(speaker, message);
-            log.info("Daily weather cast: speaker={}, location={}", speaker, dailyWeatherProperties.location());
-        }
     }
 
     private void executeNormalHeartbeat() {

@@ -65,9 +65,12 @@ class MersoomCitizenEngineTest {
 
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
 
-        verify(api).vote(any(), eq("p1"), eq(VoteType.DOWN));
+        verify(api, never()).vote(any(), any(), any());   // 공개 투표 폐지 — API 미호출
         verify(api, never()).createComment(any(), any(), any(), any(), any());
-        verify(store).save(any(), any());
+        ArgumentCaptor<MersoomState> cap = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), cap.capture());
+        // 판정(DOWN)은 평판에 그대로 반영 — w8agi rep -1
+        assertThat(cap.getValue().contextNotes().get("w8agi").reputation()).isEqualTo(-1);
     }
 
     @Test
@@ -90,8 +93,7 @@ class MersoomCitizenEngineTest {
 
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
 
-        verify(api).vote(any(), eq("p1"), eq(VoteType.DOWN));
-        verify(api).vote(any(), eq("p2"), eq(VoteType.UP));
+        verify(api, never()).vote(any(), any(), any());   // 공개 투표 폐지
         verify(api).createComment(any(), eq("p2"), any(), any(), any());
     }
 
@@ -120,7 +122,8 @@ class MersoomCitizenEngineTest {
     }
 
     @Test
-    void runComment_fallsBackToHeuristicVotes_whenJudgmentNull() {
+    void runComment_whenJudgmentNull_castsNoVotesAndNoComments() {
+        // 공개 투표 폐지 후 — judgment null이면 휴리스틱 투표도 없다(투표 자체가 폐지). 댓글도 없음, state만 저장.
         Post bright = post("p2", "산책", "친구", "오늘 산책 기분 최고에요!", "f2");
         MersoomCollector collector = mock(MersoomCollector.class);
         when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
@@ -133,7 +136,7 @@ class MersoomCitizenEngineTest {
 
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
 
-        verify(api).vote(any(), eq("p2"), eq(VoteType.UP));   // 휴리스틱: '산책' POSITIVE_KW → UP
+        verify(api, never()).vote(any(), any(), any());   // 투표 폐지 — 휴리스틱 폴백도 없음
         verify(api, never()).createComment(any(), any(), any(), any(), any());
         verify(store).save(any(), any());
     }
@@ -189,6 +192,30 @@ class MersoomCitizenEngineTest {
         var note = cap.getValue().contextNotes().get("friend1");
         assertThat(note).isNotNull();
         assertThat(note.reputation()).isEqualTo(1);
+    }
+
+    @Test
+    void emu_does_not_vote_via_api_but_tracks_reputation() {
+        // 공개 투표 폐지 — 에무도 api.vote를 호출하지 않는다(429 원천 제거). 평판은 LLM 판정으로 그대로 갱신.
+        Post bright = post("p2", "벚꽃", "친구", "오늘 산책 기분 최고에요!", "friend1");
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(bright, List.of())), List.of(), List.of(bright)));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any(), any())).thenReturn(new FeedJudgment(
+                Map.of("p2", VoteType.UP), Map.of("p2", "밝은 글"), List.of(), Map.of()));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+
+        engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
+
+        verify(api, never()).vote(any(), any(), any());   // 공개 투표 폐지 — 에무도 미호출
+        ArgumentCaptor<MersoomState> cap = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), cap.capture());
+        var note = cap.getValue().contextNotes().get("friend1");
+        assertThat(note).isNotNull();
+        assertThat(note.reputation()).isEqualTo(1);   // 평판은 여전히 갱신
     }
 
     @Test
@@ -308,7 +335,7 @@ class MersoomCitizenEngineTest {
         MersoomPostGenerator pg = mock(MersoomPostGenerator.class);
         when(pg.generate(any(), any(), any(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
         return new MersoomCitizenEngine(p, store, collector, api, pg, adGen, mock(MersoomCommentGenerator.class),
-                new VoteHeuristic(), new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
+                new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
                 new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), clock);
     }
 
@@ -319,7 +346,6 @@ class MersoomCitizenEngineTest {
         when(p.apiRateLimitSleepMs()).thenReturn(0);
         return new MersoomCitizenEngine(
                 p, store, collector, api, pg, mock(MersoomAdGenerator.class), cg,
-                new VoteHeuristic(),
                 new ContextNoteManager(clock, 1024),
                 new MersoomReputationTracker(),
                 new CommentTopicGate(),
