@@ -91,7 +91,8 @@ class MersoomCommentGeneratorTest {
         g.generate(emu, empty(), List.of(normal));
 
         String prompt = userPrompt.getValue();
-        assertThat(prompt).contains("네네에겐 반말");   // 에무 분기의 강한 반말 보강 규칙
+        assertThat(prompt).contains("네네에겐 반말")                 // 에무 분기의 강한 반말 보강 규칙
+                .contains("반말로 시작했으면 반말로 끝낸다");          // 자가수정(존댓말 seam) 방지
     }
 
     @Test
