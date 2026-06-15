@@ -16,7 +16,7 @@ import java.util.Map;
  * 머슴 글 생성. LLM 호출 → {@code {reasoning, title, content, shouldPost}} 봉투 파싱.
  *
  * 댓글 생성기와 동일 규약: 메타·게시 보류 사유는 reasoning에 격리, 게시 여부는 shouldPost로 결정.
- * 게시 보류 시 {@code null} 반환. 보수 기본값(shouldPost 명시 true 아니면 보류) + 백스톱 적용.
+ * 게시 보류 시 {@code null} 반환. shouldPost는 '명시적 false'만 보류(누락=게시), 빈 title/content·백스톱은 차단.
  */
 @Slf4j
 @Component
@@ -46,8 +46,10 @@ public class MersoomPostGenerator {
         if (env.reasoning() != null && !env.reasoning().isBlank()) {
             log.info("Mersoom post reasoning (not posted): {}", env.reasoning());
         }
-        if (!Boolean.TRUE.equals(env.shouldPost())) {
-            log.info("Mersoom post 보류 — shouldPost={} (게시하지 않음)", env.shouldPost());
+        // shouldPost는 '명시적 false'일 때만 보류 — 모델이 필드를 깜빡 누락(null)하면 좋은 글이 버려지므로
+        // 누락은 게시로 본다(부적합은 아래 title/content·백스톱 검증이 차단).
+        if (Boolean.FALSE.equals(env.shouldPost())) {
+            log.info("Mersoom post 보류 — shouldPost=false (모델이 게시 거부)");
             return null;
         }
         String title = env.title() == null ? "" : env.title().strip();

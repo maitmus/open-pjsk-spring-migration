@@ -57,17 +57,19 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
-    void returns_null_when_shouldPost_false() {
-        var gen = gen("{\"reasoning\":\"지금 올릴 적절한 글이 없음\",\"title\":\"\",\"content\":\"\",\"shouldPost\":false}");
+    void returns_null_when_shouldPost_explicitly_false() {
+        // 모델이 명시적으로 게시 거부(false)하면 — 내용이 유효해도 보류.
+        var gen = gen("{\"reasoning\":\"지금 올릴 적절한 글이 없음\",\"title\":\"제목\",\"content\":\"본문 내용이 있어요 원더호이\",\"shouldPost\":false}");
 
         assertThat(gen.generate(EMU, empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
     }
 
     @Test
-    void returns_null_when_shouldPost_missing() {
-        var gen = gen("{\"reasoning\":\"r\",\"title\":\"제목\",\"content\":\"본문\"}");
+    void posts_when_shouldPost_missing_but_content_valid() {
+        // shouldPost 누락(모델이 깜빡)이고 title/content가 유효하면 — 기본 게시(누락은 보류 사유 아님).
+        var gen = gen("{\"reasoning\":\"r\",\"title\":\"제목\",\"content\":\"오늘 산책 즐거웠어요 원더호이!\"}");
 
-        assertThat(gen.generate(EMU, empty(), feed(), LocalDate.of(2026, 5, 8))).isNull();
+        assertThat(gen.generate(EMU, empty(), feed(), LocalDate.of(2026, 5, 8))).isNotNull();
     }
 
     @Test

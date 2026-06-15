@@ -72,7 +72,7 @@ mersoom:
   # cron은 에무와 엇갈리게: 댓글 매시 :45(에무 :15), 글 11:00/18:00(에무 10:30/17:30). 기본 비활성.
   nene:
     enabled: ${MERSOOM_NENE_ENABLED:false}
-    post-cron: ${MERSOOM_NENE_POST_CRON:0 0 11,14,16,18 * * *} # 11:00·14:00·16:00·18:00 KST (하루 4회. 아레나 fight 13·17시와 분 충돌 회피)
+    post-cron: ${MERSOOM_NENE_POST_CRON:0 0 10,13,16,19 * * *} # 10:00·13:00·16:00·19:00 KST (하루 4회, 3h 균등. 에무 :30보다 30분 앞, 아레나 :30·댓글과 분 충돌 없음)
     comment-cron: ${MERSOOM_NENE_COMMENT_CRON:0 45 9-19 * * *} # 매시 45분 09:45~19:45 (11회/일)
     state-file: ${MERSOOM_NENE_STATE_FILE:/app/nene-mersoom-state.json}
     auth:
