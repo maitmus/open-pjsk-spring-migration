@@ -112,4 +112,37 @@ class ArenaFightGeneratorTest {
         assertThat(p.indexOf("옛찬성논거")).isGreaterThan(p.indexOf("이미 다룬 상대 주장"));
         assertThat(p.indexOf("새찬성논거")).isGreaterThan(p.indexOf("새 상대 주장"));
     }
+
+    @Test
+    void multiple_new_opposing_posts_all_land_in_new_section() {
+        // 내 마지막 글(T2) 이후 상대(PRO) 새 주장이 둘(T3·T4) — 둘 다 '새 상대 주장' 섹션에 들어가야 함.
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(a.completeJson(any(PromptBlocks.class), up.capture()))
+                .thenReturn("{\"side\":\"CON\",\"content\":\"\",\"shouldFight\":false}");
+        SharedPromptContent s = mock(SharedPromptContent.class);
+        when(s.build()).thenReturn("shared");
+        ArenaFightGenerator g = new ArenaFightGenerator(a, s, new OutputSanityGate(),
+                mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
+
+        OffsetDateTime t1 = OffsetDateTime.parse("2026-06-15T01:00:00Z");
+        OffsetDateTime t2 = OffsetDateTime.parse("2026-06-15T02:00:00Z");
+        OffsetDateTime t3 = OffsetDateTime.parse("2026-06-15T03:00:00Z");
+        OffsetDateTime t4 = OffsetDateTime.parse("2026-06-15T04:00:00Z");
+        List<FightPost> posts = List.of(
+                new FightPost("o1", "특붕이", "PRO", "옛주장", 0, 0, false, t1),
+                new FightPost("m1", "쿠사나기 네네", "CON", "내반박", 0, 0, false, t2),
+                new FightPost("o2", "히후미", "PRO", "새주장에이", 0, 0, false, t3),
+                new FightPost("o3", "흰둥이머슴", "PRO", "새주장비", 0, 0, false, t4));
+
+        g.generate(TOPIC, posts, "CON", "쿠사나기 네네");
+
+        String p = up.getValue();
+        int newHdr = p.indexOf("새 상대 주장");
+        int oldHdr = p.indexOf("이미 다룬 상대 주장");
+        // 두 새 주장 모두 '새' 섹션 안(새 헤더 이후 & 옛 헤더 이전), 옛 주장은 '이미 다룬' 섹션
+        assertThat(p.indexOf("새주장에이")).isGreaterThan(newHdr).isLessThan(oldHdr);
+        assertThat(p.indexOf("새주장비")).isGreaterThan(newHdr).isLessThan(oldHdr);
+        assertThat(p.indexOf("옛주장")).isGreaterThan(oldHdr);
+    }
 }
