@@ -49,12 +49,20 @@ def reputation_for(path):
     s = _read_json(path) or {}
     notes = s.get("context_notes", {})
     fa = s.get("fixed_avoid", [])
+    fa_names = {f.get("name") for f in fa}
     rows = []
     for k, v in notes.items():
         rep = v.get("reputation", 0)
-        tier = "친밀" if rep >= 5 else ("우호" if rep >= 1 else ("경계" if rep <= -1 else "중립"))
+        if k in fa_names:
+            # fixedAvoid 래치는 평판과 무관하게 '차단' 상태 — rep가 양수로 올라와도 +5 도달 전엔 해제 안 됨.
+            # 래치 바닥(-5)보다 올라왔으면 회복중으로 구분 표시(우호로 오인 금지).
+            tier = "차단·회복중" if rep > -5 else "차단"
+            cls = "차단"
+        else:
+            tier = "친밀" if rep >= 5 else ("우호" if rep >= 1 else ("경계" if rep <= -1 else "중립"))
+            cls = tier
         last = [l for l in (v.get("note") or "").split("\n") if l.strip()]
-        rows.append({"key": k, "rep": rep, "tier": tier, "call": v.get("call"),
+        rows.append({"key": k, "rep": rep, "tier": tier, "cls": cls, "call": v.get("call"),
                      "last": last[-1][:80] if last else ""})
     rows.sort(key=lambda r: -r["rep"])
     return {"count": len(rows), "fixed_avoid": [f.get("name") for f in fa], "rows": rows}
@@ -165,7 +173,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  .card h2{font-size:14px;margin:0 0 10px;color:#9ad}
  .muted{color:#8b93a7;font-size:12px} .row{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid #232734}
  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600}
- .친밀{background:#2b4a2b;color:#9f9} .우호{background:#26384d;color:#9cf} .경계{background:#4d2626;color:#f99} .중립{background:#333;color:#bbb}
+ .친밀{background:#2b4a2b;color:#9f9} .우호{background:#26384d;color:#9cf} .경계{background:#4d2626;color:#f99} .중립{background:#333;color:#bbb} .차단{background:#402038;color:#f9c;border:1px solid #d6f}
  .ok{color:#7e7} .warn{color:#f96} .small{font-size:12px;color:#c8cee0}
  .nene{border-left:3px solid #b59;padding-left:8px;margin:6px 0}
  .repsec{margin-bottom:12px}
@@ -196,7 +204,7 @@ async function load(){
    a.nene_posts.map(p=>`<div class=nene><b>[${esc(p.side)}]</b> ↑${p.up} ↓${p.dn}<br><span class=small>${esc(p.content)}</span></div>`).join('');
   const repBlock=(label,r)=>r?
    `<div class=repsec><div class=muted><b>${label}</b> · ${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</div>`+
-   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.tier}">${x.tier}</span></div>`).join('')+`</div>`:'';
+   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.cls}">${x.tier}</span></div>`).join('')+`</div>`:'';
   const rep=d.reputation||{};
   document.getElementById('rep').innerHTML=repBlock('에무',rep.emu)+repBlock('네네',rep.nene)||'<div class=muted>없음</div>';
   document.getElementById('cmt').innerHTML=
