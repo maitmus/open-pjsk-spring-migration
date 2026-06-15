@@ -70,6 +70,31 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void emu_comment_prompt_enforces_banmal_to_nene_even_without_sibling_in_feed() {
+        // 에무 기본 존댓말 디폴트가 강해 relationshipLine(피드 한 줄)만으론 네네 댓글 말투가 샌다.
+        // 에무 분기에 '네네에겐 반말' 규칙 + 반말 예시를 항상 넣어 보강(피드에 네네 글이 없어도 존재).
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        CitizenProfile emu = new CitizenProfile("emu", "에무",
+                new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
+                com.maitmus.sekairouter.persona.CharacterId.EMU, Set.of("nene_wonder"));
+        Commentable normal = new Commentable(
+                new Post("p9", "벚꽃", "친구", "산책 좋았어요", 0, 0, 0, 0, 0,
+                        OffsetDateTime.now(), "friend9", null), List.of());
+
+        g.generate(emu, empty(), List.of(normal));
+
+        String prompt = userPrompt.getValue();
+        assertThat(prompt).contains("네네에겐 반말");   // 에무 분기의 강한 반말 보강 규칙
+    }
+
+    @Test
     void nene_prompt_invites_cynical_reply_to_wary_emu_does_not() {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
