@@ -50,6 +50,13 @@ public class SharedPromptContent {
         loadFile(baseDir, EVENTS_FILE).ifPresent(c ->
                 sb.append("\n## 이벤트 캘린더 (events.json)\n\n```json\n").append(c).append("```\n"));
 
+        // 모든 경로(발화·머슴·아레나) 공통 출력 규칙. 경로별 형식 지시와 별개로 항상 적용.
+        sb.append("\n## 출력 공통 규칙 (모든 발화·게시 공통)\n");
+        sb.append("- **발행 텍스트(발화·글·댓글·광고·토론 본문)는 전부 한글로 쓴다.** ");
+        sb.append("중국·일본 한자와 불필요한 일본어/영어 원어 표기 금지 — 한자어도 전부 한글 발음으로만 적는다(예: '가희'·'세계'를 한자로 쓰지 말 것). ");
+        sb.append("시그니처·기호·이모지(♪ ☆ ★ 등)는 그대로 써도 된다.\n");
+        sb.append("- **출력 직전 한 번 더 검수**한다 — 오탈자·띄어쓰기·조사·깨진 글자가 없는지 확인하고, 어색한 표기는 자연스러운 한국어로 다듬어 내보낸다.\n");
+
         return sb.toString();
     }
 
