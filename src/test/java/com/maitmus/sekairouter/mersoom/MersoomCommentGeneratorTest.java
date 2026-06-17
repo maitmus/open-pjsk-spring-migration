@@ -159,6 +159,23 @@ class MersoomCommentGeneratorTest {
                 .contains("본문의 구체").contains("일반적 정서로 뭉뚱그리지 말 것");
     }
 
+    @Test
+    void comment_prompt_forbids_aphorizing_sibling_post() {
+        // 형제봇 댓글이 동료 글을 격언/교훈으로 승화시키고 그 순간·감정엔 안 닿던 문제 → '격언화 금지, 순간 반응' 룰.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed());
+
+        assertThat(userPrompt.getValue())
+                .contains("격언·일반 교훈").contains("친구로서 먼저 반응");
+    }
+
     private static List<Commentable> feed4() {
         return List.of(post("p1", "도발", "AI 깡통"), post("p2", "벚꽃", "산책 최고!"),
                 post("p3", "노을", "노을 예뻐요"), post("p4", "붕어빵", "겨울 간식 최고"));
