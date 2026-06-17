@@ -135,6 +135,42 @@ def recent_utterances(n=10):
     return out
 
 
+# 파트별 스킵/보류 로그 시그니처 — (메시지 정규식, 파트 라벨).
+# 성공 활동은 activity-feed.json에 영속되지만 '스킵'은 로그에만 남으므로 여기서 파싱한다(봇 앱 비침습).
+SKIP_PATTERNS = [
+    (re.compile(r"Mersoom post (?:skip|보류)"), "머슴 글"),
+    (re.compile(r"Nene mersoom post .*skip"), "머슴 글"),
+    (re.compile(r"Mersoom ad skip"), "머슴 광고"),
+    (re.compile(r"Mersoom comment (?:skip|항목 보류|— 게시 0건|—\s*게시 0건)"), "머슴 댓글"),
+    (re.compile(r"Nene mersoom comment .*skip"), "머슴 댓글"),
+    (re.compile(r"Arena propose (?:skip|보류)"), "아레나 발의"),
+    (re.compile(r"Arena fight (?:skip|보류)"), "아레나 fight"),
+    (re.compile(r"Heartbeat 백스톱|skipping second send"), "발화"),
+]
+
+
+def skips(n=16):
+    """최근 스킵/보류를 모든 파트에서 모아 최신순으로. 로그 끝 256KB 윈도우(라이브 모니터용)."""
+    out = []
+    for line in reversed(_tail(LOG, 256)):
+        m = re.match(r"\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})", line)
+        if not m:
+            continue
+        i = line.find(" : ")
+        msg = line[i + 3:] if i >= 0 else line
+        for rx, part in SKIP_PATTERNS:
+            if rx.search(msg):
+                a = re.match(r"\[(emu|nene)\]", msg)
+                actor = a.group(1) if a else ("nene" if "Nene mersoom" in msg else "·")
+                reason = msg.split("— ", 1)[1].strip() if "— " in msg else msg.strip()
+                out.append({"time": m.group(1), "part": part, "actor": actor,
+                            "reason": reason[:96]})
+                break
+        if len(out) >= n:
+            break
+    return out
+
+
 def health():
     ok = os.path.exists(LOG)
     mtime = os.path.getmtime(LOG) if ok else 0
@@ -154,7 +190,7 @@ def health():
 def api_all():
     return JSONResponse({"health": health(), "reputation": reputation(),
                          "arena": arena(), "comments": recent_comments(),
-                         "utterances": recent_utterances()})
+                         "utterances": recent_utterances(), "skips": skips()})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -177,6 +213,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  .ok{color:#7e7} .warn{color:#f96} .small{font-size:12px;color:#c8cee0}
  .nene{border-left:3px solid #b59;padding-left:8px;margin:6px 0}
  .repsec{margin-bottom:12px}
+ .part{background:#3a2f12;color:#e8c06a;border:1px solid #5a4a1e}
 </style></head><body>
 <h1>🎌 sekai-router 대시보드 <span id=now class=muted></span></h1>
 <div class=grid>
@@ -187,6 +224,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  <div class=item><div class=card><h2>아레나 토론</h2><div id=arena></div></div></div>
  <div class=item><div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div></div>
  <div class=item><div class=card><h2>최근 머슴 활동 <span class=muted>댓글·글</span></h2><div id=cmt></div></div></div>
+ <div class=item><div class=card><h2>스킵 · 보류 <span class=muted>모든 파트</span></h2><div id=skip></div></div></div>
 </div>
 <script>
 const esc=s=>(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -211,6 +249,8 @@ async function load(){
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
+  document.getElementById('skip').innerHTML=
+   (d.skips||[]).map(s=>`<div class=row><span><span class="pill part">${esc(s.part)}</span> ${s.actor&&s.actor!=='·'?'<b>'+esc(s.actor)+'</b> ':''}<span class=small>${esc(s.reason)}</span></span><span class=muted>${esc(s.time)}</span></div>`).join('')||'<div class=muted>스킵 없음</div>';
   layout();
  }catch(e){console.error(e)}
 }
