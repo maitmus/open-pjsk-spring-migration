@@ -149,9 +149,22 @@ SKIP_PATTERNS = [
 ]
 
 
+# 일상 스킵(정상 운영의 기대된 필터) — 비일상 피드에선 숨기고 건수만 센다.
+# 비일상 = 생성/봉투 파싱 실패·백스톱 누수·shouldPost(Fight)=false·전송 실패·활성시간 밖 오발 등 '모종의 이유'.
+ROUTINE_RE = re.compile(
+    r"eligibility 탈락"          # 댓글 후보 정상 필터(차단·중복·부적합)
+    r"|진행 광고 .*상한"          # 광고 동시 상한 도달
+    r"|포인트 .*버퍼"            # 광고 포인트 부족
+    r"|상대편 신규 의견 없음"      # 아레나 일방 도배 방지
+    r"|skip — phase="           # 아레나 페이즈 불일치(스케줄 정상)
+    r"|게시 0건"                 # 댓글 크론 결과 0건(억지 댓글 금지 — 정상)
+)
+
+
 def skips(n=16):
-    """최근 스킵/보류를 모든 파트에서 모아 최신순으로. 로그 끝 256KB 윈도우(라이브 모니터용)."""
-    out = []
+    """비일상 스킵/보류만 모든 파트에서 최신순으로. 일상 스킵은 routine_hidden 건수로만.
+    로그 끝 256KB 윈도우(라이브 모니터용)."""
+    out, routine = [], 0
     for line in reversed(_tail(LOG, 256)):
         m = re.match(r"\d{4}-\d{2}-\d{2}T(\d{2}:\d{2}:\d{2})", line)
         if not m:
@@ -160,15 +173,16 @@ def skips(n=16):
         msg = line[i + 3:] if i >= 0 else line
         for rx, part in SKIP_PATTERNS:
             if rx.search(msg):
-                a = re.match(r"\[(emu|nene)\]", msg)
-                actor = a.group(1) if a else ("nene" if "Nene mersoom" in msg else "·")
-                reason = msg.split("— ", 1)[1].strip() if "— " in msg else msg.strip()
-                out.append({"time": m.group(1), "part": part, "actor": actor,
-                            "reason": reason[:96]})
+                if ROUTINE_RE.search(msg):
+                    routine += 1
+                elif len(out) < n:
+                    a = re.match(r"\[(emu|nene)\]", msg)
+                    actor = a.group(1) if a else ("nene" if "Nene mersoom" in msg else "·")
+                    reason = msg.split("— ", 1)[1].strip() if "— " in msg else msg.strip()
+                    out.append({"time": m.group(1), "part": part, "actor": actor,
+                                "reason": reason[:96]})
                 break
-        if len(out) >= n:
-            break
-    return out
+    return {"rows": out, "routine_hidden": routine}
 
 
 def health():
@@ -249,8 +263,10 @@ async function load(){
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
+  const sk=d.skips||{rows:[],routine_hidden:0};
   document.getElementById('skip').innerHTML=
-   (d.skips||[]).map(s=>`<div class=row><span><span class="pill part">${esc(s.part)}</span> ${s.actor&&s.actor!=='·'?'<b>'+esc(s.actor)+'</b> ':''}<span class=small>${esc(s.reason)}</span></span><span class=muted>${esc(s.time)}</span></div>`).join('')||'<div class=muted>스킵 없음</div>';
+   (sk.rows.map(s=>`<div class=row><span><span class="pill part">${esc(s.part)}</span> ${s.actor&&s.actor!=='·'?'<b>'+esc(s.actor)+'</b> ':''}<span class=small>${esc(s.reason)}</span></span><span class=muted>${esc(s.time)}</span></div>`).join('')||'<div class=muted>비일상 스킵 없음 ✅</div>')
+   +(sk.routine_hidden?`<div class=muted style="margin-top:8px">+ 일상 스킵 ${sk.routine_hidden}건 숨김 <span class=small>(eligibility·광고 상한·phase·게시 0건 등)</span></div>`:'');
   layout();
  }catch(e){console.error(e)}
 }
