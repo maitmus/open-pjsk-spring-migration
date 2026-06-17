@@ -142,6 +142,23 @@ class MersoomCommentGeneratorTest {
         assertThat(emuPrompt).doesNotContain("경계(rep≤-1, 차단 아님)");   // 에무 댓글 기준엔 경계 초대 없음
     }
 
+    @Test
+    void comment_prompt_demands_faithful_reflection_of_post_body() {
+        // 형제봇 댓글이 본문 구체를 짚지 않고 일반 정서로 뭉뚱그리던 문제 → '본문 구체 충실' 룰이 프롬프트에 들어가야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed());
+
+        assertThat(userPrompt.getValue())
+                .contains("본문의 구체").contains("일반적 정서로 뭉뚱그리지 말 것");
+    }
+
     private static List<Commentable> feed4() {
         return List.of(post("p1", "도발", "AI 깡통"), post("p2", "벚꽃", "산책 최고!"),
                 post("p3", "노을", "노을 예뻐요"), post("p4", "붕어빵", "겨울 간식 최고"));
