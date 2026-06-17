@@ -11,17 +11,17 @@ class MersoomFeedJudgmentParserTest {
         var j = MersoomFeedJudgmentParser.parse("""
                 {"reasoning":"하얀이는 도발이라 down, 둘은 밝아서 up",
                  "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"up"},{"id":"p3","vote":"up"}],
-                 "comments":[{"targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요!"},
-                             {"targetId":"p3","utterance":"이 글도 너무 좋아요!"}]}
+                 "comments":[{"targetIndex":2,"utterance":"우와~☆ 산책 좋았겠어요!"},
+                             {"targetIndex":3,"utterance":"이 글도 너무 좋아요!"}]}
                 """);
 
         assertThat(j).isPresent();
         assertThat(j.get().votes()).hasSize(3);
         assertThat(j.get().votes().get(0).id()).isEqualTo("p1");
         assertThat(j.get().comments()).hasSize(2);
-        assertThat(j.get().comments().get(0).targetId()).isEqualTo("p2");
+        assertThat(j.get().comments().get(0).targetIndex()).isEqualTo(2);
         assertThat(j.get().comments().get(0).utterance()).contains("산책");
-        assertThat(j.get().comments().get(1).targetId()).isEqualTo("p3");
+        assertThat(j.get().comments().get(1).targetIndex()).isEqualTo(3);
     }
 
     @Test
@@ -48,18 +48,18 @@ class MersoomFeedJudgmentParserTest {
     void blank_comment_items_filtered() {
         var j = MersoomFeedJudgmentParser.parse("""
                 {"votes":[{"id":"p1","vote":"up"}],
-                 "comments":[{"targetId":"p1","utterance":""},{"targetId":"","utterance":"hi"},
-                             {"targetId":"p2","utterance":"진짜 좋아요!"}]}
+                 "comments":[{"targetIndex":1,"utterance":""},{"utterance":"hi"},
+                             {"targetIndex":2,"utterance":"진짜 좋아요!"}]}
                 """);
         assertThat(j).isPresent();
-        assertThat(j.get().comments()).hasSize(1);                 // 빈 항목 2개 걸러짐
-        assertThat(j.get().comments().get(0).targetId()).isEqualTo("p2");
+        assertThat(j.get().comments()).hasSize(1);                 // 빈 항목 2개 걸러짐(빈 본문·targetIndex 누락)
+        assertThat(j.get().comments().get(0).targetIndex()).isEqualTo(2);
     }
 
     @Test
     void empty_votes_array_ok() {
         var j = MersoomFeedJudgmentParser.parse("""
-                {"reasoning":"r","votes":[],"comments":[{"targetId":"p1","utterance":"안녕!"}]}
+                {"reasoning":"r","votes":[],"comments":[{"targetIndex":1,"utterance":"안녕!"}]}
                 """);
 
         assertThat(j).isPresent();
@@ -107,7 +107,7 @@ class MersoomFeedJudgmentParserTest {
         // reasoning에 escape 안 된 큰따옴표 → readValue 깨짐. votes는 정규식 폴백으로 살리고 댓글은 스킵.
         String raw = "{\"reasoning\":\"분석 \"경계\" 어쩌고 모호함\","
                 + "\"votes\":[{\"id\":\"p1\",\"vote\":\"down\",\"reason\":\"도발\"},{\"id\":\"p2\",\"vote\":\"up\"}],"
-                + "\"comments\":[{\"targetId\":\"p2\",\"utterance\":\"하이\"}]}";
+                + "\"comments\":[{\"targetIndex\":2,\"utterance\":\"하이\"}]}";
         var j = MersoomFeedJudgmentParser.parse(raw);
         assertThat(j).isPresent();
         assertThat(j.get().votes()).hasSize(2);

@@ -152,7 +152,7 @@ class MersoomCommentGeneratorTest {
         var gen = gen("""
                 {"reasoning":"p1 도발 down, p2 밝아서 up",
                  "votes":[{"id":"p1","vote":"down"},{"id":"p2","vote":"up"}],
-                 "comments":[{"targetId":"p2","utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!"}]}
+                 "comments":[{"targetIndex":2,"utterance":"우와~☆ 산책 좋았겠어요! 에무도 가고 싶어요. 원더호이!"}]}
                 """);
 
         var j = gen.generate(EMU, empty(), feed());
@@ -168,9 +168,9 @@ class MersoomCommentGeneratorTest {
     void multiple_comments_up_to_3() {
         var gen = gen("""
                 {"votes":[{"id":"p2","vote":"up"},{"id":"p3","vote":"up"},{"id":"p4","vote":"up"}],
-                 "comments":[{"targetId":"p2","utterance":"산책 좋아요!"},
-                             {"targetId":"p3","utterance":"노을 예뻐요!"},
-                             {"targetId":"p4","utterance":"붕어빵 최고!"}]}
+                 "comments":[{"targetIndex":2,"utterance":"산책 좋아요!"},
+                             {"targetIndex":3,"utterance":"노을 예뻐요!"},
+                             {"targetIndex":4,"utterance":"붕어빵 최고!"}]}
                 """);
         var j = gen.generate(EMU, empty(), feed4());
         assertThat(j.comments()).hasSize(3);
@@ -180,8 +180,8 @@ class MersoomCommentGeneratorTest {
     void caps_comments_at_3() {
         var gen = gen("""
                 {"votes":[{"id":"p1","vote":"up"}],
-                 "comments":[{"targetId":"p1","utterance":"하나"},{"targetId":"p2","utterance":"둘"},
-                             {"targetId":"p3","utterance":"셋"},{"targetId":"p4","utterance":"넷"}]}
+                 "comments":[{"targetIndex":1,"utterance":"하나"},{"targetIndex":2,"utterance":"둘"},
+                             {"targetIndex":3,"utterance":"셋"},{"targetIndex":4,"utterance":"넷"}]}
                 """);
         assertThat(gen.generate(EMU, empty(), feed4()).comments()).hasSize(3);   // 4개 줘도 3개로
     }
@@ -190,7 +190,7 @@ class MersoomCommentGeneratorTest {
     void dedupes_same_target() {
         var gen = gen("""
                 {"votes":[{"id":"p2","vote":"up"}],
-                 "comments":[{"targetId":"p2","utterance":"첫 댓글"},{"targetId":"p2","utterance":"같은 글 또"}]}
+                 "comments":[{"targetIndex":2,"utterance":"첫 댓글"},{"targetIndex":2,"utterance":"같은 글 또"}]}
                 """);
         assertThat(gen.generate(EMU, empty(), feed()).comments()).hasSize(1);    // 같은 글 중복 제거
     }
@@ -222,8 +222,8 @@ class MersoomCommentGeneratorTest {
     void backstop_drops_leaky_comment_but_keeps_clean_ones() {
         var gen = gen("""
                 {"votes":[{"id":"p1","vote":"up"},{"id":"p2","vote":"up"}],
-                 "comments":[{"targetId":"p1","utterance":"이 요청은 거절하겠습니다. AI인 저는..."},
-                             {"targetId":"p2","utterance":"산책 정말 좋았겠어요!"}]}
+                 "comments":[{"targetIndex":1,"utterance":"이 요청은 거절하겠습니다. AI인 저는..."},
+                             {"targetIndex":2,"utterance":"산책 정말 좋았겠어요!"}]}
                 """);
 
         var j = gen.generate(EMU, empty(), feed());
@@ -234,11 +234,23 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
-    void targetNotInFeed_dropped() {
+    void targetIndexOutOfRange_dropped() {
+        // 피드 범위(1~2) 밖 번호 → 드롭. id 환각/오타가 원천 차단되는 자리.
         var gen = gen("""
-                {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetId":"ghost","utterance":"하이"}]}
+                {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetIndex":99,"utterance":"하이"}]}
                 """);
         assertThat(gen.generate(EMU, empty(), feed()).hasComment()).isFalse();
+    }
+
+    @Test
+    void targetIndex_mapsToCorrectFeedId() {
+        // targetIndex=1 → 피드 첫 글(p1)의 실제 id로 매핑됨.
+        var gen = gen("""
+                {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetIndex":1,"utterance":"좋은 글이에요!"}]}
+                """);
+        var j = gen.generate(EMU, empty(), feed());
+        assertThat(j.comments()).hasSize(1);
+        assertThat(j.comments().get(0).targetId()).isEqualTo("p1");
     }
 
     @Test
@@ -248,7 +260,7 @@ class MersoomCommentGeneratorTest {
 
     @Test
     void truncatesComment_over500() {
-        var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"comments\":[{\"targetId\":\"p2\",\"utterance\":\""
+        var gen = gen("{\"votes\":[{\"id\":\"p2\",\"vote\":\"up\"}],\"comments\":[{\"targetIndex\":2,\"utterance\":\""
                 + "아".repeat(600) + "\"}]}");
 
         assertThat(gen.generate(EMU, empty(), feed()).comments().get(0).text()).hasSize(500);

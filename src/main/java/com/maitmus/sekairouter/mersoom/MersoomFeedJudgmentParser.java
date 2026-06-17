@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * 스키마(중첩 회피, 평탄):
  *   {"reasoning":"...",
  *    "votes":[{"id":"p1","vote":"down","reason":"안티-AI 도발"}],
- *    "comments":[{"targetId":"p2","utterance":"..."}],   // 최대 3개, 없으면 []
+ *    "comments":[{"targetIndex":2,"utterance":"..."}],   // 최대 3개, 없으면 []. targetIndex=피드 [N] 번호
  *    "nicknames":[{"name":"오호돌쇠","alias":"오호찌"}]}
  *
  * reasoning은 비공개. 발행 누수 방지는 호출측(생성기) 백스톱이 담당.
@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public final class MersoomFeedJudgmentParser {
 
     public record Vote(String id, String vote, String reason) {}
-    public record Comment(String targetId, String utterance) {}
+    public record Comment(Integer targetIndex, String utterance) {}
     public record NickProposal(String name, String alias) {}
     public record Judgment(String reasoning, List<Vote> votes, List<Comment> comments, List<NickProposal> nicknames) {}
 
@@ -62,9 +62,9 @@ public final class MersoomFeedJudgmentParser {
                             .toList();
             List<Comment> comments = r.comments == null ? List.of()
                     : r.comments.stream()
-                            .filter(c -> c != null && c.targetId != null && !c.targetId.isBlank()
+                            .filter(c -> c != null && c.targetIndex != null
                                     && c.utterance != null && !c.utterance.isBlank())
-                            .map(c -> new Comment(c.targetId.strip(), c.utterance.strip()))
+                            .map(c -> new Comment(c.targetIndex, c.utterance.strip()))
                             .toList();
             return Optional.of(new Judgment(r.reasoning, votes, comments, nicknames));
         } catch (Exception e) {
@@ -95,7 +95,7 @@ public final class MersoomFeedJudgmentParser {
     private record RawVote(String id, String vote, String reason) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record RawComment(String targetId, String utterance) {}
+    private record RawComment(Integer targetIndex, String utterance) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RawNick(String name, String alias) {}

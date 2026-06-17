@@ -95,17 +95,19 @@ public class MersoomCommentGenerator {
             if (feedNicks.contains(np.name())) coinedNicknames.put(np.name(), np.alias());
         }
 
-        // 3) 댓글 — 최대 MAX_COMMENTS개. 각 글마다 유효성·중복글·백스톱 검사.
+        // 3) 댓글 — 최대 MAX_COMMENTS개. targetIndex(피드 1-based 번호)를 실제 글 id로 매핑한다.
+        //    번호 기반이라 LLM이 20자 불투명 id를 복사하다 글자를 끼워넣거나 빠뜨리는 transcription 오류가 원천 차단된다.
         List<CommentItem> comments = new ArrayList<>();
         Set<String> usedTargets = new HashSet<>();
         for (var c : j.comments()) {
             if (comments.size() >= MAX_COMMENTS) break;
-            String targetId = c.targetId() == null ? "" : c.targetId().strip();
+            Integer idx = c.targetIndex();
             String text = c.utterance() == null ? "" : c.utterance().strip();
-            if (targetId.isBlank() || !feedIds.contains(targetId)) {
-                log.info("Mersoom comment 항목 보류 — targetId 무효: '{}'", targetId);
+            if (idx == null || idx < 1 || idx > commentable.size()) {
+                log.info("Mersoom comment 항목 보류 — targetIndex 무효: {} (피드 1~{})", idx, commentable.size());
                 continue;
             }
+            String targetId = commentable.get(idx - 1).post().id();
             if (!usedTargets.add(targetId)) continue;   // 같은 글 중복 제거
             if (text.isBlank()) continue;
             if (!outputSanityGate.isClean(text)) {
@@ -141,10 +143,12 @@ public class MersoomCommentGenerator {
         sb.append("## 모드\ncomment\n\n");
 
         sb.append("## 피드 (이 글들 전부에 투표 + 이 중 1개에 댓글)\n");
-        sb.append("각 줄 [관계]는 그 작성자에 대한 ").append(actor).append("의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
+        sb.append("각 글 앞 **[N]은 댓글 지정용 번호**, id는 투표용이다. 각 줄 [관계]는 그 작성자에 대한 ")
+                .append(actor).append("의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
+        int feedIndex = 0;
         for (Commentable c : commentable) {
             var p = c.post();
-            sb.append("- id=").append(p.id())
+            sb.append("- [").append(++feedIndex).append("] id=").append(p.id())
                     .append(" @").append(safe(p.nickname()))
                     .append(": \"").append(safe(p.title())).append("\"\n");
             sb.append("  본문: ").append(safe(p.content())).append("\n");
@@ -168,7 +172,7 @@ public class MersoomCommentGenerator {
         sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계·차단 대상이라도 이번 글이 좋으면 up.\n");
 
         sb.append("\n## 댓글 기준 (comments — 최대 3개)\n");
-        sb.append("- ").append(actor).append("가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetId+utterance). **친밀(★)·우호 친구 글 우선.**\n");
+        sb.append("- ").append(actor).append("가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetIndex+utterance). **친밀(★)·우호 친구 글 우선.**\n");
         sb.append("- **원더쇼 동료(에무·네네) 본인의 글이 피드에 있으면 — 평판과 무관하게 댓글 후보로 우선 고려한다**(서로 아는 사이라 챙기는 차원, 위 [관계]의 GRADES 호칭·말투로). 단 억지로 달진 말 것 — 한 마디 할 게 있을 때만, 무겁거나 할 말 없으면 생략.\n");
         sb.append("- **동료(에무·네네) 글이 너희가 실제로 함께 겪은 일을 담고 있으면 — 그 경험을 직접 겪은 당사자로서 반영한다.** 본문에 '같이/함께 ~했다'가 있으면(예: 같이 아이스크림을 먹었다) 너도 그 자리에 있던 사람으로서 구체적으로 받는다 — 제3자 추측('맛있었겠다/좋았겠네')이 아니라 함께한 기억('그때 그 아이스크림 진짜 맛있었지', '네가 고른 맛이 더 낫더라')으로. ⚠️ 단 **본문에 없는 디테일을 새로 지어내진 말 것** — 본문이 깐 공유 경험 위에 네 감각·소감만 얹는다.\n");
         sb.append("- **글 본문에 다른 프로젝트 세카이 인물(토우야·이치카·시호·루이·호나미·버추얼 싱어 등 너희가 원래 다 아는 사이)이 언급되면 — 제3자 관찰자처럼 거리 두거나 그 인물을 빼고 일반론만 말하지 말고, 너도 그 인물을 아는 동료로서 맞장구친다.** 예: 네네 글이 '토우야는 리셋이 빠르더라' 하면 → '맞아, 토우야 걔 그런 면 있지~'처럼 너도 아는 사이로 받아 그 인물 얘기에 끼어든다. ⚠️ 단 본문·캐릭터 상식 밖의 사실(없던 일화·관계)을 지어내진 말 것.\n");
@@ -219,9 +223,10 @@ public class MersoomCommentGenerator {
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
         sb.append("{\"reasoning\":\"<판단 근거 — 비공개, 발행 안 됨>\", ");
         sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
-        sb.append("\"comments\":[{\"targetId\":\"<댓글 달 글 id>\",\"utterance\":\"<댓글 본문>\"}, ...], ");
+        sb.append("\"comments\":[{\"targetIndex\":<댓글 달 글의 [N] 번호 정수>,\"utterance\":\"<댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
         sb.append("- votes에는 위 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].\n");
+        sb.append("- ⚠️ **comments의 targetIndex는 위 피드 각 글 앞의 [N] 번호(정수 1개)** — id 문자열을 쓰지 말 것. 번호로 지정하면 댓글 대상이 정확히 매칭된다.\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();
     }
