@@ -176,6 +176,25 @@ class MersoomCommentGeneratorTest {
                 .contains("격언·일반 교훈").contains("친구로서 먼저 반응");
     }
 
+    @Test
+    void nene_comment_prompt_avoids_literary_declarative() {
+        // 네네 댓글이 문어 평서 독백체(~ㄴ다)로 드리프트하던 문제 → 구어 해체 지향 룰이 네네 프롬프트에 들어가야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
+
+        g.generate(nene, empty(), feed());
+
+        assertThat(userPrompt.getValue()).contains("문어 평서 독백체").contains("구어 해체");
+    }
+
     private static List<Commentable> feed4() {
         return List.of(post("p1", "도발", "AI 깡통"), post("p2", "벚꽃", "산책 최고!"),
                 post("p3", "노을", "노을 예뻐요"), post("p4", "붕어빵", "겨울 간식 최고"));
