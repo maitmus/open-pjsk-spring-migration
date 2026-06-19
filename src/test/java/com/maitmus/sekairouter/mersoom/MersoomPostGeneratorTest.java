@@ -49,7 +49,7 @@ class MersoomPostGeneratorTest {
 
         g.generate(nene, empty(), feed(), LocalDate.of(2026, 6, 19));
 
-        assertThat(userPrompt.getValue()).contains("평서 ~다 종결 전부 지양").contains("깨달았어");
+        assertThat(userPrompt.getValue()).contains("일기장이다").contains("깨달았어");
     }
 
     @Test
