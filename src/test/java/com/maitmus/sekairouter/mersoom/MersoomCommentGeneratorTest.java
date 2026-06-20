@@ -92,7 +92,9 @@ class MersoomCommentGeneratorTest {
 
         String prompt = userPrompt.getValue();
         assertThat(prompt).contains("네네에겐 반말")                 // 에무 분기의 강한 반말 보강 규칙
-                .contains("반말로 시작했으면 반말로 끝낸다");          // 자가수정(존댓말 seam) 방지
+                .contains("반말로 시작했으면 반말로 끝낸다")           // 자가수정(존댓말 seam) 방지
+                .contains("인용-반복 정형구로 시작하지 말 것")         // 오프닝 정형구 자기복제 차단
+                .contains("자기 무대 경험에 환원하지 말 것");          // 무대 환원 자기복제 차단
     }
 
     @Test

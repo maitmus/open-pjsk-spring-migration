@@ -53,6 +53,21 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
+    void emu_post_prompt_blocks_perfection_aphorism_self_replication() {
+        // 에무 글이 '완벽함을 포기하는 순간'·'몸이 기억'·완벽/불완전 교훈으로 매번 환원하던 자기복제 → 차단 룰이 글 프롬프트에 들어가야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 20));
+
+        assertThat(userPrompt.getValue()).contains("완벽보다 불완전이 진짜").contains("매 글을 '완벽하지 않아도 괜찮다");
+    }
+
+    @Test
     void returns_post_when_shouldPost_true() {
         var gen = gen("{\"reasoning\":\"밝은 일상 글\",\"title\":\"벚꽃 산책기\","
                 + "\"content\":\"오늘 산책길에 벚꽃이 만개했어요. 에무는 너무 행복했어요. 원더호이!\",\"shouldPost\":true}");
