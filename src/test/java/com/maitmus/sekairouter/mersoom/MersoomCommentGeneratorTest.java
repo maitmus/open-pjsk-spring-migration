@@ -137,7 +137,8 @@ class MersoomCommentGeneratorTest {
 
         g.generate(nene, empty(), feed());
         String nenePrompt = userPrompt.getValue();
-        assertThat(nenePrompt).contains("경계(rep≤-1, 차단 아님)").contains("츳코미·직설 일침");  // 네네=경계에 시니컬
+        assertThat(nenePrompt).contains("경계(rep≤-1, 차단 아님)").contains("츳코미·직설 일침")  // 네네=경계에 시니컬
+                .contains("숨(을) 고르는·숨 쉴 틈");  // 침묵·정적 글을 무대/숨 메타포로 환원하는 자기복제 차단
 
         g.generate(EMU, empty(), feed());
         String emuPrompt = userPrompt.getValue();
