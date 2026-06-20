@@ -98,6 +98,35 @@ class MersoomCitizenEngineTest {
     }
 
     @Test
+    void recordComment_note_does_not_store_comment_body_verbatim() {
+        // 자기-echo 루프 방지: 댓글 본문이 note에 적재되면 다음 크론 프롬프트에 재주입돼
+        // (relationshipLine) 원글과 무관하게 거의 복붙된다. note엔 중립 마커만 남아야 한다.
+        Post bright = post("p2", "벚꽃~!", "친구", "오늘 산책 기분 최고에요!", "friend1");
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(bright, List.of())), List.of(), List.of(bright)));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any(), any())).thenReturn(new FeedJudgment(
+                Map.of("p2", VoteType.UP), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 풀냄새 맞아요 아침에만 나는 거!")), Map.of()));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createComment(any(), any(), any(), any(), any()))
+                .thenReturn(new MersoomDtos.CreateResponse(true, "c1"));
+
+        engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
+
+        ArgumentCaptor<MersoomState> cap = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), cap.capture());
+        var note = cap.getValue().contextNotes().get("friend1");
+        assertThat(note).isNotNull();
+        assertThat(note.note()).contains("댓글");              // 상호작용 마커는 남는다
+        assertThat(note.note()).doesNotContain("풀냄새");      // 본문 verbatim은 저장 안 됨
+        assertThat(note.note()).doesNotContain("아침에만");
+    }
+
+    @Test
     void runComment_posts_multiple_comments() {
         Post p2 = post("p2", "벚꽃", "친구", "산책 최고에요!", "f2");
         Post p3 = post("p3", "노을", "친구2", "노을이 예뻐요!", "f3");

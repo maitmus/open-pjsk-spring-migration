@@ -318,11 +318,13 @@ public class MersoomCitizenEngine {
         String nick = target.post().nickname();
         if (key != null && !key.isBlank()) {
             ContextNote prev = updated.get(key);
-            String event = "[%s] %s 글에 %s 댓글: %s".formatted(
+            // 댓글 본문 verbatim 저장 금지 — 저장하면 note가 다음 크론 프롬프트에 그대로 재주입돼
+            // (relationshipLine), LLM이 원글 대신 자기 직전 발화를 단서로 삼아 거의 복붙하는
+            // 자기-echo 루프가 생긴다(rep 높아 매 크론 댓글 다는 작성자일수록 심함). 중립 마커만 남긴다.
+            String event = "[%s] %s 글에 %s 댓글".formatted(
                     LocalDate.now(clock.withZone(KST)),
                     safeNick(nick),
-                    profile.actorName(),
-                    content.length() > 80 ? content.substring(0, 80) : content);
+                    profile.actorName());
             updated.put(key, contextNoteManager.upsertAfterInteraction(
                     prev, event, prev != null ? prev.call() : null));
         }
