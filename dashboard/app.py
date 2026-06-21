@@ -263,10 +263,9 @@ async function load(){
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
    d.utterances.map(u=>`<div class=row><span><b>${esc(u.char)}</b> <span class=small>${esc(u.msg)}</span></span><span class=muted>${esc(u.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
-  const sk=d.skips||{rows:[],routine_hidden:0};
+  const sk=d.skips||{rows:[]};
   document.getElementById('skip').innerHTML=
-   (sk.rows.map(s=>`<div class=row><span><span class="pill part">${esc(s.part)}</span> ${s.actor&&s.actor!=='·'?'<b>'+esc(s.actor)+'</b> ':''}<span class=small>${esc(s.reason)}</span></span><span class=muted>${esc(s.time)}</span></div>`).join('')||'<div class=muted>비일상 스킵 없음 ✅</div>')
-   +(sk.routine_hidden?`<div class=muted style="margin-top:8px">+ 일상 스킵 ${sk.routine_hidden}건 숨김 <span class=small>(eligibility·광고 상한·phase·게시 0건 등)</span></div>`:'');
+   sk.rows.map(s=>`<div class=row><span><span class="pill part">${esc(s.part)}</span> ${s.actor&&s.actor!=='·'?'<b>'+esc(s.actor)+'</b> ':''}<span class=small>${esc(s.reason)}</span></span><span class=muted>${esc(s.time)}</span></div>`).join('')||'<div class=muted>비일상 스킵 없음 ✅</div>';
   layout();
  }catch(e){console.error(e)}
 }
