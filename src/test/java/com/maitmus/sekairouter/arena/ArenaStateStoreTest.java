@@ -16,7 +16,7 @@ class ArenaStateStoreTest {
     private ArenaStateStore store(Path dir) {
         ArenaProperties props = new ArenaProperties(
                 true, "0 30 8 * * *", "0 30 12 * * *", "http://x/api",
-                dir.resolve("arena-state.json").toString(), null, null);
+                dir.resolve("arena-state.json").toString(), null, null, 2);
         return new ArenaStateStore(props, new ObjectMapper());
     }
 

@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
  * 아레나 주제 발의 (쿠사나기 네네). 공유 prefix(캐시 체인) + 네네 페르소나 + 발의 모드 suffix.
  * {reasoning, title, pros, cons} 봉투. 파싱 실패·빈 필드·백스톱 누수 시 {@code null}(발의 보류).
@@ -49,11 +51,26 @@ public class ArenaProposeGenerator {
 
     /** @return 발의할 주제, 또는 보류 시 {@code null}. */
     public ProposedTopic generate() {
+        return generate(List.of());
+    }
+
+    /**
+     * @param avoidTitles 오늘 이미 발의한 주제 제목들 — 이것들과 명확히 다른 각도·소재의 새 주제를 낸다(중복 방지).
+     * @return 발의할 주제, 또는 보류 시 {@code null}.
+     */
+    public ProposedTopic generate(List<String> avoidTitles) {
         // 공유 prefix(전체 페르소나)는 캐시 유지. suffix에 네네 정의를 직접 주입(주제 선정 안목 포커스).
         Persona nene = personaRegistry.get(CharacterId.NENE);
         String nenePersona = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (주제 선정 안목에 반영)\n"
                 + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
-        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX), USER);
+        String user = USER;
+        if (avoidTitles != null && !avoidTitles.isEmpty()) {
+            StringBuilder sb = new StringBuilder(USER)
+                    .append("\n## ⚠️ 중복 회피\n오늘 이미 아래 주제를 발의했다 — **가치축·영역·소재를 바꿔 명확히 다른** 새 주제를 내라(겹치거나 비슷한 변주 금지):\n");
+            for (String t : avoidTitles) sb.append("- ").append(t).append("\n");
+            user = sb.toString();
+        }
+        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX), user);
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
             log.warn("Arena propose 보류 — 봉투 파싱 실패: {}",

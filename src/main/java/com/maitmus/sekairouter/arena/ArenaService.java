@@ -55,16 +55,22 @@ public class ArenaService {
             log.info("Arena propose skip — phase={}", status == null ? null : status.phase());
             return;
         }
-        var topic = proposeGenerator.generate();
-        if (topic == null) {
-            log.info("Arena propose skip — 생성 보류");
-            return;
-        }
-        try {
-            var resp = api.propose(properties.propose(), topic.title(), topic.pros(), topic.cons());
-            log.info("Arena propose created: success={} title='{}'", resp != null && resp.success(), topic.title());
-        } catch (Exception e) {
-            log.warn("Arena propose 실패: {}", e.getMessage());
+        int count = Math.max(1, properties.proposeCount());
+        var proposed = new java.util.ArrayList<String>();   // 이미 발의한 제목 — 다음 생성에서 회피
+        for (int i = 0; i < count; i++) {
+            var topic = proposeGenerator.generate(List.copyOf(proposed));
+            if (topic == null) {
+                log.info("Arena propose skip — 생성 보류 ({}/{})", i + 1, count);
+                continue;
+            }
+            try {
+                var resp = api.propose(properties.propose(), topic.title(), topic.pros(), topic.cons());
+                log.info("Arena propose created: success={} ({}/{}) title='{}'",
+                        resp != null && resp.success(), i + 1, count, topic.title());
+                proposed.add(topic.title());
+            } catch (Exception e) {
+                log.warn("Arena propose 실패 ({}/{}): {}", i + 1, count, e.getMessage());
+            }
         }
     }
 

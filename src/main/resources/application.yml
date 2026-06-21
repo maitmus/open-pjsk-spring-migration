@@ -90,6 +90,7 @@ mersoom:
 arena:
   enabled: ${ARENA_ENABLED:false}                        # 기본 false (빌드 검증 후 true)
   propose-cron: ${ARENA_PROPOSE_CRON:0 30 8 * * *}       # 08:30 KST (PROPOSE 00–09 창, 공유 캐시 prefix 워밍)
+  propose-count: ${ARENA_PROPOSE_COUNT:2}                 # 발의 크론당 주제 수 (2번째는 1번째와 다른 각도로 — 발탁 확률↑)
   fight-cron: ${ARENA_FIGHT_CRON:0 30 12-18/2 * * *}     # 12:30·14:30·16:30·18:30 KST (4회/일, 매너모드 20시 전 종료. 2h 간격이라 추천 0이면 쿨다운으로 일부 스킵 가능)
   api-base-url: ${ARENA_API_BASE:https://www.mersoom.com/api}
   state-file: ${ARENA_STATE_FILE:/app/arena-state.json}  # side 락(토픽별 입장 고정) 영속. 볼륨 마운트

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class ArenaServiceTest {
@@ -42,14 +43,14 @@ class ArenaServiceTest {
     void propose_skips_when_not_PROPOSE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
         service().executePropose();
-        verify(proposeGen, never()).generate();
+        verify(proposeGen, never()).generate(any());
         verify(api, never()).propose(any(), any(), any(), any());
     }
 
     @Test
     void propose_posts_in_PROPOSE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "PROPOSE", null));
-        when(proposeGen.generate()).thenReturn(new ArenaProposeGenerator.ProposedTopic("제목", "p", "c"));
+        when(proposeGen.generate(any())).thenReturn(new ArenaProposeGenerator.ProposedTopic("제목", "p", "c"));
         when(api.propose(any(), any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
 
         service().executePropose();
@@ -58,9 +59,31 @@ class ArenaServiceTest {
     }
 
     @Test
+    void propose_posts_count_topics_avoiding_duplicates() {
+        // proposeCount=2 → 2건 발의, 2번째 generate엔 1번째 제목이 회피목록으로 전달.
+        ArenaProperties p = mock(ArenaProperties.class);
+        when(p.enabled()).thenReturn(true);
+        when(p.propose()).thenReturn(emu);
+        when(p.fight()).thenReturn(nene);
+        when(p.proposeCount()).thenReturn(2);
+        when(api.status()).thenReturn(new StatusResponse("2026-06-12", "PROPOSE", null));
+        when(proposeGen.generate(any()))
+                .thenReturn(new ArenaProposeGenerator.ProposedTopic("주제A", "p", "c"))
+                .thenReturn(new ArenaProposeGenerator.ProposedTopic("주제B", "p", "c"));
+        when(api.propose(any(), any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
+
+        new ArenaService(p, api, proposeGen, fightGen, stateStore, clock).executePropose();
+
+        verify(api).propose(eq(emu), eq("주제A"), any(), any());
+        verify(api).propose(eq(emu), eq("주제B"), any(), any());
+        // 2번째 generate 호출엔 1번째 제목('주제A')이 회피목록으로 들어가야 함
+        verify(proposeGen).generate(argThat(list -> list != null && list.contains("주제A")));
+    }
+
+    @Test
     void propose_skips_when_generator_null() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "PROPOSE", null));
-        when(proposeGen.generate()).thenReturn(null);
+        when(proposeGen.generate(any())).thenReturn(null);
         service().executePropose();
         verify(api, never()).propose(any(), any(), any(), any());
     }
