@@ -164,7 +164,9 @@ class MersoomCommentGeneratorTest {
 
         assertThat(userPrompt.getValue())
                 .contains("본문의 구체").contains("일반적 정서로 뭉뚱그리지 말 것")
-                .contains("맞장구 정형구를 쓰지 말 것");   // 본문 구절+'나도/봤어' 맞장구 정형구 차단(당사자성)
+                .contains("맞장구 정형구를 쓰지 말 것")     // 본문 구절+'나도/봤어' 맞장구 정형구 차단(당사자성)
+                .contains("(고교) 학생이다")               // 학생 register — 비평가·분석체 금지
+                .contains("칭찬을 분석·확인·평가");          // 칭찬받을 때 분석 아닌 캐릭터 감정으로(츤데레/기쁨)
     }
 
     @Test
