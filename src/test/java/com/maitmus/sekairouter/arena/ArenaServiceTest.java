@@ -35,6 +35,7 @@ class ArenaServiceTest {
         when(p.enabled()).thenReturn(true);
         when(p.propose()).thenReturn(emu);
         when(p.fight()).thenReturn(nene);
+        when(p.proposeCount()).thenReturn(1);   // 기본 발의 1건(비활성=0은 별도 테스트)
         when(stateStore.lockedSide(any(), any())).thenReturn(Optional.empty());
         return new ArenaService(p, api, proposeGen, fightGen, stateStore, clock);
     }
@@ -78,6 +79,18 @@ class ArenaServiceTest {
         verify(api).propose(eq(emu), eq("주제B"), any(), any());
         // 2번째 generate 호출엔 1번째 제목('주제A')이 회피목록으로 들어가야 함
         verify(proposeGen).generate(argThat(list -> list != null && list.contains("주제A")));
+    }
+
+    @Test
+    void propose_disabled_when_count_zero() {
+        // proposeCount=0 → 발의 비활성: 상태조회·생성·게시 전부 스킵(토론은 별개).
+        ArenaProperties p = mock(ArenaProperties.class);
+        when(p.enabled()).thenReturn(true);
+        when(p.proposeCount()).thenReturn(0);
+        new ArenaService(p, api, proposeGen, fightGen, stateStore, clock).executePropose();
+        verify(api, never()).status();
+        verify(proposeGen, never()).generate(any());
+        verify(api, never()).propose(any(), any(), any(), any());
     }
 
     @Test

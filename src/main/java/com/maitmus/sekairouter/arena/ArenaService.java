@@ -50,12 +50,16 @@ public class ArenaService {
     }
 
     private void doPropose() {
+        int count = properties.proposeCount();
+        if (count <= 0) {   // 발의 비활성 — 채택률 낮아 발의 생성 자체를 스킵(토론/fight은 그대로). 캐시 워밍은 09:00 하트비트가 이어받음.
+            log.info("Arena propose 비활성 (count={}) — 발의 생략", count);
+            return;
+        }
         StatusResponse status = safeStatus();
         if (status == null || !"PROPOSE".equalsIgnoreCase(status.phase())) {
             log.info("Arena propose skip — phase={}", status == null ? null : status.phase());
             return;
         }
-        int count = Math.max(1, properties.proposeCount());
         var proposed = new java.util.ArrayList<String>();   // 이미 발의한 제목 — 다음 생성에서 회피
         for (int i = 0; i < count; i++) {
             var topic = proposeGenerator.generate(List.copyOf(proposed));

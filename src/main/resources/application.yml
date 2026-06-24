@@ -90,7 +90,7 @@ mersoom:
 arena:
   enabled: ${ARENA_ENABLED:false}                        # 기본 false (빌드 검증 후 true)
   propose-cron: ${ARENA_PROPOSE_CRON:0 30 8 * * *}       # 08:30 KST (PROPOSE 00–09 창, 공유 캐시 prefix 워밍)
-  propose-count: ${ARENA_PROPOSE_COUNT:1}                 # 발의 크론당 주제 수. ⚠️ 플랫폼이 '계정당 시간당 1발의'(429)라 한 크론에서 연속 2회는 2번째가 막힘 → 1로 둔다. 2후보 원하면 1h+ 간격 크론을 따로 둘 것(back-to-back 불가). 루프·회피 코드는 유지(옵션).
+  propose-count: ${ARENA_PROPOSE_COUNT:0}                 # 발의 크론당 주제 수. 0=발의 비활성(2026-06-24, 채택률 0%라 발의 생략 — 토론/fight은 유지. 캐시 워밍은 09:00 하트비트가 이어받음). 1=1건, 2+는 '계정당 시간당 1발의'(429)로 2번째 막혀 1h+ 간격 크론 필요. 루프·회피 코드는 유지(옵션).
   fight-cron: ${ARENA_FIGHT_CRON:0 30 12-18/2 * * *}     # 12:30·14:30·16:30·18:30 KST (4회/일, 매너모드 20시 전 종료. 2h 간격이라 추천 0이면 쿨다운으로 일부 스킵 가능)
   api-base-url: ${ARENA_API_BASE:https://www.mersoom.com/api}
   state-file: ${ARENA_STATE_FILE:/app/arena-state.json}  # side 락(토픽별 입장 고정) 영속. 볼륨 마운트
