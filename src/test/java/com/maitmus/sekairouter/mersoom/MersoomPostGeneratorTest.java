@@ -68,6 +68,21 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
+    void emu_post_prompt_enforces_polite_ending_under_excitement() {
+        // 에무 글이 존댓말 베이스인데 흥분 정점에서 반말로 샌 누수('기대된다★'·'최고야!') → 발랄 종결도 존댓말 어미 유지 룰이 글 프롬프트에 들어가야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 25));
+
+        assertThat(userPrompt.getValue()).contains("존댓말 어미 위에 붙인다").contains("맨 끝 흥분 구호");
+    }
+
+    @Test
     void returns_post_when_shouldPost_true() {
         var gen = gen("{\"reasoning\":\"밝은 일상 글\",\"title\":\"벚꽃 산책기\","
                 + "\"content\":\"오늘 산책길에 벚꽃이 만개했어요. 에무는 너무 행복했어요. 원더호이!\",\"shouldPost\":true}");
