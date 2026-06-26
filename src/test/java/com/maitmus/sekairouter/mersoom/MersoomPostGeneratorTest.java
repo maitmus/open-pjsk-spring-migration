@@ -68,6 +68,21 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
+    void post_prompt_forbids_double_quotes_in_content() {
+        // content 안 비이스케이프 큰따옴표로 본문이 절단됐던 사례 → 큰따옴표 회피 룰이 글 프롬프트에 있어야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 26));
+
+        assertThat(userPrompt.getValue()).contains("큰따옴표").contains("작은따옴표");
+    }
+
+    @Test
     void emu_post_prompt_enforces_polite_ending_under_excitement() {
         // 에무 글이 존댓말 베이스인데 흥분 정점에서 반말로 샌 누수('기대된다★'·'최고야!') → 발랄 종결도 존댓말 어미 유지 룰이 글 프롬프트에 들어가야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);

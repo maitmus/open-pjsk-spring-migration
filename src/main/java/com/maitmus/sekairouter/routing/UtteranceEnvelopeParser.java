@@ -34,7 +34,7 @@ public final class UtteranceEnvelopeParser {
     public static Optional<Envelope> parse(String raw) {
         if (raw == null) return Optional.empty();
 
-        String wrapped = "[" + JsonExtractor.extract(raw) + "]";
+        String wrapped = "[" + JsonQuoteRepair.escapeInnerQuotes(JsonExtractor.extract(raw)) + "]";
         String reasoning = null;
         String utterance = null;
 

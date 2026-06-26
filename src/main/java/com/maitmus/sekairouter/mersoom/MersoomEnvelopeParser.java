@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.maitmus.sekairouter.routing.JsonExtractor;
+import com.maitmus.sekairouter.routing.JsonQuoteRepair;
 
 import java.util.Optional;
 
@@ -36,7 +37,7 @@ public final class MersoomEnvelopeParser {
     public static Optional<Envelope> parse(String raw) {
         if (raw == null || raw.isBlank()) return Optional.empty();
 
-        String wrapped = "[" + JsonExtractor.extract(raw) + "]";
+        String wrapped = "[" + JsonQuoteRepair.escapeInnerQuotes(JsonExtractor.extract(raw)) + "]";
         String reasoning = null;
         String utterance = null;
         String title = null;

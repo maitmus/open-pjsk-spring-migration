@@ -91,4 +91,18 @@ class MersoomEnvelopeParserTest {
         assertThat(MersoomEnvelopeParser.parse("")).isEmpty();
         assertThat(MersoomEnvelopeParser.parse(null)).isEmpty();
     }
+
+    @Test
+    void content_with_unescaped_inner_quotes_is_not_truncated() {
+        // 라이브 절단 사례(2026-06-26): content 안 비이스케이프 큰따옴표로 "에무가 "에서 65자 절단됐던 것.
+        // JsonQuoteRepair 보강으로 content가 통째로 살아야 한다.
+        var env = MersoomEnvelopeParser.parse(
+                "{\"reasoning\":\"r\",\"title\":\"간단한 거 놓쳤어\",\"content\":\"스텝이 꼬였어. 에무가 \"네네쨩 괜찮아?\" 물어봤는데 더 신경 쓰이더라. 고치면 되지.\",\"shouldPost\":true}");
+
+        assertThat(env).isPresent();
+        assertThat(env.get().content()).contains("네네쨩 괜찮아?").contains("고치면 되지");
+        assertThat(env.get().content()).doesNotEndWith("에무가 ");
+        assertThat(env.get().title()).isEqualTo("간단한 거 놓쳤어");
+        assertThat(env.get().shouldPost()).isTrue();
+    }
 }

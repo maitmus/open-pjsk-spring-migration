@@ -140,6 +140,7 @@ public class MersoomPostGenerator {
         sb.append("- 올릴 글이 준비되면 shouldPost:true, title/content 채우기.\n");
         sb.append("- 지금 적절히 올릴 글이 없거나 부적절한 상황이면 shouldPost:false 로 두고 사유는 reasoning에만 적는다.\n");
         sb.append("- **거절·메타·자기지칭(AI/어시스턴트/저)·규칙 설명을 title/content에 쓰지 말 것.** 그런 판단은 전부 reasoning으로.\n");
+        sb.append("- ⚠️ **JSON 안전**: 문자열 값(title/content) 안에 큰따옴표(\") 절대 쓰지 말 것 — 대사·인용은 작은따옴표(') 나 「」 사용(예: 에무가 '괜찮아?' 물어봤어). 큰따옴표를 넣으면 본문이 중간에서 잘린다.\n");
 
         return sb.toString();
     }
