@@ -122,7 +122,7 @@ class MersoomCommentGeneratorTest {
         g.generate(nene, empty(), List.of(emuPost));
 
         String prompt = userPrompt.getValue();
-        assertThat(prompt).contains("제3자 관찰자처럼");
+        assertThat(prompt).contains("그 관계 안의 당사자로 끼어든다");
     }
 
     @Test
@@ -163,8 +163,8 @@ class MersoomCommentGeneratorTest {
         g.generate(EMU, empty(), feed());
 
         assertThat(userPrompt.getValue())
-                .contains("본문의 구체").contains("일반적 정서로 뭉뚱그리지 말 것")
-                .contains("맞장구 정형구를 쓰지 말 것")     // 본문 구절+'나도/봤어' 맞장구 정형구 차단(당사자성)
+                .contains("당사자 원칙").contains("무관한 구경꾼")  // 중앙 당사자 원칙 + 생성형 자가 테스트
+                .contains("목격 선언 정형구")               // 본문 구절+'봤어' 정형구 차단(당사자성)
                 .contains("(고교) 학생이다")               // 학생 register — 비평가·분석체 금지
                 .contains("칭찬을 분석·확인·평가")          // 칭찬받을 때 분석 아닌 캐릭터 감정으로(츤데레/기쁨)
                 .contains("추상에 추상으로 받는 게 또 평론") // 개념-추상 글에 추상 재진술 맞장구 차단
@@ -172,8 +172,9 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
-    void comment_prompt_forbids_aphorizing_sibling_post() {
-        // 형제봇 댓글이 동료 글을 격언/교훈으로 승화시키고 그 순간·감정엔 안 닿던 문제 → '격언화 금지, 순간 반응' 룰.
+    void comment_prompt_central_insider_rule_covers_aphorism_and_self_reference() {
+        // 흩어진 형제봇 당사자성 케이스(격언화·자기지칭·일반론 치환 등)를 중앙 [당사자 원칙] + 자가 테스트로 통합 →
+        // 격언 승화 ❌, 글이 너를 가리킬 때 가정·일반화 회피 ❌가 그 한 룰의 예시로 들어가 있어야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
@@ -185,24 +186,10 @@ class MersoomCommentGeneratorTest {
         g.generate(EMU, empty(), feed());
 
         assertThat(userPrompt.getValue())
-                .contains("격언·일반 교훈").contains("친구로서 먼저 반응");
-    }
-
-    @Test
-    void comment_prompt_demands_owning_self_referenced_post() {
-        // 형제봇 글이 너의 실수·약점을 적시했는데('에무가 음정 헤맸어') 당사자가 아닌 가정·일반론으로 받던 문제 → '자기 지칭 사건 당사자 인정' 룰.
-        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
-        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
-                .thenReturn("{\"votes\":[],\"comments\":[]}");
-        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
-        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
-
-        g.generate(EMU, empty(), feed());
-
-        assertThat(userPrompt.getValue())
-                .contains("글의 주인공·대상이 너면").contains("그 일을 실제로 한 당사자로 인정");
+                .contains("그 글 안의")                  // 중앙 원리: 글 안의 당사자로
+                .contains("교훈·격언으로 승화")            // 격언화 축
+                .contains("가정·일반화로 회피")            // 자기지칭 축
+                .contains("지어내지 말 것");              // 날조 금지 가드
     }
 
     @Test
