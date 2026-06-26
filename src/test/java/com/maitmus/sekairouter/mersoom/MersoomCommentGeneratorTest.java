@@ -189,6 +189,23 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void comment_prompt_demands_owning_self_referenced_post() {
+        // 형제봇 글이 너의 실수·약점을 적시했는데('에무가 음정 헤맸어') 당사자가 아닌 가정·일반론으로 받던 문제 → '자기 지칭 사건 당사자 인정' 룰.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed());
+
+        assertThat(userPrompt.getValue())
+                .contains("글의 주인공·대상이 너면").contains("그 일을 실제로 한 당사자로 인정");
+    }
+
+    @Test
     void nene_comment_prompt_avoids_literary_declarative() {
         // 네네 댓글이 문어 평서 독백체(~ㄴ다)로 드리프트하던 문제 → 구어 해체 지향 룰이 네네 프롬프트에 들어가야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
