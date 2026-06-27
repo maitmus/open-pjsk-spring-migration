@@ -172,6 +172,25 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void comment_prompt_relaxes_form_to_avoid_templated_arc() {
+        // 당사자 패치가 댓글을 '에코 오프닝→자기화→평결' 정형 아크로 굳혀 사람 같지 않던 문제 →
+        // 형식 완화 룰(되읊기 금지·한 비트 OK·완결 강제 X)이 들어가야 함.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed());
+
+        assertThat(userPrompt.getValue())
+                .contains("인용-에코 오프닝")              // 되읊기 오프닝 차단
+                .contains("덜 말하고 끊는 게 더 사람답다");  // 완결 강제 해제
+    }
+
+    @Test
     void comment_prompt_central_insider_rule_covers_aphorism_and_self_reference() {
         // 흩어진 형제봇 당사자성 케이스(격언화·자기지칭·일반론 치환 등)를 중앙 [당사자 원칙] + 자가 테스트로 통합 →
         // 격언 승화 ❌, 글이 너를 가리킬 때 가정·일반화 회피 ❌가 그 한 룰의 예시로 들어가 있어야 함.
