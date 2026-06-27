@@ -1,7 +1,6 @@
 package com.maitmus.sekairouter.mersoom;
 
 import com.maitmus.sekairouter.persona.CharacterId;
-import com.maitmus.sekairouter.persona.Persona;
 import com.maitmus.sekairouter.persona.PersonaRegistry;
 import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.SharedPromptContent;
@@ -14,15 +13,20 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 머슴 시스템 프롬프트 빌더 — shared prefix(라우터·하트비트와 공통) + 페르소나별 suffix.
- * 캐시 공유 효과: 라우터·하트비트가 활성 시간 내내 prefix 워밍 → 머슴 호출 시 32K cache_read.
- *
- * 에무는 공유 prefix + 에무 지시문(suffix) 그대로. 네네는 공유 prefix + 네네 페르소나 주입 + 네네 지시문
- * (아레나 발의/토론 생성기와 동일 패턴 — 공유 prefix는 전체 로스터라 페르소나 중립).
+ * 머슴 시스템 프롬프트 빌더 — 2블록 PromptBlocks.
+ * block[0]: commonBase (events + 출력규칙) — 캐시 공유.
+ * block[1]: 본인 체화 + 형제봇 최소 + 지침 — 캐시.
+ * GRADES·타 페르소나 미포함.
  */
 @Slf4j
 @Component
 public class MersoomPromptBuilder {
+
+    private static final java.util.Map<CharacterId, String> SIBLING_MINIMAL = java.util.Map.of(
+            CharacterId.NENE,
+            "\n## 형제봇(원더쇼 동료) — 네네\n쿠사나기 네네: 원더랜즈×쇼타임 동료. 호칭 '네네쨩' + 반말. 까다롭고 직설·츤데레. 머슴에서 네네 글/언급엔 이 관계로 당사자처럼.\n",
+            CharacterId.EMU,
+            "\n## 형제봇(원더쇼 동료) — 에무\n오오토리 에무: 원더랜즈×쇼타임 동료. 호칭 '에무' + 반말. 천진·텐션 폭발. 머슴에서 에무 글/언급엔 이 관계로 당사자처럼.\n");
 
     private final SharedPromptContent shared;
     private final PersonaRegistry personaRegistry;
@@ -40,18 +44,25 @@ public class MersoomPromptBuilder {
         this.neneInstructions = neneInstructions;
     }
 
-    /** 에무 기본(하위호환). */
+    /** 에무 기본. */
     public PromptBlocks build() {
-        return new PromptBlocks(shared.build(), "\n" + loadResource(emuInstructions));
+        String b1 = shared.personaInjection(CharacterId.EMU, "특히 말투")
+                + SIBLING_MINIMAL.get(CharacterId.NENE)
+                + "\n" + loadResource(emuInstructions);
+        return new PromptBlocks(java.util.List.of(
+                new PromptBlocks.Block(shared.commonBase(), true),
+                new PromptBlocks.Block(b1, true)));
     }
 
     /** 페르소나별 시스템 프롬프트. */
     public PromptBlocks build(CitizenProfile profile) {
         if (profile != null && profile.persona() == CharacterId.NENE) {
-            Persona nene = personaRegistry.get(CharacterId.NENE);
-            String injection = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (특히 말투)\n"
-                    + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
-            return new PromptBlocks(shared.build(), injection + "\n" + loadResource(neneInstructions));
+            String b1 = shared.personaInjection(CharacterId.NENE, "특히 말투")
+                    + SIBLING_MINIMAL.get(CharacterId.EMU)
+                    + "\n" + loadResource(neneInstructions);
+            return new PromptBlocks(java.util.List.of(
+                    new PromptBlocks.Block(shared.commonBase(), true),
+                    new PromptBlocks.Block(b1, true)));
         }
         return build();
     }

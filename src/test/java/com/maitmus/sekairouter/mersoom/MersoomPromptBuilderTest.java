@@ -1,74 +1,52 @@
 package com.maitmus.sekairouter.mersoom;
 
 import com.maitmus.sekairouter.persona.CharacterId;
-import com.maitmus.sekairouter.persona.Persona;
 import com.maitmus.sekairouter.persona.PersonaRegistry;
-import com.maitmus.sekairouter.persona.PersonaType;
-import com.maitmus.sekairouter.routing.PromptBlocks;
 import com.maitmus.sekairouter.routing.SharedPromptContent;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
-
-import java.nio.file.Path;
-import java.util.Set;
+import org.springframework.core.io.ByteArrayResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class MersoomPromptBuilderTest {
 
-    private MersoomPromptBuilder builder(SharedPromptContent shared, PersonaRegistry registry) {
-        return new MersoomPromptBuilder(
-                shared,
-                registry,
-                new ClassPathResource("prompts/mersoom-instructions.md"),
-                new ClassPathResource("prompts/mersoom-instructions-nene.md"));
+    private MersoomPromptBuilder builder() {
+        SharedPromptContent shared = mock(SharedPromptContent.class);
+        when(shared.commonBase()).thenReturn("COMMONBASE");
+        when(shared.personaInjection(CharacterId.EMU, "특히 말투")).thenReturn("EMU체화");
+        when(shared.personaInjection(CharacterId.NENE, "특히 말투")).thenReturn("NENE체화");
+        PersonaRegistry reg = mock(PersonaRegistry.class);
+        return new MersoomPromptBuilder(shared, reg,
+                new ByteArrayResource("에무지침".getBytes()),
+                new ByteArrayResource("네네지침".getBytes()));
     }
 
     @Test
-    void build_returns_PromptBlocks_with_shared_prefix_and_mersoom_suffix() {
-        SharedPromptContent shared = mock(SharedPromptContent.class);
-        when(shared.build()).thenReturn("SHARED CONTENT (USER + 페르소나 + GRADES)");
-
-        PromptBlocks blocks = builder(shared, mock(PersonaRegistry.class)).build();
-
-        assertThat(blocks.blocks().get(0).text()).contains("SHARED CONTENT");
-        assertThat(blocks.blocks().get(1).text()).contains("머슴 자율 발화 모드");
-        assertThat(blocks.blocks().get(1).text()).contains("음슴체 규칙 무시");
+    void emu_block_has_self_sibling_min_instructions_no_grades() {
+        var blocks = builder().build().blocks();
+        assertThat(blocks).hasSize(2);
+        assertThat(blocks.get(0).text()).isEqualTo("COMMONBASE");
+        String b1 = blocks.get(1).text();
+        assertThat(b1).contains("EMU체화").contains("에무지침").contains("네네쨩");  // 형제봇 최소
+        assertThat(b1).doesNotContain("매트릭스").doesNotContain("페르소나 정의");
     }
 
     @Test
-    void build_nene_injects_nene_persona_and_nene_suffix() {
-        SharedPromptContent shared = mock(SharedPromptContent.class);
-        when(shared.build()).thenReturn("SHARED CONTENT");
-        PersonaRegistry registry = mock(PersonaRegistry.class);
-        when(registry.get(CharacterId.NENE)).thenReturn(
-                new Persona(CharacterId.NENE, "쿠사나기 네네", PersonaType.HUMAN_SEKAI, "네네 페르소나 정의 본문"));
-
-        CitizenProfile nene = new CitizenProfile("nene", "네네",
-                new MersoomProperties.Auth("nene_wonder", "x"),
-                Path.of("/tmp/nene.json"), CharacterId.NENE, Set.of("emu_wonder"));
-
-        PromptBlocks blocks = builder(shared, registry).build(nene);
-
-        assertThat(blocks.blocks().get(0).text()).isEqualTo("SHARED CONTENT");
-        assertThat(blocks.blocks().get(1).text()).contains("너는 쿠사나기 네네");
-        assertThat(blocks.blocks().get(1).text()).contains("네네 페르소나 정의 본문");
-        assertThat(blocks.blocks().get(1).text()).contains("쿠사나기 네네)");   // 네네 지시문 헤더
-        assertThat(blocks.blocks().get(1).text()).contains("1인칭");
+    void nene_block_uses_nene_self_and_emu_sibling_min() {
+        CitizenProfile nene = mock(CitizenProfile.class);
+        when(nene.persona()).thenReturn(CharacterId.NENE);
+        var blocks = builder().build(nene).blocks();
+        String b1 = blocks.get(1).text();
+        assertThat(b1).contains("NENE체화").contains("네네지침").contains("에무");  // 형제봇=에무
+        assertThat(b1).doesNotContain("매트릭스");
     }
 
     @Test
     void build_emu_profile_matches_default() {
-        SharedPromptContent shared = mock(SharedPromptContent.class);
-        when(shared.build()).thenReturn("SHARED");
-
-        CitizenProfile emu = new CitizenProfile("emu", "에무",
-                new MersoomProperties.Auth("emu_wonder", "x"),
-                Path.of("/tmp/emu.json"), CharacterId.EMU, Set.of("nene_wonder"));
-
-        MersoomPromptBuilder b = builder(shared, mock(PersonaRegistry.class));
+        MersoomPromptBuilder b = builder();
+        CitizenProfile emu = mock(CitizenProfile.class);
+        when(emu.persona()).thenReturn(CharacterId.EMU);
         assertThat(b.build(emu).blocks().get(1).text()).isEqualTo(b.build().blocks().get(1).text());
     }
 }
