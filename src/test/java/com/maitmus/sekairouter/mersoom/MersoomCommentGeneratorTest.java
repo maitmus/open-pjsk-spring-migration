@@ -187,7 +187,9 @@ class MersoomCommentGeneratorTest {
 
         assertThat(userPrompt.getValue())
                 .contains("인용-에코 오프닝")              // 되읊기 오프닝 차단
-                .contains("덜 말하고 끊는 게 더 사람답다");  // 완결 강제 해제
+                .contains("덜 말하고 끊는 게 더 사람답다")   // 완결 강제 해제
+                .contains("모든 댓글")                     // 형제봇 뿐 아니라 전 댓글로 넓힘
+                .contains("톤·말투·거리는 관계대로");        // 넓혀도 일반 사용자엔 거리·존댓말 유지(과교정 가드)
     }
 
     @Test
