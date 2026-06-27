@@ -110,32 +110,29 @@ public class AnthropicClientWrapper {
     }
 
     /**
-     * Two-block cache layout: shared prefix first (so prefix-match serves both paths),
-     * path-specific suffix second. Both blocks set cache_control with TTL_1H.
-     *
-     * 빈 블록은 제외 — PuzzleSolver처럼 단일 블록만 보내는 caller도 안전하게 처리.
-     * Anthropic API는 빈 text block을 거부(400)하므로 필터링 필수.
+     * 각 Block을 TextBlockParam으로 매핑한다.
+     * cache=true일 때만 cache_control(TTL_1H)을 적용하고, 빈 text 블록은 제외(API 400 회피).
+     * package-private static — PromptBlocksTest에서 직접 호출.
      */
-    private static List<TextBlockParam> buildSystemBlocks(PromptBlocks prompt) {
-        java.util.List<TextBlockParam> blocks = new java.util.ArrayList<>();
-        if (prompt.sharedPrefix() != null && !prompt.sharedPrefix().isEmpty()) {
-            blocks.add(buildBlock(prompt.sharedPrefix()));
+    static List<TextBlockParam> buildSystemBlocks(PromptBlocks prompt) {
+        java.util.List<TextBlockParam> out = new java.util.ArrayList<>();
+        for (PromptBlocks.Block b : prompt.blocks()) {
+            if (b.text() == null || b.text().isEmpty()) continue;   // 빈 블록 제외(API 400 회피)
+            out.add(buildBlock(b.text(), b.cache()));
         }
-        if (prompt.pathSuffix() != null && !prompt.pathSuffix().isEmpty()) {
-            blocks.add(buildBlock(prompt.pathSuffix()));
+        if (out.isEmpty()) {
+            throw new IllegalStateException("PromptBlocks produced no non-empty system blocks");
         }
-        if (blocks.isEmpty()) {
-            throw new IllegalStateException("Both PromptBlocks fields are empty");
-        }
-        return List.copyOf(blocks);
+        return List.copyOf(out);
     }
 
-    private static TextBlockParam buildBlock(String text) {
-        return TextBlockParam.builder()
-                .text(text)
-                .cacheControl(CacheControlEphemeral.builder()
-                        .ttl(CacheControlEphemeral.Ttl.TTL_1H)
-                        .build())
-                .build();
+    private static TextBlockParam buildBlock(String text, boolean cache) {
+        TextBlockParam.Builder b = TextBlockParam.builder().text(text);
+        if (cache) {
+            b.cacheControl(CacheControlEphemeral.builder()
+                    .ttl(CacheControlEphemeral.Ttl.TTL_1H)
+                    .build());
+        }
+        return b.build();
     }
 }

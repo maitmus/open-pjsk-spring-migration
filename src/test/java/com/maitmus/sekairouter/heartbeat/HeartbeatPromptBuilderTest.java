@@ -52,31 +52,31 @@ class HeartbeatPromptBuilderTest {
 
         PromptBlocks blocks = newBuilder(registry, props).build();
 
-        // Heartbeat-specific instruction markers — pathSuffix
-        assertThat(blocks.pathSuffix()).contains("자율 발화 모드");
+        // Heartbeat-specific instruction markers — blocks[1](pathSuffix)
+        assertThat(blocks.blocks().get(1).text()).contains("자율 발화 모드");
         // 출력은 이제 {"reasoning":"...","utterance":"..."} JSON 형식
-        assertThat(blocks.pathSuffix()).contains("\"utterance\"");
-        assertThat(blocks.pathSuffix()).contains("reasoning");
+        assertThat(blocks.blocks().get(1).text()).contains("\"utterance\"");
+        assertThat(blocks.blocks().get(1).text()).contains("reasoning");
 
-        // Persona section — sharedPrefix
-        assertThat(blocks.sharedPrefix()).contains("## 페르소나 정의");
-        assertThat(blocks.sharedPrefix()).contains("에무 페르소나 본문");
-        assertThat(blocks.sharedPrefix()).contains("네네 페르소나 본문");
+        // Persona section — blocks[0](sharedPrefix)
+        assertThat(blocks.blocks().get(0).text()).contains("## 페르소나 정의");
+        assertThat(blocks.blocks().get(0).text()).contains("에무 페르소나 본문");
+        assertThat(blocks.blocks().get(0).text()).contains("네네 페르소나 본문");
 
-        // GRADES section — sharedPrefix
-        assertThat(blocks.sharedPrefix()).contains("## 호칭·존댓말 매트릭스");
-        assertThat(blocks.sharedPrefix()).contains("에무 → 네네: 네네쨩");
+        // GRADES section — blocks[0](sharedPrefix)
+        assertThat(blocks.blocks().get(0).text()).contains("## 호칭·존댓말 매트릭스");
+        assertThat(blocks.blocks().get(0).text()).contains("에무 → 네네: 네네쨩");
 
-        // events section — sharedPrefix
-        assertThat(blocks.sharedPrefix()).contains("## 이벤트 캘린더");
-        assertThat(blocks.sharedPrefix()).contains("에무 생일");
+        // events section — blocks[0](sharedPrefix)
+        assertThat(blocks.blocks().get(0).text()).contains("## 이벤트 캘린더");
+        assertThat(blocks.blocks().get(0).text()).contains("에무 생일");
 
         // quick-ref는 더 이상 임베드되지 않음
-        assertThat(blocks.sharedPrefix()).doesNotContain("## 빠른 참조");
-        assertThat(blocks.pathSuffix()).doesNotContain("## 빠른 참조");
+        assertThat(blocks.blocks().get(0).text()).doesNotContain("## 빠른 참조");
+        assertThat(blocks.blocks().get(1).text()).doesNotContain("## 빠른 참조");
 
         // CRITICAL: must NOT contain JSON schema (heartbeat is plain text)
-        assertThat(blocks.pathSuffix()).doesNotContain("출력 JSON 스키마");
+        assertThat(blocks.blocks().get(1).text()).doesNotContain("출력 JSON 스키마");
     }
 
     @Test
@@ -91,10 +91,10 @@ class HeartbeatPromptBuilderTest {
 
         PromptBlocks blocks = newBuilder(registry, props).build();
 
-        assertThat(blocks.pathSuffix()).contains("자율 발화 모드");
-        assertThat(blocks.sharedPrefix()).contains("에무 내용");
-        assertThat(blocks.pathSuffix()).doesNotContain("출력 JSON 스키마");
-        assertThat(blocks.sharedPrefix()).doesNotContain("호칭·존댓말 매트릭스");
+        assertThat(blocks.blocks().get(1).text()).contains("자율 발화 모드");
+        assertThat(blocks.blocks().get(0).text()).contains("에무 내용");
+        assertThat(blocks.blocks().get(1).text()).doesNotContain("출력 JSON 스키마");
+        assertThat(blocks.blocks().get(0).text()).doesNotContain("호칭·존댓말 매트릭스");
     }
 
     @Test
@@ -113,7 +113,7 @@ class HeartbeatPromptBuilderTest {
 
         PromptBlocks blocks = newBuilder(registry, props).build();
 
-        assertThat(blocks.sharedPrefix()).contains("## 사용자 정보 (USER.md)");
-        assertThat(blocks.sharedPrefix()).contains("MaiT입니다.");
+        assertThat(blocks.blocks().get(0).text()).contains("## 사용자 정보 (USER.md)");
+        assertThat(blocks.blocks().get(0).text()).contains("MaiT입니다.");
     }
 }

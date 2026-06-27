@@ -40,14 +40,14 @@ class SystemPromptBuilderTest {
 
         PromptBlocks blocks = newBuilder(registry, props).build();
 
-        // 페르소나/매트릭스/이벤트는 sharedPrefix에
-        assertThat(blocks.sharedPrefix()).contains("에무 페르소나 본문");
-        assertThat(blocks.sharedPrefix()).contains("네네 페르소나 본문");
-        // 라우터 지시문/출력 스키마는 pathSuffix에
-        assertThat(blocks.pathSuffix()).contains("라우팅 규칙");
-        assertThat(blocks.pathSuffix()).contains("출력 JSON 스키마");
+        // 페르소나/매트릭스/이벤트는 blocks[0](sharedPrefix)에
+        assertThat(blocks.blocks().get(0).text()).contains("에무 페르소나 본문");
+        assertThat(blocks.blocks().get(0).text()).contains("네네 페르소나 본문");
+        // 라우터 지시문/출력 스키마는 blocks[1](pathSuffix)에
+        assertThat(blocks.blocks().get(1).text()).contains("라우팅 규칙");
+        assertThat(blocks.blocks().get(1).text()).contains("출력 JSON 스키마");
         // GRADES.md 없으면 매트릭스 섹션 없이 빌드
-        assertThat(blocks.sharedPrefix()).doesNotContain("호칭·존댓말 매트릭스");
+        assertThat(blocks.blocks().get(0).text()).doesNotContain("호칭·존댓말 매트릭스");
     }
 
     @Test
@@ -61,7 +61,7 @@ class SystemPromptBuilderTest {
 
         PromptBlocks blocks = newBuilder(registry, props).build();
 
-        assertThat(blocks.sharedPrefix()).contains("호칭·존댓말 매트릭스");
-        assertThat(blocks.sharedPrefix()).contains("에무 → 네네: 네네쨩");
+        assertThat(blocks.blocks().get(0).text()).contains("호칭·존댓말 매트릭스");
+        assertThat(blocks.blocks().get(0).text()).contains("에무 → 네네: 네네쨩");
     }
 }
