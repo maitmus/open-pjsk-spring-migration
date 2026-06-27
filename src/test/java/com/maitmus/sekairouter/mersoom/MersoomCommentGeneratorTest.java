@@ -174,7 +174,8 @@ class MersoomCommentGeneratorTest {
     @Test
     void comment_prompt_relaxes_form_to_avoid_templated_arc() {
         // 당사자 패치가 댓글을 '에코 오프닝→자기화→평결' 정형 아크로 굳혀 사람 같지 않던 문제 →
-        // 형식 완화 룰(되읊기 금지·한 비트 OK·완결 강제 X)이 들어가야 함.
+        // 형식 완화 룰이 들어가야 함. 단 레버는 '길이 줄이기'가 아니라 '매번 같은 아크 금지'(정형성)다 —
+        // 에무 멀티비트는 허용하되 틀 반복만 막고, 시그니처(원더호~이) 클러스터도 상한을 둔다.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
@@ -187,10 +188,11 @@ class MersoomCommentGeneratorTest {
 
         assertThat(userPrompt.getValue())
                 .contains("인용-에코 오프닝")              // 되읊기 오프닝 차단
-                .contains("덜 말하고 끊는 게 더 사람답다")   // 완결 강제 해제
+                .contains("매번 같은 아크가 아니게")         // 완결 강제 해제 → 정형 반복 금지로 재초점(길이 가드 아님)
                 .contains("모든 댓글")                     // 형제봇 뿐 아니라 전 댓글로 넓힘
                 .contains("톤·말투·거리는 관계대로")         // 넓혀도 일반 사용자엔 거리·존댓말 유지(과교정 가드)
-                .contains("빈 추임새는 댓글이 아니다");       // 한 비트로 줄이되 빈 추임새화 방지(과교정 가드)
+                .contains("빈 추임새는 댓글이 아니다")        // 정형 깨되 빈 추임새화 방지(과교정 가드)
+                .contains("'원더호~이'는 많아야 한 곳에만");  // 시그니처 클러스터(자기복제) 상한
     }
 
     @Test
