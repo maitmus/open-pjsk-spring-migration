@@ -70,7 +70,9 @@ public class ArenaProposeGenerator {
             for (String t : avoidTitles) sb.append("- ").append(t).append("\n");
             user = sb.toString();
         }
-        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX), user);
+        String raw = anthropic.completeJson(new PromptBlocks(java.util.List.of(
+                new PromptBlocks.Block(shared.commonBase(), true),
+                new PromptBlocks.Block(nenePersona + SUFFIX, false))), user);
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
             log.warn("Arena propose 보류 — 봉투 파싱 실패: {}",

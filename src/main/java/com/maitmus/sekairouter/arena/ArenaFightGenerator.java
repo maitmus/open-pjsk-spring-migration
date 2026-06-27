@@ -64,7 +64,9 @@ public class ArenaFightGenerator {
         String nenePersona = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (특히 말투)\n"
                 + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
         String lockedNorm = normalizeSide(lockedSide);
-        String raw = anthropic.completeJson(new PromptBlocks(shared.build(), nenePersona + SUFFIX),
+        String raw = anthropic.completeJson(new PromptBlocks(java.util.List.of(
+                new PromptBlocks.Block(shared.commonBase(), true),
+                new PromptBlocks.Block(nenePersona + SUFFIX, false))),
                 buildUserPrompt(topic, existing, lockedNorm, selfNickname));
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
