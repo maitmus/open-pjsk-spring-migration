@@ -26,7 +26,7 @@ class ArenaFightGeneratorTest {
         AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
         when(a.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llm);
         SharedPromptContent s = mock(SharedPromptContent.class);
-        when(s.build()).thenReturn("shared");
+        when(s.commonBase()).thenReturn("shared");
         return new ArenaFightGenerator(a, s, new OutputSanityGate(),
                 mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
     }
@@ -92,7 +92,7 @@ class ArenaFightGeneratorTest {
         when(a.completeJson(any(PromptBlocks.class), up.capture()))
                 .thenReturn("{\"side\":\"CON\",\"content\":\"\",\"shouldFight\":false}");
         SharedPromptContent s = mock(SharedPromptContent.class);
-        when(s.build()).thenReturn("shared");
+        when(s.commonBase()).thenReturn("shared");
         ArenaFightGenerator g = new ArenaFightGenerator(a, s, new OutputSanityGate(),
                 mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
 
@@ -121,7 +121,7 @@ class ArenaFightGeneratorTest {
         when(a.completeJson(any(PromptBlocks.class), up.capture()))
                 .thenReturn("{\"side\":\"CON\",\"content\":\"\",\"shouldFight\":false}");
         SharedPromptContent s = mock(SharedPromptContent.class);
-        when(s.build()).thenReturn("shared");
+        when(s.commonBase()).thenReturn("shared");
         ArenaFightGenerator g = new ArenaFightGenerator(a, s, new OutputSanityGate(),
                 mock(com.maitmus.sekairouter.persona.PersonaRegistry.class));
 
