@@ -33,9 +33,11 @@ public class SystemPromptBuilder {
     }
 
     public PromptBlocks build() {
-        String sharedPrefix = shared.build();
-        String suffix = "\n" + loadResource(baseInstructions) + "\n\n" + loadResource(outputSchema);
-        return new PromptBlocks(sharedPrefix, suffix);
+        String instr = "\n" + loadResource(baseInstructions) + "\n\n" + loadResource(outputSchema);
+        return new PromptBlocks(java.util.List.of(
+                new PromptBlocks.Block(shared.commonBase(), true),
+                new PromptBlocks.Block(shared.voiceRoster(), true),
+                new PromptBlocks.Block(instr, true)));
     }
 
     private String loadResource(Resource resource) {

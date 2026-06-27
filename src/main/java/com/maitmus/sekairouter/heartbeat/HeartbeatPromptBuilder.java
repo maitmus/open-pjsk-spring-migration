@@ -33,9 +33,11 @@ public class HeartbeatPromptBuilder {
     }
 
     public PromptBlocks build() {
-        String sharedPrefix = shared.build();
-        String suffix = "\n" + loadResource(baseInstructions);
-        return new PromptBlocks(sharedPrefix, suffix);
+        String instr = "\n" + loadResource(baseInstructions);
+        return new PromptBlocks(java.util.List.of(
+                new PromptBlocks.Block(shared.commonBase(), true),
+                new PromptBlocks.Block(shared.voiceRoster(), true),
+                new PromptBlocks.Block(instr, true)));
     }
 
     private String loadResource(Resource resource) {
