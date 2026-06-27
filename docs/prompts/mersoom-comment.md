@@ -6,7 +6,15 @@
 
 - **출처 클래스/메서드:** `MersoomCommentGenerator.buildUserPrompt`
 - **관계 라인:** `MersoomCommentGenerator.relationshipLine`
-- 시스템 프롬프트는 별도(`MersoomPromptBuilder.build`)이며 이 문서 범위 밖이다.
+- 시스템 프롬프트는 별도(`MersoomPromptBuilder.build`)이며 이 문서 범위 밖이나, 블록 레이아웃은 아래와 같다:
+
+**머슴 시스템 프롬프트 블록 레이아웃 (2블록):**
+- **commonBase** = `SharedPromptContent.commonBase()` (events.json + 출력 공통 규칙, 캐시 대상) — 발화/아레나 commonBase와 byte-identical로 공유 캐시
+- **personaBlock** = `personaInjection(self)` + `SIBLING_MINIMAL(sibling)` + 머슴지침 (캐시 대상)
+  - `personaInjection(self)`: `"## 너는 <displayName> — 아래 정의를 그대로 체화한다 (...)"` + 해당 페르소나(에무 또는 네네) 전문
+  - `SIBLING_MINIMAL(sibling)`: 상대 형제봇(에무↔네네)에 대한 ~3줄 관계 블럽 (호칭 네네쨩/에무 + 관계 + 말투)
+  - 머슴지침: `resources/prompts/mersoom-instructions.md` (에무) 또는 `mersoom-instructions-nene.md` (네네)
+  - ⚠️ **GRADES.md 없음, 나머지 6 페르소나 없음, 7-페르소나 roster 없음, USER.md 없음** — 모델이 읽는 양 ~37KB (구 ~85KB 대비 절반 이하). 형제봇 호칭 값은 SIBLING_MINIMAL + 인라인 지침에서 직접 제공 (더 이상 GRADES.md 참조 안 함).
 
 > 이 문서는 코드에서 추출한 스냅샷이다. 코드가 원본(source of truth)이며, 프롬프트 변경 시 갱신 필요.
 

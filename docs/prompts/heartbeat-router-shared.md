@@ -15,13 +15,14 @@
 
 ## 프롬프트 조립 개요 (시스템 vs 유저)
 
-두 경로(하트비트·라우팅) 모두 system 프롬프트는 `PromptBlocks(sharedPrefix, pathSuffix)` 2블록 구조이며, `AnthropicClientWrapper`가 각 블록에 `cache_control TTL_1H`를 붙여 전송한다. sharedPrefix는 양 경로가 byte-identical이라 prefix 캐시를 공유한다.
+두 경로(하트비트·라우팅) 모두 system 프롬프트는 3블록 구조이며, `AnthropicClientWrapper`가 각 블록에 `cache_control TTL_1H`를 붙여 전송한다. block[0]/block[1]은 양 경로가 byte-identical이라 prefix 캐시를 공유하고, 머슴·아레나의 commonBase와도 공유된다.
 
-- **sharedPrefix** = `SharedPromptContent.build()` (USER.md + 페르소나 정의 + GRADES.md + events.json)
-- **pathSuffix (하트비트)** = `resources/prompts/heartbeat-base-instructions.md`
-- **pathSuffix (라우팅)** = `resources/prompts/router-base-instructions.md` + `resources/prompts/output-schema.md`
+- **commonBase** = `SharedPromptContent.commonBase()` (events.json + 출력 공통 규칙) — **모든 경로 공유**, 머슴·아레나 commonBase와 byte-identical
+- **voiceRoster** = `SharedPromptContent.voiceRoster()` (USER.md + 7-persona roster + all 7 personas + GRADES.md) — **발화 경로(하트비트·라우팅) 전용**; USER.md는 운영자 MaiT 정보로 머슴·아레나엔 없음
+- **instr (하트비트)** = `resources/prompts/heartbeat-base-instructions.md`
+- **instr (라우팅)** = `resources/prompts/router-base-instructions.md` + `resources/prompts/output-schema.md`
 
-아래에 문서화하는 인라인 문자열은 모두 **user 프롬프트**(또는 sharedPrefix의 섹션 헤더)이며, system 본문(resources/prompts/*.md)은 이 문서 범위 밖이다.
+아래에 문서화하는 인라인 문자열은 모두 **user 프롬프트**(또는 commonBase/voiceRoster의 섹션 헤더)이며, system 본문(resources/prompts/*.md)은 이 문서 범위 밖이다.
 
 ---
 
@@ -319,4 +320,4 @@ sharedPrefix 맨 끝에는 **모든 경로 공통 출력 규칙**이 인라인�
 
 - **HeartbeatPromptBuilder** — system 본문은 `resources/prompts/heartbeat-base-instructions.md`에서 로드. 인라인 프롬프트 텍스트 없음 (suffix 앞에 `"\n"`만 붙임).
 - **SystemPromptBuilder** — system 본문은 `resources/prompts/router-base-instructions.md` + `resources/prompts/output-schema.md`에서 로드. 인라인 프롬프트 텍스트 없음 (구분자 `"\n"`, `"\n\n"`만 사용).
-- **AnthropicClientWrapper** — 프롬프트 2블록 조립 + `cache_control TTL_1H` + web_search 툴 부착만 담당. 인라인 프롬프트 텍스트 없음. (한국어 주석 `// 빈 블록은 제외...`는 코드 주석일 뿐 프롬프트 아님.)
+- **AnthropicClientWrapper** — 프롬프트 3블록 조립 + `cache_control TTL_1H` + web_search 툴 부착만 담당. 인라인 프롬프트 텍스트 없음. (한국어 주석 `// 빈 블록은 제외...`는 코드 주석일 뿐 프롬프트 아님.)

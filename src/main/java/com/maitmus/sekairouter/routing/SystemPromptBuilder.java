@@ -9,11 +9,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Builds the system prompt for routing (conversation) calls as two cache blocks:
- *  - sharedPrefix: USER.md + personas + GRADES + events (identical to heartbeat)
- *  - pathSuffix : router-base-instructions + output-schema
+ * Builds the system prompt for routing (conversation) calls as three cache blocks:
+ *  - commonBase : events.json + 출력 공통 규칙 (byte-identical across all paths — shared cache)
+ *  - voiceRoster: USER.md + 7-persona roster + all personas + GRADES (identical to heartbeat)
+ *  - instr      : router base-instructions + output-schema
  *
- * The shared block sits first so Anthropic prefix-cache reads serve both paths.
+ * commonBase and voiceRoster are byte-identical to {@link com.maitmus.sekairouter.heartbeat.HeartbeatPromptBuilder},
+ * so Anthropic prefix-cache reads serve both 발화 paths.
  */
 @Slf4j
 @Component

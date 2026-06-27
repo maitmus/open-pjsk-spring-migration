@@ -11,11 +11,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Builds the system prompt for heartbeat (autonomous utterance) calls as two cache blocks:
- *  - sharedPrefix: USER.md + personas + GRADES + events (identical to routing)
- *  - pathSuffix : heartbeat-base-instructions
+ * Builds the system prompt for heartbeat (autonomous utterance) calls as three cache blocks:
+ *  - commonBase : events.json + 출력 공통 규칙 (byte-identical across all paths — shared cache)
+ *  - voiceRoster: USER.md + 7-persona roster + all personas + GRADES (identical to routing)
+ *  - instr      : heartbeat-base-instructions
  *
- * The shared block is byte-identical to {@link com.maitmus.sekairouter.routing.SystemPromptBuilder},
+ * commonBase and voiceRoster are byte-identical to {@link com.maitmus.sekairouter.routing.SystemPromptBuilder},
  * so Anthropic prefix cache writes from either path serve the other.
  */
 @Slf4j
