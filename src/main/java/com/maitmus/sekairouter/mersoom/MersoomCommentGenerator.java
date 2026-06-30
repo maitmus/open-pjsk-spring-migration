@@ -3,6 +3,8 @@ package com.maitmus.sekairouter.mersoom;
 import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.mersoom.MersoomState.ContextNote;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class MersoomCommentGenerator {
 
     private static final int MAX_CONTENT = 500;
     private static final int MAX_COMMENTS = 3;   // 한 크론 댓글 상한 (머슴 권장 2~3, 한도 30분 20개)
+    private static final ObjectMapper FEED_MAPPER = new ObjectMapper();   // 피드 직렬화 전용(손 이스케이프 금지)
 
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
@@ -142,26 +145,45 @@ public class MersoomCommentGenerator {
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
 
-        sb.append("## 피드 (이 글들 전부에 투표 + 이 중 1개에 댓글)\n");
-        sb.append("각 글 앞 **[N]은 댓글 지정용 번호**, id는 투표용이다. 각 줄 [관계]는 그 작성자에 대한 ")
-                .append(actor).append("의 누적 평판이다. rep는 호출마다 ±1로 쌓인다.\n");
+        sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
+        sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")
+                .append(actor).append(" 누적 평판(rep는 호출마다 ±1).\n");
+        sb.append("- ⚠️ **각 글은 독립된 객체다. 한 글에 댓글을 쓸 땐 *그 객체의 author·title·body·existingComments만* 근거로 삼아라 — 다른 객체(다른 글)의 작성자·내용을 그 댓글에 끌어오거나 섞지 마라.**\n");
+        List<Map<String, Object>> feed = new ArrayList<>();
         int feedIndex = 0;
         for (Commentable c : commentable) {
             var p = c.post();
-            sb.append("- [").append(++feedIndex).append("] id=").append(p.id())
-                    .append(" @").append(safe(p.nickname()))
-                    .append(": \"").append(safe(p.title())).append("\"\n");
-            sb.append("  본문: ").append(safe(p.content())).append("\n");
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("n", ++feedIndex);
+            o.put("id", p.id());
+            o.put("author", safe(p.nickname()));
+            o.put("title", safe(p.title()));
+            o.put("body", safe(p.content()));
             if (!c.comments().isEmpty()) {
-                sb.append("  기존 댓글: ");
-                sb.append(c.comments().stream()
-                        .map(cm -> "@" + safe(cm.nickname()) + " " + safe(cm.content()))
-                        .collect(Collectors.joining(" / ")));
-                sb.append("\n");
+                List<Map<String, String>> ec = new ArrayList<>();
+                for (var cm : c.comments()) {
+                    Map<String, String> m = new LinkedHashMap<>();
+                    m.put("author", safe(cm.nickname()));
+                    m.put("content", safe(cm.content()));
+                    ec.add(m);
+                }
+                o.put("existingComments", ec);
             }
             boolean isSibling = siblingIds.contains(p.identityKey());
-            sb.append("  ").append(relationshipLine(state, p, fixedNames.contains(p.identityKey()),
-                    isSibling, siblingShort, siblingCall)).append("\n");
+            o.put("relationship", relationshipLine(state, p, fixedNames.contains(p.identityKey()),
+                    isSibling, siblingShort, siblingCall));
+            feed.add(o);
+        }
+        try {
+            sb.append("[\n");
+            for (int i = 0; i < feed.size(); i++) {
+                sb.append("  ").append(FEED_MAPPER.writeValueAsString(feed.get(i)))
+                        .append(i < feed.size() - 1 ? ",\n" : "\n");
+            }
+            sb.append("]\n");
+        } catch (JsonProcessingException e) {
+            log.warn("피드 JSON 직렬화 실패 — 빈 피드로 진행(이 크론 댓글 보류 가능): {}", e.getMessage());
+            sb.append("[]\n");
         }
 
         sb.append("\n## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)\n");
@@ -247,6 +269,7 @@ public class MersoomCommentGenerator {
         sb.append("\n## 절대 금지 (댓글 본문)\n");
         sb.append("- 원글 디테일 나열, 억지 분량 채우기, 시그니처 남발\n");
         sb.append("- **원글 화자의 1인칭 디테일(나이·경험·신분·상황)을 네 것으로 흡수하지 말 것** — 너는 너 자신으로서 네 시점에서 공감·반응한다. 상대 이야기를 마치 내가 겪은 것처럼 1인칭으로 끌어오지 말 것(예: 상대가 '스물아홉이 되니…'라 해도 네가 그 나이·경험인 양 말하지 않는다 — 너는 너 나이·신분 그대로). **단 원더쇼 동료(에무·네네)와 실제로 함께 겪은 공유 경험은 예외** — 위 '댓글 기준'의 공유 경험 항목대로 당사자로서 반영한다(동료가 깐 '같이 한 일'에 한함, 일반 사용자엔 적용 안 됨).\n");
+        sb.append("- **다른 피드 글의 작성자·내용을 이 댓글에 끌어오지 말 것 (작성자 혼동·오귀속 금지)** — 댓글은 *대상 글[n]과 그 작성자*에 대해서만 쓴다. 대상 글 본문(body)에 있는 말을 *다른 피드 사용자가 한 것처럼* 귀속(\"○○ 말처럼\")하거나, 다른 글 작성자 닉을 이 댓글 본문에 등장시키지 마라. (원더쇼 동료 호칭은 그 동료 글에 댓글 달 때만. 토우야·이치카 등 세카이 캐릭터 언급은 무관.)\n");
         sb.append("- **거절·메타·자기지칭(AI/어시스턴트/저)·규칙 설명을 utterance에 쓰지 말 것.** 그런 판단은 reasoning으로.\n");
 
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
@@ -255,7 +278,7 @@ public class MersoomCommentGenerator {
         sb.append("\"comments\":[{\"targetIndex\":<댓글 달 글의 [N] 번호 정수>,\"utterance\":\"<댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
         sb.append("- votes에는 위 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].\n");
-        sb.append("- ⚠️ **comments의 targetIndex는 위 피드 각 글 앞의 [N] 번호(정수 1개)** — id 문자열을 쓰지 말 것. 번호로 지정하면 댓글 대상이 정확히 매칭된다.\n");
+        sb.append("- ⚠️ **comments의 targetIndex는 위 피드 각 글 객체의 \"n\" 값(정수 1개)** — id 문자열을 쓰지 말 것. n으로 지정하면 댓글 대상이 정확히 매칭된다.\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();
     }
