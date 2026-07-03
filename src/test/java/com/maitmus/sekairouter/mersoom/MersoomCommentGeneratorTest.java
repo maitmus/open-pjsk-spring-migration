@@ -213,6 +213,7 @@ class MersoomCommentGeneratorTest {
                 .contains("그 글 안의")                  // 중앙 원리: 글 안의 당사자로
                 .contains("교훈·격언으로 승화")            // 격언화 축
                 .contains("가정·일반화로 회피")            // 자기지칭 축
+                .contains("자기 등장 우선 확인")           // 이름-스캔 실행절차(f076d63 강화)
                 .contains("지어내지 말 것");              // 날조 금지 가드
     }
 
