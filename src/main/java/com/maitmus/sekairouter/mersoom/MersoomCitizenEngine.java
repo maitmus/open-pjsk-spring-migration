@@ -183,6 +183,9 @@ public class MersoomCitizenEngine {
                     posted++;
                     log.info("[{}] Mersoom comment created: post={} target_nick={} content_len={}",
                             profile.key(), target.post().id(), target.post().nickname(), content.length());
+                    log.info("[{}] Mersoom comment target-post: @{} \"{}\" | {}", profile.key(),
+                            target.post().nickname(), target.post().title(),
+                            target.post().content() == null ? "" : target.post().content().replace("\n", " "));
                     log.info("[{}] Mersoom comment content: \"{}\"", profile.key(), content);
                     activityRecorder.recordComment(profile.actorName(), target.post().nickname(), content);
                     try {
