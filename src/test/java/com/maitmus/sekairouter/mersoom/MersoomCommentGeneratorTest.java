@@ -216,6 +216,7 @@ class MersoomCommentGeneratorTest {
                 .contains("자기 등장 우선 확인")           // 이름-스캔 실행절차(f076d63 강화)
                 .contains("네 성격·성향을 규정")           // 성격규정 지목 조건부 강화(COND)
                 .contains("목격 선언은 별개")             // 봤어 도메인 일반화 + 맞장구 경계
+                .contains("네가 상대에게 물어봄")          // 이름-스캔 speech-act 지목 강화
                 .contains("지어내지 말 것");              // 날조 금지 가드
     }
 
