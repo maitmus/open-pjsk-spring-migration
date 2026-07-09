@@ -123,6 +123,38 @@ class MersoomCommentGeneratorTest {
 
         String prompt = userPrompt.getValue();
         assertThat(prompt).contains("그 관계 안의 당사자로 끼어든다");
+        // ① 자기지목 힌트: 형제(에무) 글 본문이 나(네네)를 언급('네네쨩이랑…') → 그 글 relationship에 당사자 힌트 주입
+        assertThat(prompt)
+                .contains("이 글 본문이 너(네네)를 언급/지목")
+                .contains("네네쨩이랑 같이 무대")          // 추출된 지목 문장이 힌트에 인용됨
+                .contains("본문에 없는 역할·대사는 지어내지 말 것");  // 날조 가드가 힌트로 이관됨
+    }
+
+    @Test
+    void self_mention_hint_absent_for_nonsibling_and_when_name_missing() {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
+        // (a) 일반 유저 글이 본문에 '네네'를 담아도 — isSibling 아니라 힌트 미발동
+        Commentable userPost = new Commentable(
+                new Post("p1", "관람", "팬", "네네 무대 최고였어요", 0, 0, 0, 0, 0,
+                        OffsetDateTime.now(), "fan_x", null), List.of());
+        // (b) 형제 글이지만 본문에 내 이름 없음 — 힌트 미발동
+        Commentable emuPostNoName = new Commentable(
+                new Post("p2", "일상", "에무", "오늘 붕어빵 먹었어요", 0, 0, 0, 0, 0,
+                        OffsetDateTime.now(), "emu_wonder", null), List.of());
+
+        g.generate(nene, empty(), List.of(userPost, emuPostNoName));
+
+        assertThat(userPrompt.getValue()).doesNotContain("이 글 본문이 너(네네)를 언급/지목");
     }
 
     @Test
@@ -212,12 +244,11 @@ class MersoomCommentGeneratorTest {
         assertThat(userPrompt.getValue())
                 .contains("그 글 안의")                  // 중앙 원리: 글 안의 당사자로
                 .contains("교훈·격언으로 승화")            // 격언화 축
-                .contains("가정·일반화로 회피")            // 자기지칭 축
-                .contains("자기 등장 우선 확인")           // 이름-스캔 실행절차(f076d63 강화)
-                .contains("네 성격·성향을 규정")           // 성격규정 지목 조건부 강화(COND)
-                .contains("목격 선언은 별개")             // 봤어 도메인 일반화 + 맞장구 경계
-                .contains("네가 상대에게 물어봄")          // 이름-스캔 speech-act 지목 강화
-                .contains("지어내지 말 것");              // 날조 금지 가드
+                .contains("목격 선언은 별개")             // 봤어 도메인 일반화 + 맞장구 경계 (일반 룰, 유지)
+                .contains("네 성격·성향을 규정")           // COND 규정 ❌/✅ (load-bearing, 산문 존치)
+                .contains("지어내지 말 것");              // 날조 금지 가드(상식 밖 사실)
+        // 이름-스캔·speech-act 산문은 ①(코드 힌트 주입)으로 이관돼 제거됨(self_mention_hint_* 테스트가 검증).
+        // COND 규정 산문은 load-bearing이라 존치(sim서 제거 시 규정 어긋난 반박 0%→60% 회귀 확인).
     }
 
     @Test
@@ -374,5 +405,36 @@ class MersoomCommentGeneratorTest {
     private static MersoomState empty() {
         return new MersoomState(List.of(), List.of(), List.of(), Map.of(), 8,
                 List.of(), null, null, List.of(), List.of());
+    }
+
+    /** sim-refine용 harness — 코드가 실제로 뿜는 USER 프롬프트를 파일로 덤프(손-복제 배제). */
+    @Test
+    void dumpRealPromptsForSim() throws Exception {
+        String dir = System.getenv("SIM_DUMP_DIR");
+        org.junit.jupiter.api.Assumptions.assumeTrue(dir != null, "SIM_DUMP_DIR 미지정 — 덤프 스킵");
+        CitizenProfile emu = new CitizenProfile("emu", "에무",
+                new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
+                com.maitmus.sekairouter.persona.CharacterId.EMU, Set.of("nene_wonder"));
+        java.util.Map<String,String> cases = java.util.Map.of(
+            "real_gyujeong", "오늘 안무 연습하다가 중간 삽입 안무 타이밍을 또 놓쳤어. 두 번째 컷인데 자꾸 한 발 늦어. 에무는 그런 거 신경도 안 쓰는데 나는 자꾸 신경 써져. 내일 다시 맞춰봐야겠어.",
+            "real_insa", "어제 영화부 회의에서 누군가 나한테 인사했는데, 내가 너무 자동으로 작은 목소리로 고개만 까딱했대. 나중에 에무가 웃으면서 '네네는 왜 항상 그렇게 인사해?'라고 물어봤어. 생각해보니 낯가림이 극성인 거도 있고, 습관적으로 쎄하려는 건 아닌데 소리가 제멋대로인 거 같아. 다음엔 또 까먹어.");
+        for (var e : cases.entrySet()) {
+            ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+            AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+            when(anthropic.completeJson(any(PromptBlocks.class), up.capture()))
+                    .thenReturn("{\"votes\":[],\"comments\":[]}");
+            MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+            when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+            Commentable nenePost = new Commentable(new Post("p1",
+                    "real_gyujeong".equals(e.getKey()) ? "타이밍 놓쳤네" : "인사가 자꾸 작아",
+                    "네네", e.getValue(), 0, 0, 0, 0, 0, OffsetDateTime.now(), "nene_wonder", null), List.of());
+            Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
+                    "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());
+            Commentable f3 = new Commentable(new Post("p3", "연습 끝", "라쿵쌤",
+                    "오늘 연습 길게 했더니 어깨가 뻐근하네요. 그래도 뿌듯해요.", 0,0,0,0,0, OffsetDateTime.now(), "rak_x", null), List.of());
+            g.generate(emu, empty(), List.of(nenePost, f2, f3));
+            java.nio.file.Files.writeString(java.nio.file.Path.of(dir, e.getKey() + ".userprompt.txt"), up.getValue());
+        }
     }
 }
