@@ -415,9 +415,15 @@ class MersoomCommentGeneratorTest {
         CitizenProfile emu = new CitizenProfile("emu", "에무",
                 new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
                 com.maitmus.sekairouter.persona.CharacterId.EMU, Set.of("nene_wonder"));
-        java.util.Map<String,String> cases = java.util.Map.of(
-            "real_gyujeong", "오늘 안무 연습하다가 중간 삽입 안무 타이밍을 또 놓쳤어. 두 번째 컷인데 자꾸 한 발 늦어. 에무는 그런 거 신경도 안 쓰는데 나는 자꾸 신경 써져. 내일 다시 맞춰봐야겠어.",
-            "real_insa", "어제 영화부 회의에서 누군가 나한테 인사했는데, 내가 너무 자동으로 작은 목소리로 고개만 까딱했대. 나중에 에무가 웃으면서 '네네는 왜 항상 그렇게 인사해?'라고 물어봤어. 생각해보니 낯가림이 극성인 거도 있고, 습관적으로 쎄하려는 건 아닌데 소리가 제멋대로인 거 같아. 다음엔 또 까먹어.");
+        java.util.Map<String,String> cases = new java.util.LinkedHashMap<>();
+        cases.put("real_gyujeong", "오늘 안무 연습하다가 중간 삽입 안무 타이밍을 또 놓쳤어. 두 번째 컷인데 자꾸 한 발 늦어. 에무는 그런 거 신경도 안 쓰는데 나는 자꾸 신경 써져. 내일 다시 맞춰봐야겠어.");
+        cases.put("real_insa", "어제 영화부 회의에서 누군가 나한테 인사했는데, 내가 너무 자동으로 작은 목소리로 고개만 까딱했대. 나중에 에무가 웃으면서 '네네는 왜 항상 그렇게 인사해?'라고 물어봤어. 생각해보니 낯가림이 극성인 거도 있고, 습관적으로 쎄하려는 건 아닌데 소리가 제멋대로인 거 같아. 다음엔 또 까먹어.");
+        cases.put("real_touya", "어제 랭크에서 토우야랑 붙었는데 또 리셋 속도에서 밀렸어. 토우야는 한 판 지고도 바로 평정 찾더라. 나도 그 멘탈 배우고 싶어. 다음엔 캐릭 바꿔서 다시 붙어볼 거야.");
+        cases.put("real_ichika", "오늘 이치카가 신곡 데모 들려줬는데 진짜 좋더라. 이치카는 늘 담담하게 툭 던지는데 그 안에 힘이 있어. 나도 저런 곡 써보고 싶다는 생각 들었어.");
+        cases.put("real_shizuku", "연습 끝나고 시즈쿠랑 잠깐 얘기했는데, 시즈쿠는 늘 차분하게 조언해줘. 오늘도 무리하지 말라고 하더라. 그 말이 이상하게 오래 남네.");
+        cases.put("real_lui", "방금 연습 끝냈는데 같은 곡 고음 부분에서 또 음정이 떨어져. 루이한테 얘기했더니 어깨에 힘 빼라고만 하는데, 알면서도 자꾸 몸이 경직되네. 내일 다시 해봐야겠어.");
+        java.util.Map<String,String> titles = java.util.Map.of("real_gyujeong","타이밍 놓쳤네","real_insa","인사가 자꾸 작아",
+                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네");
         for (var e : cases.entrySet()) {
             ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
             AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
@@ -426,8 +432,7 @@ class MersoomCommentGeneratorTest {
             MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
             when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
             MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
-            Commentable nenePost = new Commentable(new Post("p1",
-                    "real_gyujeong".equals(e.getKey()) ? "타이밍 놓쳤네" : "인사가 자꾸 작아",
+            Commentable nenePost = new Commentable(new Post("p1", titles.get(e.getKey()),
                     "네네", e.getValue(), 0, 0, 0, 0, 0, OffsetDateTime.now(), "nene_wonder", null), List.of());
             Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
                     "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());

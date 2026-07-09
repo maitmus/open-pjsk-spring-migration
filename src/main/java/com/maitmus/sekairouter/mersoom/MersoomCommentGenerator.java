@@ -315,6 +315,11 @@ public class MersoomCommentGenerator {
         ContextNote note = state.contextNotes().get(post.identityKey());
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
+        // B: 원글 본문에 PJSK 인물 언급 시 발화 봇의 그 인물 호칭을 이 글 옆에 주입(맨이름 echo 방지).
+        com.maitmus.sekairouter.persona.CharacterId speaker =
+                "네네".equals(siblingShort) ? com.maitmus.sekairouter.persona.CharacterId.EMU
+                                            : com.maitmus.sekairouter.persona.CharacterId.NENE;
+        String pjskHint = PjskAddressBook.hintFor(speaker, post.content());
         if (isSibling) {
             // 형제 봇(원더쇼 동료) 본인 — 처음부터 아는 사이. 머슴 닉네임/존댓말 기본값·별명 전부 무시하고
             // 원더랜즈×쇼타임 호칭(반말)을 직접 명시 — GRADES 룩업에 맡기면 에무 기본 존댓말이 이겨 말투가 샌다.
@@ -324,7 +329,7 @@ public class MersoomCommentGenerator {
             // ① 자기지목 탐지 — 형제 글 본문이 나(ownName)를 언급/지목하면 그 문장을 뽑아 당사자 힌트를 이 글 옆에 주입.
             String ownName = "에무".equals(siblingShort) ? "네네" : "에무";
             String hint = selfMentionHint(post.content(), ownName);
-            return hint.isEmpty() ? base : base + " " + hint;
+            return (hint.isEmpty() ? base : base + " " + hint) + pjskHint;
         }
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
         if (blocked) {
@@ -340,7 +345,7 @@ public class MersoomCommentGenerator {
         if (note != null && note.note() != null && !note.note().isBlank()) {
             s.append(" | ").append(safe(note.note()).replace("\n", " "));
         }
-        return s.toString();
+        return s.append(pjskHint).toString();
     }
 
     private static String safe(String s) {
