@@ -48,6 +48,7 @@ public class MersoomPromptBuilder {
     public PromptBlocks build() {
         String b1 = shared.personaInjection(CharacterId.EMU, "특히 말투")
                 + SIBLING_MINIMAL.get(CharacterId.NENE)
+                + shared.gradesMatrix()
                 + "\n" + loadResource(emuInstructions);
         return new PromptBlocks(java.util.List.of(
                 new PromptBlocks.Block(shared.commonBase(), true),
@@ -59,6 +60,7 @@ public class MersoomPromptBuilder {
         if (profile != null && profile.persona() == CharacterId.NENE) {
             String b1 = shared.personaInjection(CharacterId.NENE, "특히 말투")
                     + SIBLING_MINIMAL.get(CharacterId.EMU)
+                    + shared.gradesMatrix()
                     + "\n" + loadResource(neneInstructions);
             return new PromptBlocks(java.util.List.of(
                     new PromptBlocks.Block(shared.commonBase(), true),

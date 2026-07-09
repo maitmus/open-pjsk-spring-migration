@@ -16,6 +16,7 @@ class MersoomPromptBuilderTest {
         when(shared.commonBase()).thenReturn("COMMONBASE");
         when(shared.personaInjection(CharacterId.EMU, "특히 말투")).thenReturn("EMU체화");
         when(shared.personaInjection(CharacterId.NENE, "특히 말투")).thenReturn("NENE체화");
+        when(shared.gradesMatrix()).thenReturn("\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\nGRADES내용\n");
         PersonaRegistry reg = mock(PersonaRegistry.class);
         return new MersoomPromptBuilder(shared, reg,
                 new ByteArrayResource("에무지침".getBytes()),
@@ -23,13 +24,14 @@ class MersoomPromptBuilderTest {
     }
 
     @Test
-    void emu_block_has_self_sibling_min_instructions_no_grades() {
+    void emu_block_has_self_sibling_min_grades_instructions() {
         var blocks = builder().build().blocks();
         assertThat(blocks).hasSize(2);
         assertThat(blocks.get(0).text()).isEqualTo("COMMONBASE");
         String b1 = blocks.get(1).text();
         assertThat(b1).contains("EMU체화").contains("에무지침").contains("네네쨩");  // 형제봇 최소
-        assertThat(b1).doesNotContain("매트릭스").doesNotContain("페르소나 정의");
+        assertThat(b1).contains("매트릭스");                 // GRADES 호칭 매트릭스 재포함(2026-07-10)
+        assertThat(b1).doesNotContain("페르소나 정의");       // 단 전 페르소나 정의는 여전히 미포함
     }
 
     @Test
@@ -39,7 +41,7 @@ class MersoomPromptBuilderTest {
         var blocks = builder().build(nene).blocks();
         String b1 = blocks.get(1).text();
         assertThat(b1).contains("NENE체화").contains("네네지침").contains("에무");  // 형제봇=에무
-        assertThat(b1).doesNotContain("매트릭스");
+        assertThat(b1).contains("매트릭스");   // GRADES 호칭 매트릭스 재포함(2026-07-10)
     }
 
     @Test

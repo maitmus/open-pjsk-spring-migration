@@ -58,9 +58,16 @@ public class SharedPromptContent {
                 sb.append("## 사용자 정보 (USER.md)\n\n").append(c).append("\n"));
         sb.append("\n## 페르소나 정의\n\n");
         registry.all().values().forEach(p -> appendPersona(sb, p));
-        loadFile(baseDir, GRADES_FILE).ifPresent(c ->
-                sb.append("\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\n").append(c).append("\n"));
+        sb.append(gradesMatrix());
         return sb.toString();
+    }
+
+    /** 호칭·존댓말 매트릭스 (GRADES.md) 블록 — 발화·머슴 공용(머슴은 2026-07-10 재포함). */
+    public String gradesMatrix() {
+        Path baseDir = Paths.get(personaProperties.dir());
+        return loadFile(baseDir, GRADES_FILE)
+                .map(c -> "\n## 호칭·존댓말 매트릭스 (GRADES.md)\n\n" + c + "\n")
+                .orElse("");
     }
 
     /** 단일 캐릭터 체화 주입(머슴·아레나용). */

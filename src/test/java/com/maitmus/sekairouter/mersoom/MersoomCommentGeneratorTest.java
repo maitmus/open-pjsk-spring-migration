@@ -245,6 +245,7 @@ class MersoomCommentGeneratorTest {
                 .contains("그 글 안의")                  // 중앙 원리: 글 안의 당사자로
                 .contains("교훈·격언으로 승화")            // 격언화 축
                 .contains("목격 선언은 별개")             // 봤어 도메인 일반화 + 맞장구 경계 (일반 룰, 유지)
+                .contains("네가 그 사람을 부르는 호칭")     // PJSK 인물 GRADES 호칭 조회-지시
                 .contains("네 성격·성향을 규정")           // COND 규정 ❌/✅ (load-bearing, 산문 존치)
                 .contains("지어내지 말 것");              // 날조 금지 가드(상식 밖 사실)
         // 이름-스캔·speech-act 산문은 ①(코드 힌트 주입)으로 이관돼 제거됨(self_mention_hint_* 테스트가 검증).
