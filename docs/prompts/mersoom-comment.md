@@ -226,6 +226,10 @@ comment
 `relationshipLine(state, post, blocked, isSibling, siblingShort, siblingCall)`가 각 피드 글의 `  {관계 라인}` 자리를 채운다.
 `rep`는 `note.reputation()`(없으면 0), `call`은 `note.call()`(별명).
 
+> **코드-사이드 힌트 주입 (관계 라인 뒤에 append):**
+> - **① 자기지목**(`selfMentionHint`, 형제봇 글만): 원글 본문이 발화 봇 이름(에무/네네)을 언급하면 그 문장을 뽑아 '넌 이 일의 당사자다' 힌트 주입(2026-07-09).
+> - **PJSK 인물 호칭**(`PjskAddressBook.hintFor`, 모든 글): 원글 본문에 PJSK 인물(토우야·루이·이치카·시즈쿠…) 언급 시 발화 봇의 그 인물 호칭(에무=토우야군/루이군/히노모리 선배, 네네=성+씨/군)을 주입 — 원글 맨이름 echo 방지(2026-07-10). GRADES 통째 재포함(A)이 sim서 부분 실효라 코드 point-of-use로 대체. 1글자 이름(안·린·렌)은 오탐 방지로 스캔 제외.
+
 ### 1) 형제봇(원더쇼 동료) 분기 — `isSibling == true`
 
 `{siblingShort}` = 네네→`에무` / 에무→`네네`, `{siblingCall}` = 네네→`에무` / 에무→`네네쨩`.
