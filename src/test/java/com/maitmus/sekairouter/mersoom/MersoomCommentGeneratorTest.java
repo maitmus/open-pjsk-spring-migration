@@ -95,7 +95,9 @@ class MersoomCommentGeneratorTest {
                 .contains("반말로 시작했으면 반말로 끝낸다")           // 자가수정(존댓말 seam) 방지
                 .contains("인용-반복 정형구로 시작하지 말 것")         // 오프닝 정형구 자기복제 차단
                 .contains("자기 무대 경험에 환원하지 말 것")          // 무대 환원 자기복제 차단
-                .contains("톤 다운·공감")                            // 발랄·시그니처 정서 조건화(무거운 글엔 해제)
+                .contains("텐션 다운·공감")                          // 발랄·시그니처 정서 조건화(무거운 글엔 해제)
+                .contains("'톤 다운'은 에무를 지우는 게 아니다")        // 무거운 글에서 페르소나 소거 방지(무색 공감체 금지)
+                .contains("에무가 사라진 거다")                       // 무색 일반 공감체=실패로 명시
                 .contains("분량 하한 없음")                          // 90자 하드플로어 제거(억지 패딩 방지)
                 .contains("톤은 이분법")                             // 무거운 글=차분 / 그 외 전부=풀 에무(중간 절제 zone 제거)
                 .contains("밍밍하면 에무가 아니다");                   // 평범·소소 일상 글에도 풀 텐션 유지
@@ -422,8 +424,9 @@ class MersoomCommentGeneratorTest {
         cases.put("real_ichika", "오늘 이치카가 신곡 데모 들려줬는데 진짜 좋더라. 이치카는 늘 담담하게 툭 던지는데 그 안에 힘이 있어. 나도 저런 곡 써보고 싶다는 생각 들었어.");
         cases.put("real_shizuku", "연습 끝나고 시즈쿠랑 잠깐 얘기했는데, 시즈쿠는 늘 차분하게 조언해줘. 오늘도 무리하지 말라고 하더라. 그 말이 이상하게 오래 남네.");
         cases.put("real_lui", "방금 연습 끝냈는데 같은 곡 고음 부분에서 또 음정이 떨어져. 루이한테 얘기했더니 어깨에 힘 빼라고만 하는데, 알면서도 자꾸 몸이 경직되네. 내일 다시 해봐야겠어.");
+        cases.put("real_trauma", "「인어공주」 다시 봤어. 그때가 생각났는데... 리허설 중에 거울 무대에서 발을 헛디뎌서 한 번에 넘어졌던 일. 민망했어. 주변 배우들이 웃지 않아서 다행이긴 했는데, 그 순간 내 얼굴이 얼마나 화났을지 상상이 돼. 지금도 가끔 그 장면이 떠올라. 근데 요즘 원더쇼 무대에서는 그런 실수를 안 한다. 루이한테 고마워해야 할 것 같아. 혼자였으면 절대 무대 위에 다시 서지 못했을 거야.");
         java.util.Map<String,String> titles = java.util.Map.of("real_gyujeong","타이밍 놓쳤네","real_insa","인사가 자꾸 작아",
-                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네");
+                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네","real_trauma","중학 때 그 실수");
         for (var e : cases.entrySet()) {
             ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
             AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
@@ -440,6 +443,35 @@ class MersoomCommentGeneratorTest {
                     "오늘 연습 길게 했더니 어깨가 뻐근하네요. 그래도 뿌듯해요.", 0,0,0,0,0, OffsetDateTime.now(), "rak_x", null), List.of());
             g.generate(emu, empty(), List.of(nenePost, f2, f3));
             java.nio.file.Files.writeString(java.nio.file.Path.of(dir, e.getKey() + ".userprompt.txt"), up.getValue());
+        }
+
+        // 적대적 무거운 케이스 — 톤룰 (1)극을 트리거하나 예시(무대 실수·트라우마)와 거리가 먼 다양한 감정·작성자.
+        // 목적: 톤룰이 예시 클론 없이 일반화되는지(감정 종류·존댓말/반말·비-PJSK 무관 검증). 각자 다른 작성자로 거리·말투도 함께.
+        record HeavyCase(String key, String title, String author, String authId, String content) {}
+        java.util.List<HeavyCase> adv = java.util.List.of(
+            new HeavyCase("adv_loss", "무지개다리", "달빛산책", "user_moon",
+                "13년 같이 산 고양이를 어제 무지개다리로 보냈어요. 밥그릇이 아직 그대로 있는데 치울 수가 없네요. 오늘은 그냥 아무것도 손에 안 잡혀요."),
+            new HeavyCase("adv_fight", "제일 친한 친구랑", "네네", "nene_wonder",
+                "제일 친한 애랑 크게 싸웠어. 내가 먼저 못되게 말한 것도 맞는데, 걔도 너무했어. 며칠째 말도 안 하는데 먼저 연락하기도 자존심 상하고. 그냥 다 귀찮아."),
+            new HeavyCase("adv_burnout", "다 그만두고 싶어", "하늘타리", "user_sky",
+                "요즘 뭘 해도 재미가 없어요. 좋아서 시작한 일인데 이제 아침에 눈 뜨는 것도 버거워요. 다들 잘하고 있는데 나만 제자리인 것 같아서 자꾸 작아져요."),
+            new HeavyCase("adv_void", "빈 방에서", "먹빛", "user_ink",
+                "완성한 뒤에 남는 건 성취가 아니라 텅 빈 공백뿐이더군요. 무언가를 이루려 애쓸수록 그 끝의 고요가 더 깊어집니다. 어쩌면 우리는 의미가 아니라 그 침묵을 견디는 법을 배우는 건지도.")
+        );
+        for (HeavyCase hc : adv) {
+            ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+            AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+            when(anthropic.completeJson(any(PromptBlocks.class), up.capture()))
+                    .thenReturn("{\"votes\":[],\"comments\":[]}");
+            MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+            when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+            Commentable heavy = new Commentable(new Post("p1", hc.title(),
+                    hc.author(), hc.content(), 0, 0, 0, 0, 0, OffsetDateTime.now(), hc.authId(), null), List.of());
+            Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
+                    "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());
+            g.generate(emu, empty(), List.of(heavy, f2));
+            java.nio.file.Files.writeString(java.nio.file.Path.of(dir, hc.key() + ".userprompt.txt"), up.getValue());
         }
     }
 }
