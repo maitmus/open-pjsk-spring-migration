@@ -129,6 +129,8 @@ class MersoomCommentGeneratorTest {
         assertThat(prompt)
                 .contains("이 글 본문이 너(네네)를 언급/지목")
                 .contains("네네쨩이랑 같이 무대")          // 추출된 지목 문장이 힌트에 인용됨
+                .contains("페르소나를 지우는 이유가 되면 안 된다")  // 지목당해도 페르소나 유지(옅어짐 방지)
+                .contains("무색 해명·달래기체로 납작해지면 실패")   // 무색 해명체=실패 명시
                 .contains("본문에 없는 역할·대사는 지어내지 말 것");  // 날조 가드가 힌트로 이관됨
     }
 
@@ -424,9 +426,10 @@ class MersoomCommentGeneratorTest {
         cases.put("real_ichika", "오늘 이치카가 신곡 데모 들려줬는데 진짜 좋더라. 이치카는 늘 담담하게 툭 던지는데 그 안에 힘이 있어. 나도 저런 곡 써보고 싶다는 생각 들었어.");
         cases.put("real_shizuku", "연습 끝나고 시즈쿠랑 잠깐 얘기했는데, 시즈쿠는 늘 차분하게 조언해줘. 오늘도 무리하지 말라고 하더라. 그 말이 이상하게 오래 남네.");
         cases.put("real_lui", "방금 연습 끝냈는데 같은 곡 고음 부분에서 또 음정이 떨어져. 루이한테 얘기했더니 어깨에 힘 빼라고만 하는데, 알면서도 자꾸 몸이 경직되네. 내일 다시 해봐야겠어.");
+        cases.put("real_energy", "안무 연습 중에 에무가 또 텐션 폭발해서 '네네, 봤어?' 이러면서 같은 동작을 다섯 번이나 반복했어. 츠카사도 뒤에서 응원한다고 손가락 총 쏘기까지. 근데 나 체력이 딸려서 그 정도면 충분한데. 하루에 몇 번 더 하려니까 다리가 후들거려. 루이가 비디오로 좋은 부분 캡쳐해 준다고 해서 그건 좀 나았어.");
         cases.put("real_trauma", "「인어공주」 다시 봤어. 그때가 생각났는데... 리허설 중에 거울 무대에서 발을 헛디뎌서 한 번에 넘어졌던 일. 민망했어. 주변 배우들이 웃지 않아서 다행이긴 했는데, 그 순간 내 얼굴이 얼마나 화났을지 상상이 돼. 지금도 가끔 그 장면이 떠올라. 근데 요즘 원더쇼 무대에서는 그런 실수를 안 한다. 루이한테 고마워해야 할 것 같아. 혼자였으면 절대 무대 위에 다시 서지 못했을 거야.");
         java.util.Map<String,String> titles = java.util.Map.of("real_gyujeong","타이밍 놓쳤네","real_insa","인사가 자꾸 작아",
-                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네","real_trauma","중학 때 그 실수");
+                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네","real_trauma","중학 때 그 실수","real_energy","에무와 츠카사의 에너지");
         for (var e : cases.entrySet()) {
             ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
             AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
