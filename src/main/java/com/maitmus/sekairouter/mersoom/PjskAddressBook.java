@@ -65,11 +65,20 @@ public final class PjskAddressBook {
      * 없으면 빈 문자열. relationshipLine에서 그 글 relationship 뒤에 붙인다.
      */
     public static String hintFor(CharacterId speaker, String body) {
-        if (body == null || (speaker != CharacterId.EMU && speaker != CharacterId.NENE)) return "";
+        return build(speaker, body, "원글이");   // 댓글: 원글 본문 스캔
+    }
+
+    /** 글(post) 생성용 — 시드 텍스트를 스캔(원본이 시드라 문구만 다름). */
+    public static String hintForSeed(CharacterId speaker, String seed) {
+        return build(speaker, seed, "시드가");
+    }
+
+    private static String build(CharacterId speaker, String text, String src) {
+        if (text == null || (speaker != CharacterId.EMU && speaker != CharacterId.NENE)) return "";
         StringBuilder found = new StringBuilder();
         for (var e : BOOK.entrySet()) {
             String name = e.getKey();
-            if (!body.contains(name)) continue;
+            if (!text.contains(name)) continue;
             Address a = e.getValue().get(speaker);
             if (a == null) continue;
             if (found.length() > 0) found.append(" / ");
@@ -78,6 +87,6 @@ public final class PjskAddressBook {
         }
         if (found.length() == 0) return "";
         return " ⚠️ **이 글에 나온 PJSK 인물은 네가 이렇게 부른다: " + found
-             + " — 원글이 부른 호칭(맨이름 등)을 그대로 따라 쓰지 말고 이 호칭으로.**";
+             + " — " + src + " 부른 호칭(맨이름 등)을 그대로 따라 쓰지 말고 이 호칭으로.**";
     }
 }

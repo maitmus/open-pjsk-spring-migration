@@ -52,11 +52,13 @@ post
 
 `{topic}` = `seedPicker.pickTopic(persona)`, `{tone}` = `seedPicker.pickTone(persona)` (페르소나별 시드 토픽/톤).
 
+`{pjsk_hint}`(⚠️ 줄) = `PjskAddressBook.hintForSeed(persona, topic+" "+tone)` — 시드가 PJSK 인물을 맨이름으로 언급하면(예: 네네 '토우야와의 라이벌' 시드) 발화 페르소나 고유 호칭(에무=토우야군, 네네=아오야기군)으로 부르라는 point-of-use 힌트. 시드에 인물이 없으면 빈 줄(미출력). 댓글의 `hintFor`와 동일 원리·주소록, 문구만 '시드가 부른'.
+
 ```
 ## 오늘 글 시드 (이 각도로 작성)
 - 토픽: {topic}
 - 톤·도입 패턴: {tone}
-
+{pjsk_hint}
 ```
 
 ### ## 최근 내 글 (3개, reply 추적) — `feed.myTracked()`가 비어있지 않을 때만

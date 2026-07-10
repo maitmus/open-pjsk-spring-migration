@@ -98,6 +98,33 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
+    void seed_pjsk_name_injects_address_hint() {
+        // 시드가 PJSK 인물을 맨이름으로 언급하면(예: 네네 '토우야와의 라이벌' 시드) 페르소나 호칭 힌트가 프롬프트에 주입돼야 함.
+        // 시드는 랜덤이라 여러 번 돌려: (a) 힌트 불변식 — 시드에 토우야 있으면 반드시 '아오야기군' 힌트 동반, (b) 배선 검증 — 힌트가 실제로 뜸.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
+
+        boolean sawHint = false;
+        for (int i = 0; i < 400; i++) {
+            g.generate(nene, empty(), feed(), LocalDate.of(2026, 6, 19));
+            String p = userPrompt.getValue();
+            String seedBlock = p.substring(p.indexOf("## 오늘 글 시드"), p.indexOf("## 지시"));
+            if (seedBlock.contains("토우야")) {
+                assertThat(seedBlock).contains("아오야기군");   // 불변식: 이름 있으면 호칭 힌트 동반
+                sawHint = true;
+            }
+        }
+        assertThat(sawHint).isTrue();   // 배선 검증: 400회 중 토우야 시드가 최소 1회는 뜸
+    }
+
+    @Test
     void returns_post_when_shouldPost_true() {
         var gen = gen("{\"reasoning\":\"밝은 일상 글\",\"title\":\"벚꽃 산책기\","
                 + "\"content\":\"오늘 산책길에 벚꽃이 만개했어요. 에무는 너무 행복했어요. 원더호이!\",\"shouldPost\":true}");

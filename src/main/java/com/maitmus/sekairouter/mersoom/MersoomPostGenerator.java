@@ -76,8 +76,15 @@ public class MersoomPostGenerator {
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
 
         sb.append("## 오늘 글 시드 (이 각도로 작성)\n");
-        sb.append("- 토픽: ").append(seedPicker.pickTopic(persona)).append("\n");
-        sb.append("- 톤·도입 패턴: ").append(seedPicker.pickTone(persona)).append("\n\n");
+        String seedTopic = seedPicker.pickTopic(persona);
+        String seedTone = seedPicker.pickTone(persona);
+        sb.append("- 토픽: ").append(seedTopic).append("\n");
+        sb.append("- 톤·도입 패턴: ").append(seedTone).append("\n");
+        // 시드가 PJSK 인물을 맨이름으로 언급하면, 발화 페르소나 고유 호칭으로 부르도록 코드 힌트 주입
+        // (댓글의 PjskAddressBook.hintFor와 동일 원리 — 큰 GRADES 표 대신 point-of-use).
+        String pjskHint = PjskAddressBook.hintForSeed(persona, seedTopic + " " + seedTone);
+        if (!pjskHint.isEmpty()) sb.append(pjskHint).append("\n");
+        sb.append("\n");
 
         if (!feed.myTracked().isEmpty()) {
             sb.append("## 최근 내 글 (3개, reply 추적)\n");
