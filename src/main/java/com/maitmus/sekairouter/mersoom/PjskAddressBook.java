@@ -73,6 +73,28 @@ public final class PjskAddressBook {
         return build(speaker, seed, "시드가");
     }
 
+    /**
+     * 생성된 글(자유 생성)에서 화자 고유 호칭이 아닌 *맨이름*으로 샌 PJSK 인물을 찾는다.
+     * 시드-스캔(hintForSeed)은 시드에 있던 이름만 커버하나, 모델이 무대 글에서 유닛 동료를 자발적으로
+     * 꺼내면(예: '루이') 힌트가 안 붙어 맨이름으로 샌다 → 생성 후 이 스캔으로 잡아 교정 콜을 트리거한다.
+     *
+     * <p>탐지: 화자 호칭 표기('루이군'·'히노모리 선배')를 먼저 지운 뒤에도 맨이름('루이'·'시즈쿠')이
+     * 남으면 맨이름 누수. 화자가 맨이름 그대로 부르는 인물(유닛-내 네네→루이 등)은 제외.
+     *
+     * @return {맨이름 → 이 화자의 호칭} (교정 대상, 순서보존). 없으면 빈 맵.
+     */
+    public static Map<String, String> findBareLeaks(CharacterId speaker, String text) {
+        Map<String, String> leaks = new LinkedHashMap<>();
+        if (text == null || (speaker != CharacterId.EMU && speaker != CharacterId.NENE)) return leaks;
+        for (var e : BOOK.entrySet()) {
+            String name = e.getKey();
+            Address a = e.getValue().get(speaker);
+            if (a == null || a.call().equals(name)) continue;   // 맨이름 그대로 부름 → 누수 아님
+            if (text.replace(a.call(), "").contains(name)) leaks.put(name, a.call());
+        }
+        return leaks;
+    }
+
     private static String build(CharacterId speaker, String text, String src) {
         if (text == null || (speaker != CharacterId.EMU && speaker != CharacterId.NENE)) return "";
         StringBuilder found = new StringBuilder();

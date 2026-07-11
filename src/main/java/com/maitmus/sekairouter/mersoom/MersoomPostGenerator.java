@@ -34,7 +34,8 @@ public class MersoomPostGenerator {
     /** @return 게시할 글, 또는 게시 보류 시 {@code null}. */
     public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today) {
         String userPrompt = buildUserPrompt(profile, state, feed, today);
-        String raw = anthropic.completeJson(promptBuilder.build(profile), userPrompt);
+        var blocks = promptBuilder.build(profile);   // 교정 콜에서 재사용(같은 시스템 프리픽스 → 캐시 히트)
+        String raw = anthropic.completeJson(blocks, userPrompt);
 
         var parsed = MersoomEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
@@ -66,7 +67,45 @@ public class MersoomPostGenerator {
         if (title.length() > MAX_TITLE) title = title.substring(0, MAX_TITLE);
         if (content.length() > MAX_CONTENT) content = content.substring(0, MAX_CONTENT);
 
+        // 글 호칭 검증 게이트 — 모델이 자발적으로 꺼낸 PJSK 인물을 맨이름으로 불렀으면(시드-스캔 사각지대)
+        // 같은 시스템 프롬프트로 1회 교정한다(캐시 히트라 비용 미미). 교정 실패 시 원문 유지.
+        var leaks = PjskAddressBook.findBareLeaks(profile.persona(), title + "\n" + content);
+        if (!leaks.isEmpty()) {
+            var corrected = correctAddress(blocks, title, content, leaks);
+            if (corrected != null) {
+                log.info("Mersoom post 호칭 교정 적용: {} (맨이름→호칭)", leaks.keySet());
+                title = corrected.title();
+                content = corrected.content();
+            } else {
+                log.warn("Mersoom post 호칭 교정 실패({}) — 원문 유지", leaks.keySet());
+            }
+        }
+
         return new GeneratedPost(title, content);
+    }
+
+    /** 맨이름 누수를 화자 호칭으로 고치는 1회 교정 콜(내용·톤은 유지). 실패 시 null. */
+    private GeneratedPost correctAddress(com.maitmus.sekairouter.routing.PromptBlocks blocks,
+                                         String title, String content, Map<String, String> leaks) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 모드\npost-호칭교정\n\n");
+        sb.append("방금 네가 쓴 글이야. **내용·톤·길이·문장 구조는 그대로 두고**, 아래 PJSK 인물 호칭만 고쳐서 다시 내라")
+          .append("(조사·어미도 새 호칭에 맞춰 맞춤법대로 자연스럽게):\n");
+        for (var e : leaks.entrySet()) {
+            sb.append("- '").append(e.getKey()).append("' → **'").append(e.getValue()).append("'**\n");
+        }
+        sb.append("\n[제목] ").append(title).append("\n[본문] ").append(content).append("\n\n");
+        sb.append("## 출력 형식 (JSON 1개)\n{\"title\":\"<교정된 제목>\", \"content\":\"<교정된 본문>\"}\n");
+
+        var parsed = MersoomEnvelopeParser.parse(anthropic.completeJson(blocks, sb.toString()));
+        if (parsed.isEmpty()) return null;
+        String ct = parsed.get().title() == null ? "" : parsed.get().title().strip();
+        String cc = parsed.get().content() == null ? "" : parsed.get().content().strip();
+        if (ct.isBlank() || cc.isBlank()) return null;
+        if (!outputSanityGate.isClean(ct) || !outputSanityGate.isClean(cc)) return null;
+        if (ct.length() > MAX_TITLE) ct = ct.substring(0, MAX_TITLE);
+        if (cc.length() > MAX_CONTENT) cc = cc.substring(0, MAX_CONTENT);
+        return new GeneratedPost(ct, cc);
     }
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today) {

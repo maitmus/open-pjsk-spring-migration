@@ -54,6 +54,8 @@ post
 
 `{pjsk_hint}`(⚠️ 줄) = `PjskAddressBook.hintForSeed(persona, topic+" "+tone)` — 시드가 PJSK 인물을 맨이름으로 언급하면(예: 네네 '토우야와의 라이벌' 시드) 발화 페르소나 고유 호칭(에무=토우야군, 네네=아오야기군)으로 부르라는 point-of-use 힌트. 시드에 인물이 없으면 빈 줄(미출력). 댓글의 `hintFor`와 동일 원리·주소록, 문구만 '시드가 부른'.
 
+> **생성 후 호칭 검증 게이트(2026-07-11)**: 시드-스캔은 *시드에 있던* 이름만 커버 — 모델이 무대 글에서 유닛 동료(루이·츠카사)를 **자발적으로** 꺼내면 힌트가 안 붙어 맨이름으로 샜다(라이브 13:30 '무대 준비 중' 글에서 '루이' ×3 누수). 그래서 `MersoomPostGenerator.generate`가 생성 후 `PjskAddressBook.findBareLeaks(persona, title+content)`로 스캔 → 맨이름 누수가 있으면 **같은 시스템 프롬프트로 1회 교정 콜**(`## 모드 post-호칭교정`, 캐시 히트라 저비용)로 '루이'→'루이군'만 고쳐 재생성한다(내용·톤 유지, 조사 맞춤법 LLM 처리). 교정 실패 시 원문 유지. per-character 하드코딩 없이 PjskAddressBook 데이터 경유.
+
 ```
 ## 오늘 글 시드 (이 각도로 작성)
 - 토픽: {topic}

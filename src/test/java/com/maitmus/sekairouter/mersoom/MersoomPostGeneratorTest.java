@@ -14,6 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MersoomPostGeneratorTest {
@@ -122,6 +124,39 @@ class MersoomPostGeneratorTest {
             }
         }
         assertThat(sawHint).isTrue();   // 배선 검증: 400회 중 토우야 시드가 최소 1회는 뜸
+    }
+
+    @Test
+    void address_correction_gate_fixes_bare_pjsk_name_in_post() {
+        // 시드-스캔 사각지대: 모델이 자발적으로 '루이'(맨이름)를 꺼내면 → 생성 후 게이트가 잡아 교정 콜로 '루이군' 교정.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
+                .thenReturn("{\"title\":\"무대 준비\",\"content\":\"오늘 루이랑 안무 맞췄어요 원더호이\",\"shouldPost\":true}")  // 1차: 맨이름 누수
+                .thenReturn("{\"title\":\"무대 준비\",\"content\":\"오늘 루이군이랑 안무 맞췄어요 원더호이\"}");            // 교정 콜: 루이군
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+
+        var result = g.generate(EMU, empty(), feed(), LocalDate.of(2026, 7, 11));
+
+        assertThat(result).isNotNull();
+        assertThat(result.content()).contains("루이군");                 // 교정 적용
+        verify(anthropic, times(2)).completeJson(any(PromptBlocks.class), anyString());  // 원생성 + 교정 = 2콜
+    }
+
+    @Test
+    void no_correction_call_when_no_bare_leak() {
+        // 누수 없으면 교정 콜 안 함(1콜) — 불필요한 비용 방지.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
+                .thenReturn("{\"title\":\"벚꽃\",\"content\":\"오늘 산책 즐거웠어요 원더호이\",\"shouldPost\":true}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+
+        g.generate(EMU, empty(), feed(), LocalDate.of(2026, 7, 11));
+
+        verify(anthropic, times(1)).completeJson(any(PromptBlocks.class), anyString());
     }
 
     @Test
