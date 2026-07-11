@@ -3,7 +3,12 @@ package com.maitmus.sekairouter.mersoom;
 import com.maitmus.sekairouter.persona.CharacterId;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -95,9 +100,28 @@ public class MersoomSeedPicker {
         return pickTone(CharacterId.EMU);
     }
 
+    /**
+     * 최근 픽한 토픽을 이 개수만큼 배제(동적 시드) — 복원추출이라 최근 소재가 재선택돼 편중되던 문제 완화.
+     * 풀보다 작아야 함(NENE 18·EMU 20). 6 ≈ 최근 ~1.5일(4글/일) 내 같은 토픽 재등장 방지.
+     */
+    private static final int RECENT_WINDOW = 6;
+    private final Map<CharacterId, Deque<String>> recentTopics = new EnumMap<>(CharacterId.class);
+
     public String pickTopic(CharacterId persona) {
         List<String> pool = persona == CharacterId.NENE ? NENE_TOPIC_SEEDS : TOPIC_SEEDS;
-        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+        return pickAvoidingRecent(persona, pool);
+    }
+
+    /** 최근 배제하고 픽 → 기록. 후보 소진(윈도우≥풀) 시 전체 풀 폴백. */
+    private synchronized String pickAvoidingRecent(CharacterId persona, List<String> pool) {
+        Deque<String> recent = recentTopics.computeIfAbsent(persona, k -> new ArrayDeque<>());
+        List<String> candidates = new ArrayList<>(pool);
+        candidates.removeAll(recent);
+        if (candidates.isEmpty()) candidates = pool;
+        String pick = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+        recent.addLast(pick);
+        while (recent.size() > RECENT_WINDOW) recent.removeFirst();
+        return pick;
     }
 
     public String pickTone(CharacterId persona) {

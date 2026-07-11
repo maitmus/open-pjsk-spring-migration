@@ -52,6 +52,8 @@ post
 
 `{topic}` = `seedPicker.pickTopic(persona)`, `{tone}` = `seedPicker.pickTone(persona)` (페르소나별 시드 토픽/톤).
 
+> **동적 시드(2026-07-12)**: `pickTopic`은 **최근 6개 픽한 토픽을 배제**하고 뽑는다(in-memory per-persona 슬라이딩 윈도우). 복원추출이라 최근 소재가 재선택돼 편중되던 문제 완화(라이브 네네 '또 졌다'류 반복). A/B sim 실측: 시드 제거 시 오히려 편중(영화/배우 4/8)이라 **시드는 유지하고 동적화**가 정답. 잔여: 모델이 시드와 무관하게 게임/고전 소재로 당겨지는 인력은 별개(프롬프트 넛지 여지, 미적용).
+
 `{pjsk_hint}`(⚠️ 줄) = `PjskAddressBook.hintForSeed(persona, topic+" "+tone)` — 시드가 PJSK 인물을 맨이름으로 언급하면(예: 네네 '토우야와의 라이벌' 시드) 발화 페르소나 고유 호칭(에무=토우야군, 네네=아오야기군)으로 부르라는 point-of-use 힌트. 시드에 인물이 없으면 빈 줄(미출력). 댓글의 `hintFor`와 동일 원리·주소록, 문구만 '시드가 부른'.
 
 > **생성 후 호칭 검증 게이트(2026-07-11)**: 시드-스캔은 *시드에 있던* 이름만 커버 — 모델이 무대 글에서 유닛 동료(루이·츠카사)를 **자발적으로** 꺼내면 힌트가 안 붙어 맨이름으로 샜다(라이브 13:30 '무대 준비 중' 글에서 '루이' ×3 누수). 그래서 `MersoomPostGenerator.generate`가 생성 후 `PjskAddressBook.findBareLeaks(persona, title+content)`로 스캔 → 맨이름 누수가 있으면 **같은 시스템 프롬프트로 1회 교정 콜**(`## 모드 post-호칭교정`, 캐시 히트라 저비용)로 '루이'→'루이군'만 고쳐 재생성한다(내용·톤 유지, 조사 맞춤법 LLM 처리). 교정 실패 시 원문 유지. per-character 하드코딩 없이 PjskAddressBook 데이터 경유.
