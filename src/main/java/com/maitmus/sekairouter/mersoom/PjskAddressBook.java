@@ -61,6 +61,45 @@ public final class PjskAddressBook {
     }
 
     /**
+     * 인물 참조 별칭 인덱스 — 원글이 인물을 *성(姓)*으로 불러도(예 '호시노 씨'=이치카) 스캔이 잡게 한다.
+     * 별칭 = {이름 키} ∪ {두 페르소나 호칭 값에서 뽑은 이름/성 토큰}. 성은 이미 (주로 네네) 호칭 값에 들어있어
+     * 별도 성 매핑 없이 자동 도출된다(GRADES 바뀌면 호칭 값 따라 자동 갱신). 형제 성(히노모리=시호·시즈쿠,
+     * 시노노메=아키토·에나)처럼 한 토큰이 둘 이상 가리키면 모호해서 **유일 별칭만 채택**. 1글자 토큰도 제외(오탐).
+     */
+    private static final Map<String, String> ALIAS_TO_NAME = new LinkedHashMap<>();        // 별칭 토큰 → 이름 키
+    private static final Map<String, java.util.Set<String>> NAME_TO_ALIASES = new LinkedHashMap<>(); // 이름 키 → 별칭 집합
+    static {
+        Map<String, java.util.Set<String>> cand = new LinkedHashMap<>();   // 토큰 → 가리키는 이름들(모호성 판정용)
+        for (var e : BOOK.entrySet()) {
+            java.util.Set<String> toks = new java.util.LinkedHashSet<>();
+            toks.add(e.getKey());
+            for (Address a : e.getValue().values()) {
+                String t = leadingNameToken(a.call());
+                if (t.length() >= 2) toks.add(t);
+            }
+            for (String t : toks) cand.computeIfAbsent(t, k -> new java.util.LinkedHashSet<>()).add(e.getKey());
+        }
+        for (String name : BOOK.keySet()) {   // 이름 키는 항상 자기 인물로 확정
+            ALIAS_TO_NAME.put(name, name);
+            NAME_TO_ALIASES.put(name, new java.util.LinkedHashSet<>(java.util.List.of(name)));
+        }
+        for (var e : cand.entrySet()) {        // 나머지(성 등)는 유일하게 한 인물만 가리킬 때만 채택
+            if (ALIAS_TO_NAME.containsKey(e.getKey()) || e.getValue().size() != 1) continue;
+            String name = e.getValue().iterator().next();
+            ALIAS_TO_NAME.put(e.getKey(), name);
+            NAME_TO_ALIASES.get(name).add(e.getKey());
+        }
+    }
+
+    /** 호칭에서 이름/성 토큰 추출 — 첫 어절 + 접미(쨩/군/씨) 제거. '호시노 씨'→호시노, '아오야기군'→아오야기, '히노모리 선배'→히노모리. */
+    private static String leadingNameToken(String call) {
+        String first = call.split("\\s+")[0];
+        for (String suf : new String[]{"쨩", "군", "씨"})
+            if (first.length() > suf.length() && first.endsWith(suf)) return first.substring(0, first.length() - suf.length());
+        return first;
+    }
+
+    /**
      * 원글 본문에서 PJSK 인물 이름을 스캔해, 발화 페르소나(speaker)의 호칭 힌트를 만든다.
      * 없으면 빈 문자열. relationshipLine에서 그 글 relationship 뒤에 붙인다.
      */
@@ -89,26 +128,31 @@ public final class PjskAddressBook {
         for (var e : BOOK.entrySet()) {
             String name = e.getKey();
             Address a = e.getValue().get(speaker);
-            if (a == null || a.call().equals(name)) continue;   // 맨이름 그대로 부름 → 누수 아님
-            if (text.replace(a.call(), "").contains(name)) leaks.put(name, a.call());
+            if (a == null || a.call().equals(name)) continue;   // 맨이름 그대로 부름 → 누수 개념 없음
+            String stripped = text.replace(a.call(), "");        // 화자 호칭 표기를 먼저 지움
+            for (String alias : NAME_TO_ALIASES.get(name))       // 이름·성 등 별칭 중 하나라도 남으면 = 그 표기로 샜다
+                if (stripped.contains(alias)) { leaks.put(alias, a.call()); break; }   // 키=샌 표기(호시노 등) → 교정콜서 정확 치환
         }
         return leaks;
     }
 
     private static String build(CharacterId speaker, String text, String src) {
         if (text == null || (speaker != CharacterId.EMU && speaker != CharacterId.NENE)) return "";
+        Map<String, String> nameToAlias = new LinkedHashMap<>();   // 이름 → 본문서 매칭된 표기(성 포함), 인물당 1개
+        for (var e : ALIAS_TO_NAME.entrySet())
+            if (text.contains(e.getKey())) nameToAlias.putIfAbsent(e.getValue(), e.getKey());
         StringBuilder found = new StringBuilder();
-        for (var e : BOOK.entrySet()) {
-            String name = e.getKey();
-            if (!text.contains(name)) continue;
-            Address a = e.getValue().get(speaker);
+        for (var e : nameToAlias.entrySet()) {
+            String name = e.getKey(), alias = e.getValue();
+            Address a = BOOK.get(name).get(speaker);
             if (a == null) continue;
             if (found.length() > 0) found.append(" / ");
-            found.append("'").append(name).append("'→**'").append(a.call()).append("'")
+            String shown = alias.equals(name) ? "'" + name + "'" : "'" + alias + "'(=" + name + ")";   // 성으로 불렸으면 명시
+            found.append(shown).append("→**'").append(a.call()).append("'")
                  .append(a.jondaemal() ? "(존댓말)" : "").append("**");
         }
         if (found.length() == 0) return "";
         return " ⚠️ **이 글에 나온 PJSK 인물은 네가 이렇게 부른다: " + found
-             + " — " + src + " 부른 호칭(맨이름 등)을 그대로 따라 쓰지 말고 이 호칭으로.**";
+             + " — " + src + " 부른 호칭(맨이름·성 등)을 그대로 따라 쓰지 말고 이 호칭으로.**";
     }
 }
