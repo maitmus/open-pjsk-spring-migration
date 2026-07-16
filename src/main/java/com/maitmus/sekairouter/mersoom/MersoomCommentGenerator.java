@@ -4,9 +4,15 @@ import com.maitmus.sekairouter.mersoom.MersoomCollector.Commentable;
 import com.maitmus.sekairouter.mersoom.MersoomDtos.VoteType;
 import com.maitmus.sekairouter.mersoom.MersoomState.ContextNote;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.maitmus.sekairouter.persona.CharacterId;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
+import com.maitmus.sekairouter.routing.JsonExtractor;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
+import com.maitmus.sekairouter.routing.PromptBlocks;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -38,6 +44,11 @@ public class MersoomCommentGenerator {
     private static final int MAX_CONTENT = 500;
     private static final int MAX_COMMENTS = 3;   // 한 크론 댓글 상한 (머슴 권장 2~3, 한도 30분 20개)
     private static final ObjectMapper FEED_MAPPER = new ObjectMapper();   // 피드 직렬화 전용(손 이스케이프 금지)
+    private static final JsonMapper CORRECTION_MAPPER = JsonMapper.builder()   // 호칭 교정 응답 파싱(관대)
+            .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+            .enable(JsonReadFeature.ALLOW_TRAILING_COMMA)
+            .build();
+    static { CORRECTION_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); }
 
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
@@ -65,7 +76,8 @@ public class MersoomCommentGenerator {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
         String userPrompt = buildUserPrompt(profile, state, commentable);
-        String raw = anthropic.completeJson(promptBuilder.build(profile), userPrompt);
+        PromptBlocks blocks = promptBuilder.build(profile);   // 호칭 교정 콜에서 재사용(같은 시스템 프리픽스 → 캐시 히트)
+        String raw = anthropic.completeJson(blocks, userPrompt);
 
         var parsed = MersoomFeedJudgmentParser.parse(raw);
         if (parsed.isEmpty()) {
@@ -120,7 +132,56 @@ public class MersoomCommentGenerator {
             }
             comments.add(new CommentItem(targetId, text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text));
         }
+
+        // 4) 호칭 검증 게이트 — 힌트를 모델이 stochastic하게 무시하고 원글의 호칭(예 네네 '아오야기군')을 echo하면,
+        //    생성 후 findBareLeaks로 결정론적으로 잡아 같은 시스템 프롬프트로 1회 교정한다(글 게이트와 대칭, 캐시 히트).
+        comments = correctAddressInComments(blocks, profile.persona(), comments);
+
         return new FeedJudgment(votes, voteReasons, comments, coinedNicknames);
+    }
+
+    /** 생성된 댓글들에서 맨이름·성 누수를 화자 호칭으로 고치는 1회 교정 콜(누수 있을 때만). 실패 시 원문 유지. */
+    private List<CommentItem> correctAddressInComments(PromptBlocks blocks, CharacterId speaker, List<CommentItem> comments) {
+        List<Integer> idxs = new ArrayList<>();
+        List<Map<String, String>> leaksList = new ArrayList<>();
+        for (int i = 0; i < comments.size(); i++) {
+            Map<String, String> lk = PjskAddressBook.findBareLeaks(speaker, comments.get(i).text());
+            if (!lk.isEmpty()) { idxs.add(i); leaksList.add(lk); }
+        }
+        if (idxs.isEmpty()) return comments;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 모드\ncomment-호칭교정\n\n");
+        sb.append("방금 네가 쓴 댓글이야. **내용·톤·길이는 그대로**, 아래 항목의 PJSK 인물 호칭만 고쳐 다시 내라")
+          .append("(조사·어미도 새 호칭에 맞춰 맞춤법대로 자연스럽게):\n");
+        for (int k = 0; k < idxs.size(); k++) {
+            sb.append("[").append(k).append("] ").append(comments.get(idxs.get(k)).text()).append("\n");
+            for (var e : leaksList.get(k).entrySet())
+                sb.append("    - '").append(e.getKey()).append("' → **'").append(e.getValue()).append("'**\n");
+        }
+        sb.append("\n## 출력 형식 (JSON 1개)\n{\"fixed\":[{\"i\":<번호>,\"text\":\"<교정된 댓글>\"}]}\n");
+
+        try {
+            var fixed = CORRECTION_MAPPER.readTree(JsonExtractor.extract(anthropic.completeJson(blocks, sb.toString()))).get("fixed");
+            if (fixed == null || !fixed.isArray()) return comments;
+            List<CommentItem> out = new ArrayList<>(comments);
+            int applied = 0;
+            for (var f : fixed) {
+                if (f.get("i") == null || f.get("text") == null) continue;
+                int k = f.get("i").asInt(-1);
+                String t = f.get("text").asText("").strip();
+                if (k < 0 || k >= idxs.size() || t.isBlank() || !outputSanityGate.isClean(t)) continue;
+                if (t.length() > MAX_CONTENT) t = t.substring(0, MAX_CONTENT);
+                int ci = idxs.get(k);
+                out.set(ci, new CommentItem(comments.get(ci).targetId(), t));
+                applied++;
+            }
+            log.info("Mersoom comment 호칭 교정 적용: {}/{}건 (맨이름·성→호칭)", applied, idxs.size());
+            return out;
+        } catch (Exception ex) {
+            log.warn("Mersoom comment 호칭 교정 실패 — 원문 유지: {}", ex.toString());
+            return comments;
+        }
     }
 
     private static VoteType toVoteType(String s) {

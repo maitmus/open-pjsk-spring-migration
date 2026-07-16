@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MersoomCommentGeneratorTest {
@@ -36,6 +38,40 @@ class MersoomCommentGeneratorTest {
 
     private static Commentable post(String id, String title, String content) {
         return new Commentable(new Post(id, title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null), List.of());
+    }
+
+    @Test
+    void comment_address_gate_fixes_surname_echo() {
+        // 힌트를 stochastic하게 무시하고 에무가 '아오야기군'(네네 호칭)을 echo하면 → 게이트가 findBareLeaks로 잡아 교정 콜로 '토우야군'.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
+                .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[{\"targetIndex\":1,\"utterance\":\"아오야기군이랑 자꾸 붙으니까 더 강해지는 거겠지~ 화이팅!\"}]}")
+                .thenReturn("{\"fixed\":[{\"i\":0,\"text\":\"토우야군이랑 자꾸 붙으니까 더 강해지는 거겠지~ 화이팅!\"}]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        var j = g.generate(EMU, empty(), List.of(post("p1", "게임", "서바이벌 한 판 했어")));
+
+        assertThat(j).isNotNull();
+        assertThat(j.comments()).hasSize(1);
+        assertThat(j.comments().get(0).text()).contains("토우야군").doesNotContain("아오야기");   // 교정 적용
+        verify(anthropic, times(2)).completeJson(any(PromptBlocks.class), anyString());          // 생성 + 교정
+    }
+
+    @Test
+    void comment_gate_no_correction_when_clean() {
+        // 누수 없으면 교정 콜 안 함(1콜).
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), anyString()))
+                .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[{\"targetIndex\":1,\"utterance\":\"토우야군 손놀림 대단하네~ 화이팅!\"}]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+
+        g.generate(EMU, empty(), List.of(post("p1", "게임", "서바이벌 한 판")));
+
+        verify(anthropic, times(1)).completeJson(any(PromptBlocks.class), anyString());
     }
 
     private static List<Commentable> feed() {
@@ -426,11 +462,12 @@ class MersoomCommentGeneratorTest {
         cases.put("real_ichika", "오늘 이치카가 신곡 데모 들려줬는데 진짜 좋더라. 이치카는 늘 담담하게 툭 던지는데 그 안에 힘이 있어. 나도 저런 곡 써보고 싶다는 생각 들었어.");
         cases.put("real_shizuku", "연습 끝나고 시즈쿠랑 잠깐 얘기했는데, 시즈쿠는 늘 차분하게 조언해줘. 오늘도 무리하지 말라고 하더라. 그 말이 이상하게 오래 남네.");
         cases.put("real_lui", "방금 연습 끝냈는데 같은 곡 고음 부분에서 또 음정이 떨어져. 루이한테 얘기했더니 어깨에 힘 빼라고만 하는데, 알면서도 자꾸 몸이 경직되네. 내일 다시 해봐야겠어.");
+        cases.put("real_aoyagi", "오늘 한 판은 괜찮은 편이었어. 서바이벌 모드 끝자락에서 슬슬 리듬이 안 맞기 시작했는데, 마지막 스테이지에서 확 집중이 풀렸어. 문제는 아오야기군이 또 나한테 한 판 걸어왔는데, 그 녀석 손놀림이 최근에 더 정교해졌더라. 아오야기군한테 졌어. 다음 땐 피하지 않을 거야.");
         cases.put("real_surname", "오늘 발성 연습하다가 옛날 생각이 났어. 호시노 씨는 자세한 설명에 고개 끄덕끄덕하면서 따라하는데, 그 진지한 모습이 자꾸 옛날 나하고 겹쳐서. 지금은 에무랑 호시노 씨랑 같이 고음 부분 고쳐주니까 완전히 다르지만. 누군가 성장하는 걸 옆에서 보는 게 이런 느낌이구나 싶었어.");
         cases.put("real_energy", "안무 연습 중에 에무가 또 텐션 폭발해서 '네네, 봤어?' 이러면서 같은 동작을 다섯 번이나 반복했어. 츠카사도 뒤에서 응원한다고 손가락 총 쏘기까지. 근데 나 체력이 딸려서 그 정도면 충분한데. 하루에 몇 번 더 하려니까 다리가 후들거려. 루이가 비디오로 좋은 부분 캡쳐해 준다고 해서 그건 좀 나았어.");
         cases.put("real_trauma", "「인어공주」 다시 봤어. 그때가 생각났는데... 리허설 중에 거울 무대에서 발을 헛디뎌서 한 번에 넘어졌던 일. 민망했어. 주변 배우들이 웃지 않아서 다행이긴 했는데, 그 순간 내 얼굴이 얼마나 화났을지 상상이 돼. 지금도 가끔 그 장면이 떠올라. 근데 요즘 원더쇼 무대에서는 그런 실수를 안 한다. 루이한테 고마워해야 할 것 같아. 혼자였으면 절대 무대 위에 다시 서지 못했을 거야.");
         java.util.Map<String,String> titles = java.util.Map.of("real_gyujeong","타이밍 놓쳤네","real_insa","인사가 자꾸 작아",
-                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네","real_trauma","중학 때 그 실수","real_energy","에무와 츠카사의 에너지","real_surname","호시노 씨 가르치기");
+                "real_touya","토우야한테 또 밀렸다","real_ichika","이치카 신곡","real_shizuku","시즈쿠랑 얘기","real_lui","고음 부분 자꾸 튀네","real_trauma","중학 때 그 실수","real_energy","에무와 츠카사의 에너지","real_surname","호시노 씨 가르치기","real_aoyagi","서바이벌은 손놀림이");
         for (var e : cases.entrySet()) {
             ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
             AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
