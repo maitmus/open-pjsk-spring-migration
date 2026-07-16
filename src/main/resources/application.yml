@@ -20,6 +20,7 @@ logging:
       total-size-cap: 1GB
 
 discord:
+  enabled: ${DISCORD_ENABLED:true}                        # false면 JDA 초기화 스킵(발화·리액티브 대화 둘 다 휴면일 때 부팅 취약점·유휴연결 제거)
   router-token: ${DISCORD_ROUTER_TOKEN:}
   sekai-channel-id: ${SEKAI_CHANNEL_ID:}
   character-tokens:
