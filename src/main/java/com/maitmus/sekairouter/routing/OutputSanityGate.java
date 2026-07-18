@@ -32,6 +32,17 @@ public class OutputSanityGate {
             "as an ai", "i am unable", "i'm not able", "language model"
     );
 
+    /**
+     * 발행 직전 결정론적 오타 정규화 (페르소나 비종속). **항상 오답인 표기만** 안전 치환한다.
+     * - '에뮤'(영어 Emu를 음차해 오독) → '에무'(캐릭터명). 조사 무관(둘 다 '무' 종결)이라 안전하고,
+     *   에뮤(새)를 실제로 언급할 확률이 사실상 0이라 false-positive 없음.
+     * 새 케이스가 생기면 여기에 '항상 오답↔정답' 쌍만 추가(맥락 의존 치환은 넣지 말 것).
+     */
+    public String normalize(String text) {
+        if (text == null) return null;
+        return text.replace("에뮤", "에무");
+    }
+
     public boolean isClean(String text) {
         if (text == null || text.isBlank()) return true;
         for (String m : KO_MARKERS) {

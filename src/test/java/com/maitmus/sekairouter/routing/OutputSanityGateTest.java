@@ -40,4 +40,13 @@ class OutputSanityGateTest {
         assertThat(gate.isClean("")).isTrue();
         assertThat(gate.isClean(null)).isTrue();
     }
+
+    @Test
+    void normalize_fixes_emu_misspelling() {
+        // 영어 Emu 음차 오독 '에뮤' → '에무'(캐릭터명). 조사 무관.
+        assertThat(gate.normalize("에뮤도 리허설 때 그래요")).isEqualTo("에무도 리허설 때 그래요");
+        assertThat(gate.normalize("에뮤가 봤어! 에뮤는 알아")).isEqualTo("에무가 봤어! 에무는 알아");
+        assertThat(gate.normalize("에무는 그대로")).isEqualTo("에무는 그대로");   // 정상은 불변
+        assertThat(gate.normalize(null)).isNull();
+    }
 }

@@ -137,6 +137,11 @@ public class MersoomCommentGenerator {
         //    생성 후 findBareLeaks로 결정론적으로 잡아 같은 시스템 프롬프트로 1회 교정한다(글 게이트와 대칭, 캐시 히트).
         comments = correctAddressInComments(blocks, profile.persona(), comments);
 
+        // 결정론적 오타 정규화(에뮤→에무 등) — 발행 직전 마지막
+        comments = comments.stream()
+                .map(c -> new CommentItem(c.targetId(), outputSanityGate.normalize(c.text())))
+                .toList();
+
         return new FeedJudgment(votes, voteReasons, comments, coinedNicknames);
     }
 

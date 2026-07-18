@@ -81,6 +81,9 @@ public class MersoomPostGenerator {
             }
         }
 
+        // 결정론적 오타 정규화(에뮤→에무 등) — 발행 직전 마지막
+        title = outputSanityGate.normalize(title);
+        content = outputSanityGate.normalize(content);
         return new GeneratedPost(title, content);
     }
 
