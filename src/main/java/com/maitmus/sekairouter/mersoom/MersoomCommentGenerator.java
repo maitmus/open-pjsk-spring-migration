@@ -53,6 +53,7 @@ public class MersoomCommentGenerator {
     private final AnthropicClientWrapper anthropic;
     private final MersoomPromptBuilder promptBuilder;
     private final OutputSanityGate outputSanityGate;
+    private final com.maitmus.sekairouter.heartbeat.EventsCalendar eventsCalendar;
 
     /**
      * 피드 판정 결과.
@@ -210,6 +211,7 @@ public class MersoomCommentGenerator {
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
+        sb.append(MersoomEventHint.todayLine(eventsCalendar, profile.persona()));   // 오늘 생일·기념일이면 point-of-use 힌트
 
         sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
         sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")

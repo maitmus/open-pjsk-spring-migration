@@ -24,12 +24,18 @@ class MersoomPostGeneratorTest {
             new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
             com.maitmus.sekairouter.persona.CharacterId.EMU, java.util.Set.of());
 
+    private static com.maitmus.sekairouter.heartbeat.EventsCalendar noEvents() {
+        var c = mock(com.maitmus.sekairouter.heartbeat.EventsCalendar.class);
+        when(c.todayOverride()).thenReturn(java.util.Optional.empty());
+        return c;
+    }
+
     private MersoomPostGenerator gen(String llmReturn) {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         when(anthropic.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llmReturn);
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        return new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        return new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
     }
 
     private static CollectedFeed feed() {
@@ -44,7 +50,7 @@ class MersoomPostGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
                 com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
@@ -62,7 +68,7 @@ class MersoomPostGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 20));
 
@@ -77,7 +83,7 @@ class MersoomPostGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 26));
 
@@ -92,7 +98,7 @@ class MersoomPostGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 25));
 
@@ -108,7 +114,7 @@ class MersoomPostGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
                 com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
@@ -135,7 +141,7 @@ class MersoomPostGeneratorTest {
                 .thenReturn("{\"title\":\"무대 준비\",\"content\":\"오늘 루이군이랑 안무 맞췄어요 원더호이\"}");            // 교정 콜: 루이군
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
 
         var result = g.generate(EMU, empty(), feed(), LocalDate.of(2026, 7, 11));
 
@@ -152,7 +158,7 @@ class MersoomPostGeneratorTest {
                 .thenReturn("{\"title\":\"벚꽃\",\"content\":\"오늘 산책 즐거웠어요 원더호이\",\"shouldPost\":true}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate());
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed(), LocalDate.of(2026, 7, 11));
 

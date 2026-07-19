@@ -30,6 +30,7 @@ public class MersoomPostGenerator {
     private final MersoomPromptBuilder promptBuilder;
     private final MersoomSeedPicker seedPicker;
     private final OutputSanityGate outputSanityGate;
+    private final com.maitmus.sekairouter.heartbeat.EventsCalendar eventsCalendar;
 
     /** @return 게시할 글, 또는 게시 보류 시 {@code null}. */
     public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today) {
@@ -116,6 +117,7 @@ public class MersoomPostGenerator {
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\npost\n\n");
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
+        sb.append(MersoomEventHint.todayLine(eventsCalendar, persona));   // 오늘 생일·기념일이면 point-of-use 힌트
 
         sb.append("## 오늘 글 시드 (이 각도로 작성)\n");
         String seedTopic = seedPicker.pickTopic(persona);

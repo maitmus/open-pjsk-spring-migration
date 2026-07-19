@@ -33,11 +33,17 @@ class MersoomCommentGeneratorTest {
         when(anthropic.completeJson(any(PromptBlocks.class), anyString())).thenReturn(llmReturn);
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        return new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        return new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
     }
 
     private static Commentable post(String id, String title, String content) {
         return new Commentable(new Post(id, title, "닉", content, 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null), List.of());
+    }
+
+    private static com.maitmus.sekairouter.heartbeat.EventsCalendar noEvents() {
+        var c = mock(com.maitmus.sekairouter.heartbeat.EventsCalendar.class);
+        when(c.todayOverride()).thenReturn(java.util.Optional.empty());
+        return c;
     }
 
     @Test
@@ -49,7 +55,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"fixed\":[{\"i\":0,\"text\":\"토우야군이랑 자꾸 붙으니까 더 강해지는 거겠지~ 화이팅!\"}]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         var j = g.generate(EMU, empty(), List.of(post("p1", "게임", "서바이벌 한 판 했어")));
 
@@ -67,7 +73,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[{\"targetIndex\":1,\"utterance\":\"토우야군 손놀림 대단하네~ 화이팅!\"}]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), List.of(post("p1", "게임", "서바이벌 한 판")));
 
@@ -87,7 +93,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         CitizenProfile emuWithSibling = new CitizenProfile("emu", "에무",
                 new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
@@ -115,7 +121,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         CitizenProfile emu = new CitizenProfile("emu", "에무",
                 new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
@@ -148,7 +154,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
@@ -178,7 +184,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
@@ -205,7 +211,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
@@ -230,7 +236,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed());
 
@@ -254,7 +260,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed());
 
@@ -277,7 +283,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
 
         g.generate(EMU, empty(), feed());
 
@@ -300,7 +306,7 @@ class MersoomCommentGeneratorTest {
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+        MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
         CitizenProfile nene = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
                 com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
@@ -475,7 +481,7 @@ class MersoomCommentGeneratorTest {
                     .thenReturn("{\"votes\":[],\"comments\":[]}");
             MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
             when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
             Commentable nenePost = new Commentable(new Post("p1", titles.get(e.getKey()),
                     "네네", e.getValue(), 0, 0, 0, 0, 0, OffsetDateTime.now(), "nene_wonder", null), List.of());
             Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
@@ -506,7 +512,7 @@ class MersoomCommentGeneratorTest {
                     .thenReturn("{\"votes\":[],\"comments\":[]}");
             MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
             when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate());
+            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
             Commentable heavy = new Commentable(new Post("p1", hc.title(),
                     hc.author(), hc.content(), 0, 0, 0, 0, 0, OffsetDateTime.now(), hc.authId(), null), List.of());
             Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
