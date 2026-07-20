@@ -37,7 +37,7 @@ public final class MersoomEnvelopeParser {
     public static Optional<Envelope> parse(String raw) {
         if (raw == null || raw.isBlank()) return Optional.empty();
 
-        String wrapped = "[" + JsonQuoteRepair.escapeInnerQuotes(JsonExtractor.extract(raw)) + "]";
+        String wrapped = wrapObjects(JsonQuoteRepair.escapeInnerQuotes(JsonExtractor.extract(raw)));
         String reasoning = null;
         String utterance = null;
         String title = null;
@@ -69,5 +69,43 @@ public final class MersoomEnvelopeParser {
             return Optional.empty();
         }
         return Optional.of(new Envelope(reasoning, utterance, title, content, shouldPost));
+    }
+
+    /**
+     * 이스케이프 정규화된 문자열에서 균형 잡힌 최상위 {@code {…}} 객체만 골라
+     * {@code [obj1,obj2,…]} 배열로 이어붙인다. 객체 사이의 자연어·코드펜스(모델이
+     * self-correction으로 JSON을 다시 뱉는 경우 — reasoning만 있는 빈 객체 뒤에 프로즈 +
+     * 완성 객체를 다시 내는 사례)는 버린다. 이후 토큰 루프의 필드 last-wins 규칙이 마지막
+     * 완성 객체를 채택한다. 균형 객체를 하나도 못 찾으면 기존 동작({@code [입력]})으로 폴백.
+     */
+    private static String wrapObjects(String s) {
+        StringBuilder arr = new StringBuilder("[");
+        boolean inString = false;
+        boolean first = true;
+        int depth = 0;
+        int objStart = -1;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inString) {
+                if (c == '\\') { i++; continue; }   // 이스케이프 쌍 건너뛰기
+                if (c == '"') inString = false;
+                continue;
+            }
+            if (c == '"') { inString = true; continue; }
+            if (c == '{') {
+                if (depth == 0) objStart = i;
+                depth++;
+            } else if (c == '}' && depth > 0) {
+                depth--;
+                if (depth == 0 && objStart >= 0) {
+                    if (!first) arr.append(',');
+                    arr.append(s, objStart, i + 1);
+                    first = false;
+                    objStart = -1;
+                }
+            }
+        }
+        arr.append(']');
+        return first ? "[" + s + "]" : arr.toString();   // 균형 객체 0개면 폴백(절단 객체도 부분 파싱)
     }
 }

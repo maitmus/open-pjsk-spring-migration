@@ -81,6 +81,39 @@ class MersoomEnvelopeParserTest {
     }
 
     @Test
+    void picks_complete_object_after_reasoning_only_then_prose() {
+        // 라이브 절단 사례(2026-07-20 네네 생일): 모델이 reasoning만 든 JSON을 먼저 뱉고,
+        // 자연어로 "아, 잠깐! …다시 작성합니다:" 자각한 뒤 완성 JSON을 다시 냈다.
+        // 두 코드펜스 사이 프로즈로 파싱이 첫 객체에서 끊겨 title/content가 비어 보류됐던 것.
+        // 이제 균형 객체를 모두 골라 last-wins로 완성 객체(둘째)를 채택해야 한다.
+        String raw = """
+                ```json
+                {
+                  "reasoning": "첫 시도 — 글 없음"
+                }
+                ```
+
+                아, 잠깐! 위 JSON은 reasoning만 있고 글이 없네요. 다시 작성합니다:
+
+                ```json
+                {
+                  "reasoning": "둘째 시도 — 완성",
+                  "title": "리허설실 햇살이 따뜻해요~☆",
+                  "content": "오늘도 네네쨩 생일이라 더 반짝반짝한 기분이에요! 네네쨩, 생일 축하해요~☆",
+                  "shouldPost": true
+                }
+                ```
+                """;
+        var env = MersoomEnvelopeParser.parse(raw);
+
+        assertThat(env).isPresent();
+        assertThat(env.get().title()).isEqualTo("리허설실 햇살이 따뜻해요~☆");
+        assertThat(env.get().content()).contains("생일 축하해요");
+        assertThat(env.get().reasoning()).isEqualTo("둘째 시도 — 완성");   // last-wins
+        assertThat(env.get().shouldPost()).isTrue();
+    }
+
+    @Test
     void plain_text_without_json_is_empty() {
         // 봉투가 아닌 생 텍스트(구 포맷)는 게시 불가 신호로 empty 반환
         assertThat(MersoomEnvelopeParser.parse("그냥 댓글 텍스트입니다")).isEmpty();
