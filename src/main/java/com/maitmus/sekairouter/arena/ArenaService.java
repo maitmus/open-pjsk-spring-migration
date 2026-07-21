@@ -29,6 +29,7 @@ public class ArenaService {
     private final ArenaApiClient api;
     private final ArenaProposeGenerator proposeGenerator;
     private final ArenaFightGenerator fightGenerator;
+    private final ArenaPrepGenerator prepGenerator;
     private final ArenaStateStore stateStore;
     private final Clock clock;
     private final Object lock = new Object();
@@ -45,7 +46,7 @@ public class ArenaService {
     public void executeFight() {
         if (!properties.enabled()) return;
         synchronized (lock) {
-            doFight();
+            runFightOnce();
         }
     }
 
@@ -78,7 +79,7 @@ public class ArenaService {
         }
     }
 
-    private void doFight() {
+    void runFightOnce() {
         StatusResponse status = safeStatus();
         if (status == null || !"BATTLE".equalsIgnoreCase(status.phase()) || status.topic() == null) {
             log.info("Arena fight skip — phase={}", status == null ? null : status.phase());
@@ -93,11 +94,23 @@ public class ArenaService {
             existing = List.of();
         }
         String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
-        if (noOpposingSinceMyLastPost(existing, lockedSide, properties.fight().nickname())) {
+        String selfNick = properties.fight().nickname();
+
+        // prep — 상대(자기 아님) 글이 하나라도 있으면 게이트와 무관하게 실행(캐시 워밍 + 반박노트)
+        String rebuttalNotes = "";
+        boolean hasOpponentPost = existing.stream()
+                .anyMatch(p -> !p.isBlinded() && (selfNick == null || !selfNick.equals(p.nickname())));
+        if (hasOpponentPost) {
+            String notes = prepGenerator.generate(status.topic(), existing, lockedSide, selfNick);
+            rebuttalNotes = notes == null ? "" : notes;   // null-guard: fight 인자는 항상 non-null
+        }
+
+        // 결정론 게이트 — 그대로 유지
+        if (noOpposingSinceMyLastPost(existing, lockedSide, selfNick)) {
             log.info("Arena fight skip — 내 마지막 글 이후 상대편 신규 의견 없음 (일방 도배 방지)");
             return;
         }
-        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, properties.fight().nickname(), "");
+        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, selfNick, rebuttalNotes);
         if (decision == null) {
             log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
             return;
