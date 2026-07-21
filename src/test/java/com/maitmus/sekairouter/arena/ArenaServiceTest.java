@@ -105,7 +105,7 @@ class ArenaServiceTest {
     void fight_skips_when_not_BATTLE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "PROPOSE", null));
         service().executeFight();
-        verify(fightGen, never()).generate(any(), any(), any(), any());
+        verify(fightGen, never()).generate(any(), any(), any(), any(), any());
         verify(api, never()).fight(any(), any(), any());
     }
 
@@ -113,7 +113,7 @@ class ArenaServiceTest {
     void fight_posts_in_BATTLE_phase() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
         when(api.fightPosts(any())).thenReturn(List.of());
-        when(fightGen.generate(any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거임"));
+        when(fightGen.generate(any(), any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거임"));
         when(api.fight(any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
 
         service().executeFight();
@@ -137,7 +137,7 @@ class ArenaServiceTest {
 
         svc.executeFight();
 
-        verify(fightGen, never()).generate(any(), any(), any(), any());
+        verify(fightGen, never()).generate(any(), any(), any(), any(), any());
         verify(api, never()).fight(any(), any(), any());
     }
 
@@ -148,7 +148,7 @@ class ArenaServiceTest {
         when(api.fightPosts(any())).thenReturn(List.of(
                 new FightPost("b", "쿠사나기 네네", "CON", "반대", 0, 0, false, T1),
                 new FightPost("c", "어떤찬성러", "PRO", "재반박", 0, 0, false, T2)));
-        when(fightGen.generate(any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거"));
+        when(fightGen.generate(any(), any(), any(), any(), any())).thenReturn(new ArenaFightGenerator.FightDecision("CON", "논거"));
         when(api.fight(any(), any(), any())).thenReturn(new CreateResponse(true, "id"));
         ArenaService svc = service();
         when(stateStore.lockedSide(any(), any())).thenReturn(Optional.of("CON"));
@@ -170,7 +170,7 @@ class ArenaServiceTest {
 
         svc.executeFight();
 
-        verify(fightGen, never()).generate(any(), any(), any(), any());
+        verify(fightGen, never()).generate(any(), any(), any(), any(), any());
         verify(api, never()).fight(any(), any(), any());
     }
 
@@ -178,7 +178,7 @@ class ArenaServiceTest {
     void fight_skips_when_generator_null() {
         when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
         when(api.fightPosts(any())).thenReturn(List.of());
-        when(fightGen.generate(any(), any(), any(), any())).thenReturn(null);
+        when(fightGen.generate(any(), any(), any(), any(), any())).thenReturn(null);
         service().executeFight();
         verify(api, never()).fight(any(), any(), any());
     }

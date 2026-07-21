@@ -21,7 +21,7 @@ class ArenaPromptBlocksTest {
     private static final Topic TOPIC = new Topic("t1", "제목", "p", "c");
 
     @Test
-    void fight_generator_sends_uncached_nene_block_over_commonBase() {
+    void fight_generator_shares_cached_persona_prefix() {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<PromptBlocks> cap = ArgumentCaptor.forClass(PromptBlocks.class);
         when(anthropic.completeJson(cap.capture(), any())).thenReturn("{\"shouldFight\":false}");
@@ -31,14 +31,15 @@ class ArenaPromptBlocksTest {
         when(reg.get(CharacterId.NENE)).thenReturn(
                 new Persona(CharacterId.NENE, "쿠사나기 네네", PersonaType.HUMAN_SEKAI, "네네내용"));
 
-        new ArenaFightGenerator(anthropic, shared, new OutputSanityGate(), reg)
-                .generate(TOPIC, java.util.List.of(), null, "쿠사나기 네네");
+        new ArenaFightGenerator(anthropic, new ArenaPersonaBlocks(shared, reg), new OutputSanityGate())
+                .generate(TOPIC, java.util.List.of(), null, "쿠사나기 네네", "");
 
         PromptBlocks p = cap.getValue();
         assertThat(p.blocks().get(0).text()).isEqualTo("COMMONBASE");
-        assertThat(p.blocks().get(0).cache()).isTrue();
-        assertThat(p.blocks().get(1).cache()).isFalse();   // 아레나 tail uncached
+        assertThat(p.blocks().get(0).cache()).isFalse();                       // commonBase는 브레이크포인트 아님
+        assertThat(p.blocks().get(1).cache()).isTrue();                        // 페르소나 블록 = 캐시 프리픽스 끝
         assertThat(p.blocks().get(1).text()).contains("네네내용");
+        assertThat(p.blocks().get(p.blocks().size() - 1).cache()).isFalse();   // SUFFIX uncached
     }
 
     @Test

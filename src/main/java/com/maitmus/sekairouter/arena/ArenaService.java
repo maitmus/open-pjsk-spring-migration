@@ -97,7 +97,7 @@ public class ArenaService {
             log.info("Arena fight skip — 내 마지막 글 이후 상대편 신규 의견 없음 (일방 도배 방지)");
             return;
         }
-        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, properties.fight().nickname());
+        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, properties.fight().nickname(), "");
         if (decision == null) {
             log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
             return;
