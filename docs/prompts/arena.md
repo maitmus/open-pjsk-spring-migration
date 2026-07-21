@@ -13,10 +13,11 @@
 
 > 참고: 작업 지시는 발의 제너레이터를 "에무"로 표기했으나, 코드(`ArenaProposeGenerator`)는 쿠사나기 네네를 주입·지칭한다. 본 문서는 코드를 충실히 따른다.
 
-프롬프트 조립 방식: 2블록 `[commonBase (cached), 네네persona+SUFFIX (UNcached)]`.
+프롬프트 조립 방식: 3블록 `[commonBase (cached), 네네persona (cached), SUFFIX (UNcached)]`.
 
-- **commonBase** = `SharedPromptContent.commonBase()` (events.json + 출력 공통 규칙, 캐시 대상) — 발화/머슴 commonBase와 byte-identical로 공유 캐시
-- **네네persona+SUFFIX** = `nenePersona + SUFFIX` (네네 페르소나 정의 + 모드별 지침) — **캐시 안 함**: 아레나 fight 크론 주기(2h)가 Anthropic prefix-cache TTL(1h)을 초과해 캐시가 만료되므로, cache_control을 달면 캐시 hit 없이 2× write penalty만 발생한다.
+- **commonBase** = `SharedPromptContent.commonBase()` — fight와 byte-identical 공유 캐시
+- **네네persona** = `nenePersona` 정의 — fight와 byte-identical 공유 캐시
+- **SUFFIX** = fight 모드 지침 (uncached) — prep과는 다른 suffix
 
 user 프롬프트는 `buildUserPrompt()` / `USER` 상수로 별도 전달한다.
 

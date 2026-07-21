@@ -26,7 +26,7 @@ public class ArenaPersonaBlocks {
     /** prep·fight 공통 캐시 프리픽스 2블록. 두 번째(페르소나) 블록만 cache=true. */
     public List<PromptBlocks.Block> cachedPrefix() {
         Persona nene = personaRegistry.get(CharacterId.NENE);
-        String content = (nene != null && nene.content() != null) ? nene.content() : "";
+        String content = (nene.content() != null) ? nene.content() : "";
         String personaBlock = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다\n" + content + "\n";
         return List.of(
                 new PromptBlocks.Block(shared.commonBase(), false),
