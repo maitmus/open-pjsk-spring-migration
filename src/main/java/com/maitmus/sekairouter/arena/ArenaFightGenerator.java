@@ -2,18 +2,15 @@ package com.maitmus.sekairouter.arena;
 
 import com.maitmus.sekairouter.arena.ArenaDtos.FightPost;
 import com.maitmus.sekairouter.arena.ArenaDtos.Topic;
-import com.maitmus.sekairouter.persona.CharacterId;
-import com.maitmus.sekairouter.persona.Persona;
-import com.maitmus.sekairouter.persona.PersonaRegistry;
 import com.maitmus.sekairouter.routing.AnthropicClientWrapper;
 import com.maitmus.sekairouter.routing.OutputSanityGate;
 import com.maitmus.sekairouter.routing.PromptBlocks;
-import com.maitmus.sekairouter.routing.SharedPromptContent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -31,9 +28,8 @@ public class ArenaFightGenerator {
     private static final int MAX_CONTENT = 1000;
 
     private final AnthropicClientWrapper anthropic;
-    private final SharedPromptContent shared;
+    private final ArenaPersonaBlocks personaBlocks;
     private final OutputSanityGate backstop;
-    private final PersonaRegistry personaRegistry;
 
     public record FightDecision(String side, String content) {}
 
@@ -54,20 +50,18 @@ public class ArenaFightGenerator {
             """;
 
     /**
-     * @param lockedSide   이미 이 토픽에 고정한 입장(PRO/CON). null이면 첫 턴 — 자유 선택.
-     * @param selfNickname 네네 자신의 닉(자기 이전 글 식별용).
+     * @param lockedSide    이미 이 토픽에 고정한 입장(PRO/CON). null이면 첫 턴 — 자유 선택.
+     * @param selfNickname  네네 자신의 닉(자기 이전 글 식별용).
+     * @param rebuttalNotes 사전 준비한 반박 논지 참고(선택, null/blank면 무시).
      * @return PRO/CON + 논거, 또는 보류 시 {@code null}. 락이 걸렸으면 side는 항상 lockedSide.
      */
-    public FightDecision generate(Topic topic, List<FightPost> existing, String lockedSide, String selfNickname) {
-        // 공유 prefix(전체 페르소나)는 캐시 유지. suffix에 네네 정의를 직접 주입해 포커스(희석 방지).
-        Persona nene = personaRegistry.get(CharacterId.NENE);
-        String nenePersona = "\n## 너는 쿠사나기 네네 — 아래 정의를 그대로 체화한다 (특히 말투)\n"
-                + (nene != null && nene.content() != null ? nene.content() : "") + "\n";
+    public FightDecision generate(Topic topic, List<FightPost> existing, String lockedSide,
+                                   String selfNickname, String rebuttalNotes) {
         String lockedNorm = normalizeSide(lockedSide);
-        String raw = anthropic.completeJson(new PromptBlocks(java.util.List.of(
-                new PromptBlocks.Block(shared.commonBase(), true),
-                new PromptBlocks.Block(nenePersona + SUFFIX, false))),
-                buildUserPrompt(topic, existing, lockedNorm, selfNickname));
+        List<PromptBlocks.Block> blocks = new ArrayList<>(personaBlocks.cachedPrefix());
+        blocks.add(new PromptBlocks.Block(SUFFIX, false));
+        String raw = anthropic.completeJson(new PromptBlocks(blocks),
+                buildUserPrompt(topic, existing, lockedNorm, selfNickname, rebuttalNotes));
         var parsed = ArenaEnvelopeParser.parse(raw);
         if (parsed.isEmpty()) {
             log.warn("Arena fight 보류 — 봉투 파싱 실패: {}",
@@ -109,7 +103,8 @@ public class ArenaFightGenerator {
         };
     }
 
-    private String buildUserPrompt(Topic topic, List<FightPost> existing, String lockedSide, String selfNickname) {
+    private String buildUserPrompt(Topic topic, List<FightPost> existing, String lockedSide,
+                                    String selfNickname, String rebuttalNotes) {
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\narena-fight\n");
         sb.append("## 오늘의 토론 주제\n");
@@ -153,6 +148,10 @@ public class ArenaFightGenerator {
             sb.append(lockedSide == null ? "## 상대·기타 논거 (반박 참고)\n" : "## 같은 편·기타 논거 (참고)\n").append(ctx).append("\n");
         }
 
+        if (rebuttalNotes != null && !rebuttalNotes.isBlank()) {
+            sb.append("## 네가 준비한 반박 포인트 (참고 — 그대로 베끼지 말고 논지로만 활용)\n")
+              .append(rebuttalNotes.strip()).append("\n\n");
+        }
         sb.append("## 지시\n");
         if (lockedSide != null) {
             sb.append("★ 너의 고정 입장: **").append(lockedSide).append("**. 이 토픽에서 이미 ")
