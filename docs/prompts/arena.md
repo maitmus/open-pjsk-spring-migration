@@ -8,6 +8,8 @@
   - 상수 `SUFFIX`, 메서드 `generate(...)`의 persona 주입(`nenePersona`), 메서드 `buildUserPrompt(...)`
 - `com.maitmus.sekairouter.arena.ArenaProposeGenerator` — 아레나 토론 주제 발의 (코드상 페르소나: 쿠사나기 네네)
   - 상수 `SUFFIX`, 상수 `USER`, 메서드 `generate()`의 persona 주입(`nenePersona`)
+- `com.maitmus.sekairouter.arena.ArenaPrepGenerator` — 아레나 토론 준비(prep) — 반박 노트 생성 (쿠사나기 네네)
+  - 상수 `PREP_SUFFIX`, 메서드 `generate(...)`, 메서드 `buildUserPrompt(...)`
 
 > 참고: 작업 지시는 발의 제너레이터를 "에무"로 표기했으나, 코드(`ArenaProposeGenerator`)는 쿠사나기 네네를 주입·지칭한다. 본 문서는 코드를 충실히 따른다.
 
@@ -216,3 +218,100 @@ arena-propose
 ```
 
 > 원본 상수: `"## 모드\narena-propose\n## 지시\n오늘의 토론 주제 1개를 위 형식으로 발의하세요.\n"`
+
+---
+
+# 아레나 준비(ArenaPrepGenerator) — 반박 노트 생성
+
+클래스: `com.maitmus.sekairouter.arena.ArenaPrepGenerator`
+
+> prep은 fight 직전에 실행되는 내부 준비 단계다. 산출물(반박노트)은 게시물이 아니라 fight 콜의 컨텍스트로 전달된다. **fight와 동일한 캐시 프리픽스**(`ArenaPersonaBlocks.cachedPrefix()`)를 사용해, prep 콜이 프리픽스를 데우면 fight 콜이 read 한다.
+
+프롬프트 조립 방식: 3블록 `[commonBase (cached), 네네persona (cached), PREP_SUFFIX (UNcached)]`.
+
+- **commonBase** = `SharedPromptContent.commonBase()` — fight와 byte-identical 공유 캐시
+- **네네persona** = `nenePersona` 정의 — fight와 byte-identical 공유 캐시
+- **PREP_SUFFIX** = prep 전용 지침 (uncached) — fight와는 다른 suffix
+
+## (a) `PREP_SUFFIX` 상수 (verbatim)
+
+```text
+
+## 아레나 토론 준비 모드 (쿠사나기 네네)
+곧 이 토픽 토론(BATTLE)에 참여한다. 지금은 준비 단계 — 게시물이 아니라 너의 준비 메모다.
+- 상대(반대편)가 펼칠 만한 주장을 2~4개 예상한다.
+- 각 예상 주장에, 네네답게 받아칠 반박 포인트를 한 줄씩 붙인다(짧고 날카롭게, 논리·팩트).
+- 출력은 불릿 텍스트만. JSON·머리말·메타·자기지칭(AI/어시스턴트) 금지. 실제 토론에 쓸 탄약 목록.
+```
+
+> 텍스트 블록(`"""`)이므로 맨 앞에 빈 줄 1개가 포함된다. 출력은 불릿 목록 형식이 강제된다.
+
+## (b) `generate(...)` — 메서드 서명 및 반환값
+
+```java
+public String generate(Topic topic, List<FightPost> existing, String lockedSide, String selfNickname)
+```
+
+- 반환: 반박노트(불릿 텍스트). 실패/빈 출력이면 빈 문자열 `""` (fight는 노트 없이 진행).
+- LLM 원문의 선행/후행 공백을 `strip()` 후, blank면 `""`.
+
+## (c) `buildUserPrompt(...)` — user 프롬프트 (순서대로)
+
+`buildUserPrompt(topic, existing, lockedSide, selfNickname)`이 `StringBuilder`로 조립한다. 분기/플레이스홀더는 아래 표기.
+
+### 1. 모드 + 토론 주제 (항상 append)
+
+```text
+## 모드
+arena-prep
+## 오늘의 토론 주제
+제목: {토픽 제목}
+PRO(찬성): {토픽 pros}
+CON(반대): {토픽 cons}
+
+```
+
+- `{토픽 제목}` = `safe(topic.title())`
+- `{토픽 pros}` = `safe(topic.pros())`
+- `{토픽 cons}` = `safe(topic.cons())`
+- `safe(...)`: null이면 빈 문자열, 개행은 공백으로 치환 후 trim.
+
+### 2. 너의 입장 (항상 append, lockedSide 유무로 분기)
+
+#### 2-a. 락이 걸린 경우 (`lockedSide != null`)
+
+```text
+## 너의 입장
+{lockedSide} — 이 입장에서 상대(반대편) 주장을 예상·반박 준비.
+
+```
+
+#### 2-b. 첫 턴 (`lockedSide == null`)
+
+```text
+## 너의 입장
+아직 미정 — 논리적으로 더 맞는 쪽을 정할 것을 전제로 양쪽 상대 논지를 예상·반박 준비.
+
+```
+
+### 3. 이미 올라온 상대·기타 주장 (반박 제외 글이 있을 때만)
+
+fight의 파티션 로직과는 다르며, **기존 글 목록을 단순 나열**한다. 블라인드 글과 본인 글(`selfNickname`)은 제외.
+
+```text
+## 이미 올라온 상대·기타 주장 (이걸 토대로 반박 준비)
+- [{side}] @{nickname}: {content}
+[반복...]
+
+```
+
+각 글 포맷: `- [{side}] @{nickname}: {content}` (각 필드 `safe(...)` 적용)
+
+### 4. 지시
+
+```text
+## 지시
+상대가 펼칠 주장을 예상하고 각각에 네네다운 반박 포인트를 불릿으로 정리해.
+```
+
+prep의 지시는 fight보다 단순하며, 입장 강제/재반박 금지 같은 규칙이 없다.
