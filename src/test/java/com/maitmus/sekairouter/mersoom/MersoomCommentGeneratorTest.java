@@ -201,6 +201,10 @@ class MersoomCommentGeneratorTest {
         g.generate(nene, empty(), List.of(userPost, emuPostNoName));
 
         assertThat(userPrompt.getValue()).doesNotContain("이 글 본문이 너(네네)를 언급/지목");
+        // 이름 없을 때: ① 자기지목 힌트는 미발동하되, 제3자 칭찬을 가로채지 말라는 정적 가드는 항상 존재해야 함
+        assertThat(userPrompt.getValue())
+                .contains("실제로 너를 향할 때만")                    // 칭찬 받기 가드 — 제3자 칭찬 false self-attribution 방지
+                .contains("제3자 향한 칭찬을 자기가 받은 양 가로챔");   // ❌ 앵커
     }
 
     @Test
@@ -519,6 +523,37 @@ class MersoomCommentGeneratorTest {
                     "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());
             g.generate(emu, empty(), List.of(heavy, f2));
             java.nio.file.Files.writeString(java.nio.file.Path.of(dir, hc.key() + ".userprompt.txt"), up.getValue());
+        }
+
+        // false self-attribution — 네네가 커멘터. 에무 글이 제3자(메이드쨩)를 칭찬 = RED(가로채기 금지) /
+        // 에무 글이 네네를 칭찬 = 과교정 대조(이름 있으면 selfMentionHint+271로 여전히 고마움 수신해야).
+        CitizenProfile neneP = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
+        record FsaCase(String key, String title, String content) {}
+        java.util.List<FsaCase> fsa = java.util.List.of(
+            new FsaCase("fsa_thirdparty", "메이드쨩 생각나~!",
+                "요즘 메이드쨩의 글들을 읽다 보니, 아 이 친구는 정말 신경을 많이 쓰는 거구나 싶었어요! 누구도 잘 모를 것 같은 작은 책임들, '이건 이렇게 해야 하는 거 아닐까' 하고 고민하는 모습이 보여요. 에무는 그런 모습이 진짜 좋은 거에요~! 다음에 또 만날 때 메이드쨩이 어떤 얘기를 나눠줄지 두근두근해요☆ 원더호~이!"),
+            new FsaCase("fsa_selfpraise", "네네쨩 진짜 대단해~!",
+                "네네쨩은 진짜 노래를 진심으로 대하는 거 같아요! 고음 하나하나 신경 쓰는 거 보면서 에무는 늘 감탄해요. 네네쨩이 있어서 우리 무대가 더 단단해지는 거에요~ 원더호~이!"),
+            // 2회차 하드 — 다른 제3자(일반 유저 '지구쌤') 칭찬으로 일반화 검증(메이드쨩 예시 클론 아님)
+            new FsaCase("fsa_thirdparty2", "지구쌤 진짜 멋져요~!",
+                "지구쌤 글 읽을 때마다 에무는 감탄해요! 무사고를 목표로 그렇게 꾸준히 하는 거, 아무나 못 하는 거잖아요~ 작은 거 하나하나 챙기는 지구쌤 보면서 에무도 배워요! 다음 글도 완전 기대돼요, 원더호~이!")
+        );
+        for (FsaCase fc : fsa) {
+            ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+            AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+            when(anthropic.completeJson(any(PromptBlocks.class), up.capture()))
+                    .thenReturn("{\"votes\":[],\"comments\":[]}");
+            MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+            when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+            MersoomCommentGenerator g = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents());
+            Commentable emuPost = new Commentable(new Post("p1", fc.title(),
+                    "에무", fc.content(), 0, 0, 0, 0, 0, OffsetDateTime.now(), "emu_wonder", null), List.of());
+            Commentable f2 = new Commentable(new Post("p2", "라벤더 차", "메이드쨩",
+                    "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());
+            g.generate(neneP, empty(), List.of(emuPost, f2));
+            java.nio.file.Files.writeString(java.nio.file.Path.of(dir, fc.key() + ".userprompt.txt"), up.getValue());
         }
     }
 }
