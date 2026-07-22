@@ -109,7 +109,9 @@ public class ArenaService {
                 if (stored.isEmpty() || oppCount > stored.get().oppCount()) {
                     String notes = prepGenerator.generate(status.topic(), existing, lockedSide, selfNick);
                     rebuttalNotes = notes == null ? "" : notes;
-                    stateStore.saveNotes(today, topicId, rebuttalNotes, oppCount);
+                    if (!rebuttalNotes.isBlank()) {
+                        stateStore.saveNotes(today, topicId, rebuttalNotes, oppCount);
+                    }
                 } else {
                     rebuttalNotes = stored.get().notes();
                 }

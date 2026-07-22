@@ -105,7 +105,7 @@ class ArenaServiceFightWiringTest {
     }
 
     @org.junit.jupiter.api.Test
-    void prep_regenerated_only_when_opponent_count_increased() {
+    void prep_reused_when_opponent_count_unchanged() {
         ArenaApiClient api = mock(ArenaApiClient.class);
         when(api.status()).thenReturn(battleStatus());
         java.time.OffsetDateTime t = java.time.OffsetDateTime.parse("2026-07-23T02:00:00Z");
@@ -153,6 +153,55 @@ class ArenaServiceFightWiringTest {
         verify(prep).generate(any(),any(),any(),anyString());                 // 재생성
         verify(store).saveNotes(any(), eq("t1"), eq("- 새 노트"), eq(2));       // 저장(현재 상대수 2)
         verify(fight).generate(any(),any(),any(),anyString(),eq("- 새 노트"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void prep_regenerated_when_stored_count_lower_than_current() {
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        java.time.OffsetDateTime t = java.time.OffsetDateTime.parse("2026-07-23T02:00:00Z");
+        when(api.fightPosts(any())).thenReturn(java.util.List.of(
+                new FightPost("o1","특붕이","PRO","A",0,0,false,t),
+                new FightPost("o2","히후미","PRO","B",0,0,false,t)));   // 현재 2
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.of("CON"));
+        when(store.notes(any(), eq("t1")))
+                .thenReturn(java.util.Optional.of(new ArenaStateStore.StoredNotes("- 옛 노트", 1)));  // 저장=1
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        when(prep.generate(any(),any(),any(),anyString())).thenReturn("- 갱신 노트");
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),eq("- 갱신 노트"))).thenReturn(null);
+
+        svc(api, mock(ArenaProposeGenerator.class), fight, prep, store).runFightOnce();
+
+        verify(prep).generate(any(),any(),any(),anyString());                       // 재생성
+        verify(store).saveNotes(any(), eq("t1"), eq("- 갱신 노트"), eq(2));           // 새 count 저장
+        verify(fight).generate(any(),any(),any(),anyString(),eq("- 갱신 노트"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void blank_regenerated_notes_are_not_saved() {
+        // 재생성 분기인데 prep이 빈 값을 반환 → 저장된 좋은 노트를 blank로 덮지 않는다(saveNotes 호출 자체가 없어야).
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        java.time.OffsetDateTime t = java.time.OffsetDateTime.parse("2026-07-23T02:00:00Z");
+        when(api.fightPosts(any())).thenReturn(java.util.List.of(
+                new FightPost("o1","특붕이","PRO","A",0,0,false,t),
+                new FightPost("o2","히후미","PRO","B",0,0,false,t)));   // 현재 2
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.of("CON"));
+        when(store.notes(any(), eq("t1")))
+                .thenReturn(java.util.Optional.of(new ArenaStateStore.StoredNotes("- 옛 노트", 1)));  // 저장=1 → 재생성 분기
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        when(prep.generate(any(),any(),any(),anyString())).thenReturn("");   // transient blank
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),eq(""))).thenReturn(null);
+
+        svc(api, mock(ArenaProposeGenerator.class), fight, prep, store).runFightOnce();
+
+        verify(prep).generate(any(),any(),any(),anyString());
+        verify(store, never()).saveNotes(any(), any(), anyString(), anyInt());   // blank는 저장 안 함
+        verify(fight).generate(any(),any(),any(),anyString(),eq(""));            // fight엔 그대로 blank 전달
     }
 
     @org.junit.jupiter.api.Test
