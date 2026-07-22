@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
@@ -24,6 +25,7 @@ import java.util.List;
 public class ArenaService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final int LAST_FIGHT_HOUR = 19;   // fight-cron(0 5 12-19)의 마지막 시각 — 이 틱 뒤 노트 초기화
 
     private final ArenaProperties properties;
     private final ArenaApiClient api;
@@ -87,45 +89,62 @@ public class ArenaService {
         }
         LocalDate today = LocalDate.now(clock.withZone(KST));
         String topicId = status.topic().id();
-        List<FightPost> existing;
         try {
-            existing = api.fightPosts(today);
-        } catch (Exception e) {
-            existing = List.of();
-        }
-        String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
-        String selfNick = properties.fight().nickname();
-
-        // prep — 상대(자기 아님) 글이 하나라도 있으면 게이트와 무관하게 실행(캐시 워밍 + 반박노트)
-        String rebuttalNotes = "";
-        boolean hasOpponentPost = existing.stream()
-                .anyMatch(p -> !p.isBlinded() && (selfNick == null || !selfNick.equals(p.nickname())));
-        if (hasOpponentPost) {
-            String notes = prepGenerator.generate(status.topic(), existing, lockedSide, selfNick);
-            rebuttalNotes = notes == null ? "" : notes;   // null-guard: fight 인자는 항상 non-null
-        }
-
-        // 결정론 게이트 — 그대로 유지
-        if (noOpposingSinceMyLastPost(existing, lockedSide, selfNick)) {
-            log.info("Arena fight skip — 내 마지막 글 이후 상대편 신규 의견 없음 (일방 도배 방지)");
-            return;
-        }
-        var decision = fightGenerator.generate(status.topic(), existing, lockedSide, selfNick, rebuttalNotes);
-        if (decision == null) {
-            log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
-            return;
-        }
-        try {
-            var resp = api.fight(properties.fight(), decision.side(), decision.content());
-            boolean ok = resp != null && resp.success();
-            log.info("Arena fight created: success={} side={} len={} locked={}",
-                    ok, decision.side(), decision.content().length(), lockedSide != null);
-            // 첫 성공 시 입장 고정 — 이후 턴은 이 side로 락(같은 값 재기록은 무해).
-            if (ok) {
-                stateStore.recordSide(today, topicId, decision.side());
+            List<FightPost> existing;
+            try {
+                existing = api.fightPosts(today);
+            } catch (Exception e) {
+                existing = List.of();
             }
-        } catch (Exception e) {
-            log.warn("Arena fight 실패 (쿨다운 등) — 스킵: {}", e.getMessage());
+            String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
+            String selfNick = properties.fight().nickname();
+
+            // 반박노트 — 상대 글 수가 저장 시점보다 늘었을 때만 재생성·저장, 아니면 저장본 재사용(정체 토픽 헛수고 방지)
+            String rebuttalNotes = "";
+            int oppCount = (int) existing.stream()
+                    .filter(p -> !p.isBlinded() && (selfNick == null || !selfNick.equals(p.nickname())))
+                    .count();
+            if (oppCount > 0) {
+                var stored = stateStore.notes(today, topicId);
+                if (stored.isEmpty() || oppCount > stored.get().oppCount()) {
+                    String notes = prepGenerator.generate(status.topic(), existing, lockedSide, selfNick);
+                    rebuttalNotes = notes == null ? "" : notes;
+                    if (!rebuttalNotes.isBlank()) {
+                        stateStore.saveNotes(today, topicId, rebuttalNotes, oppCount);
+                    }
+                } else {
+                    rebuttalNotes = stored.get().notes();
+                }
+            }
+
+            // 결정론 게이트 — 그대로 유지
+            if (noOpposingSinceMyLastPost(existing, lockedSide, selfNick)) {
+                log.info("Arena fight skip — 내 마지막 글 이후 상대편 신규 의견 없음 (일방 도배 방지)");
+                return;
+            }
+            var decision = fightGenerator.generate(status.topic(), existing, lockedSide, selfNick, rebuttalNotes);
+            if (decision == null) {
+                log.info("Arena fight skip — 생성 보류 (shouldFight=false 또는 백스톱)");
+                return;
+            }
+            try {
+                var resp = api.fight(properties.fight(), decision.side(), decision.content());
+                boolean ok = resp != null && resp.success();
+                log.info("Arena fight created: success={} side={} len={} locked={}",
+                        ok, decision.side(), decision.content().length(), lockedSide != null);
+                // 첫 성공 시 입장 고정 — 이후 턴은 이 side로 락(같은 값 재기록은 무해).
+                if (ok) {
+                    stateStore.recordSide(today, topicId, decision.side());
+                }
+            } catch (Exception e) {
+                log.warn("Arena fight 실패 (쿨다운 등) — 스킵: {}", e.getMessage());
+            }
+        } finally {
+            // 하루 마지막 fight 시각이면 이 토픽 노트 초기화(게이트 skip·보류·성공 무관).
+            // date-scope 자동 리셋의 명시 안전망 — 다음날 새 토픽 대비.
+            if (LocalTime.now(clock.withZone(KST)).getHour() == LAST_FIGHT_HOUR) {
+                stateStore.clearNotes(today, topicId);
+            }
         }
     }
 

@@ -28,6 +28,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ArenaStateStore {
 
+    public record StoredNotes(String notes, int oppCount) {}
+
     private final ArenaProperties properties;
     private final ObjectMapper objectMapper;
 
@@ -57,9 +59,42 @@ public class ArenaStateStore {
         return Optional.of(s.side());
     }
 
-    /** 토픽에 입장을 고정(첫 fight 성공 시). 같은 값 재기록은 무해(idempotent). */
+    /** 토픽에 입장을 고정(첫 fight 성공 시). 같은 값 재기록은 무해(idempotent). 기존 notes는 보존. */
     public void recordSide(LocalDate date, String topicId, String side) {
-        save(new ArenaState(date.toString(), topicId, side));
+        ArenaState cur = load();
+        boolean sameTopic = Objects.equals(cur.date(), date.toString())
+                && Objects.equals(cur.topicId(), topicId);
+        String notes = sameTopic ? cur.rebuttalNotes() : null;
+        Integer cnt = sameTopic ? cur.notesOppCount() : null;
+        save(new ArenaState(date.toString(), topicId, side, notes, cnt));
+    }
+
+    /** 오늘·해당 토픽의 저장된 반박노트. 날짜/토픽 불일치나 노트 없으면 빈 값. */
+    public Optional<StoredNotes> notes(LocalDate date, String topicId) {
+        ArenaState s = load();
+        if (s.rebuttalNotes() == null || s.rebuttalNotes().isBlank()) return Optional.empty();
+        if (!Objects.equals(s.date(), date.toString())) return Optional.empty();
+        if (!Objects.equals(s.topicId(), topicId)) return Optional.empty();
+        int cnt = s.notesOppCount() == null ? 0 : s.notesOppCount();
+        return Optional.of(new StoredNotes(s.rebuttalNotes(), cnt));
+    }
+
+    /** 반박노트 저장(같은 date+topic이면 기존 side 보존). */
+    public void saveNotes(LocalDate date, String topicId, String notes, int oppCount) {
+        ArenaState cur = load();
+        boolean sameTopic = Objects.equals(cur.date(), date.toString())
+                && Objects.equals(cur.topicId(), topicId);
+        String side = sameTopic ? cur.side() : null;
+        save(new ArenaState(date.toString(), topicId, side, notes, oppCount));
+    }
+
+    /** 반박노트만 비움(같은 date+topic이면 side 보존). */
+    public void clearNotes(LocalDate date, String topicId) {
+        ArenaState cur = load();
+        boolean sameTopic = Objects.equals(cur.date(), date.toString())
+                && Objects.equals(cur.topicId(), topicId);
+        if (!sameTopic) return;   // 다른 토픽이면 건드릴 노트 없음
+        save(new ArenaState(date.toString(), topicId, cur.side(), null, null));
     }
 
     private void save(ArenaState state) {
