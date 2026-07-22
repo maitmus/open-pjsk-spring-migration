@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -101,5 +102,79 @@ class ArenaServiceFightWiringTest {
 
         verify(prep).generate(any(), any(), any(), anyString());          // prep은 돌았고
         verify(fight, never()).generate(any(), any(), any(), anyString(), anyString());  // fight는 게이트에 막힘
+    }
+
+    @org.junit.jupiter.api.Test
+    void prep_regenerated_only_when_opponent_count_increased() {
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        java.time.OffsetDateTime t = java.time.OffsetDateTime.parse("2026-07-23T02:00:00Z");
+        // 상대 PRO 글 2개
+        when(api.fightPosts(any())).thenReturn(java.util.List.of(
+                new FightPost("o1","특붕이","PRO","A",0,0,false,t),
+                new FightPost("o2","히후미","PRO","B",0,0,false,t)));
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.of("CON"));
+        // 저장된 노트가 oppCount=2 (현재도 2) → 재생성 안 함, 재사용
+        when(store.notes(any(), eq("t1")))
+                .thenReturn(java.util.Optional.of(new ArenaStateStore.StoredNotes("- 저장된 노트", 2)));
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),eq("- 저장된 노트"))).thenReturn(null);
+
+        svc(api, mock(ArenaProposeGenerator.class), fight, prep, store).runFightOnce();
+
+        verify(prep, never()).generate(any(),any(),any(),anyString());        // 재생성 안 함
+        verify(store, never()).saveNotes(any(),any(),anyString(),anyInt());
+        verify(fight).generate(any(),any(),any(),anyString(),eq("- 저장된 노트"));  // 저장본 사용
+    }
+
+    @org.junit.jupiter.api.Test
+    void prep_regenerated_and_saved_when_new_opponent_post() {
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        java.time.OffsetDateTime t = java.time.OffsetDateTime.parse("2026-07-23T02:00:00Z");
+        when(api.fightPosts(any())).thenReturn(java.util.List.of(
+                new FightPost("o1","특붕이","PRO","A",0,0,false,t),
+                new FightPost("o2","히후미","PRO","B",0,0,false,t)));   // 현재 상대 2개
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.empty());  // 첫 턴 → 게이트 통과
+        when(store.notes(any(), eq("t1"))).thenReturn(java.util.Optional.empty());       // 저장 노트 없음
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        when(prep.generate(any(),any(),any(),anyString())).thenReturn("- 새 노트");
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),eq("- 새 노트")))
+                .thenReturn(new ArenaFightGenerator.FightDecision("CON","논거"));
+        when(api.fight(any(),anyString(),anyString()))
+                .thenReturn(new com.maitmus.sekairouter.mersoom.MersoomDtos.CreateResponse(true,"p1"));
+
+        svc(api, mock(ArenaProposeGenerator.class), fight, prep, store).runFightOnce();
+
+        verify(prep).generate(any(),any(),any(),anyString());                 // 재생성
+        verify(store).saveNotes(any(), eq("t1"), eq("- 새 노트"), eq(2));       // 저장(현재 상대수 2)
+        verify(fight).generate(any(),any(),any(),anyString(),eq("- 새 노트"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void clears_notes_at_last_fight_hour() {
+        // Clock을 19시(KST)로 → 마지막 fight 시각 → clearNotes 호출
+        java.time.Clock c19 = java.time.Clock.fixed(
+                java.time.Instant.parse("2026-07-23T10:00:00Z"),   // UTC 10:00 = KST 19:00
+                java.time.ZoneId.of("Asia/Seoul"));
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        when(api.fightPosts(any())).thenReturn(java.util.List.of());
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.empty());
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),anyString())).thenReturn(null);
+        ArenaProperties props = mock(ArenaProperties.class);
+        when(props.enabled()).thenReturn(true);
+        when(props.fight()).thenReturn(new ArenaProperties.Account("id","pw","쿠사나기 네네"));
+        new ArenaService(props, api, mock(ArenaProposeGenerator.class), fight, prep, store, c19)
+                .runFightOnce();
+
+        verify(store).clearNotes(any(), eq("t1"));
     }
 }
