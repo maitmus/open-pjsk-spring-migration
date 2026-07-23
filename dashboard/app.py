@@ -226,6 +226,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  .친밀{background:#2b4a2b;color:#9f9} .우호{background:#26384d;color:#9cf} .경계{background:#4d2626;color:#f99} .중립{background:#333;color:#bbb} .차단{background:#402038;color:#f9c;border:1px solid #d6f}
  .ok{color:#7e7} .warn{color:#f96} .small{font-size:12px;color:#c8cee0}
  .nene{border-left:3px solid #b59;padding-left:8px;margin:6px 0}
+ .notes{margin:6px 0;border-left:3px solid #59b;padding-left:8px} .notes summary{cursor:pointer;font-size:13px;font-weight:600;color:#cdd6f4;padding:2px 0;list-style:none} .notes summary::-webkit-details-marker{display:none} .notes summary::before{content:'▸ ';color:#59b} .notes[open] summary::before{content:'▾ '} .notesbody{white-space:pre-wrap;font-size:12px;color:#c8cee0;line-height:1.55;padding:6px 0 2px}
  .repsec{margin-bottom:12px}
  .part{background:#3a2f12;color:#e8c06a;border:1px solid #5a4a1e}
 </style></head><body>
@@ -253,6 +254,7 @@ async function load(){
    `<div class=row><span>페이즈</span><span>${esc(a.phase||'-')}</span></div>`+
    `<div class=row><span>토픽</span><span class=small>${esc(a.topic||'-')}</span></div>`+
    `<div class=row><span>side 락</span><span class=pill>${esc(lk.side||'-')}</span></div>`+
+   (lk.rebuttalNotes?`<details class=notes><summary>반박 노트 <span class=muted>상대글 ${lk.notesOppCount??'-'}건 기준</span></summary><div class=notesbody>${esc(lk.rebuttalNotes)}</div></details>`:'')+
    a.nene_posts.map(p=>`<div class=nene><b>[${esc(p.side)}]</b> ↑${p.up} ↓${p.dn}<br><span class=small>${esc(p.content)}</span></div>`).join('');
   const repBlock=(label,r)=>r?
    `<div class=repsec><div class=muted><b>${label}</b> · ${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</div>`+
