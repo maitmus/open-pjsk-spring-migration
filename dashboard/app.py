@@ -227,7 +227,7 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
  .ok{color:#7e7} .warn{color:#f96} .small{font-size:12px;color:#c8cee0}
  .nene{border-left:3px solid #b59;padding-left:8px;margin:6px 0}
  .notes{margin:6px 0;border-left:3px solid #59b;padding-left:8px} .notes summary{cursor:pointer;font-size:13px;font-weight:600;color:#cdd6f4;padding:2px 0;list-style:none} .notes summary::-webkit-details-marker{display:none} .notes summary::before{content:'▸ ';color:#59b} .notes[open] summary::before{content:'▾ '} .notesbody{white-space:pre-wrap;font-size:12px;color:#c8cee0;line-height:1.55;padding:6px 0 2px}
- .repsec{margin-bottom:12px}
+ .repcols{display:grid;grid-template-columns:1fr 1fr;gap:10px} .repsec{margin-bottom:0} .repsec>summary{cursor:pointer;list-style:none;padding:3px 0;color:#9ad;font-size:12px;font-weight:600} .repsec>summary::-webkit-details-marker{display:none} .repsec>summary::before{content:'▸ ';color:#59b} .repsec[open]>summary::before{content:'▾ '}
  .part{background:#3a2f12;color:#e8c06a;border:1px solid #5a4a1e}
 </style></head><body>
 <h1>🎌 sekai-router 대시보드 <span id=now class=muted></span></h1>
@@ -257,10 +257,11 @@ async function load(){
    (lk.rebuttalNotes?`<details class=notes><summary>반박 노트 <span class=muted>상대글 ${lk.notesOppCount??'-'}건 기준</span></summary><div class=notesbody>${esc(lk.rebuttalNotes)}</div></details>`:'')+
    a.nene_posts.map(p=>`<div class=nene><b>[${esc(p.side)}]</b> ↑${p.up} ↓${p.dn}<br><span class=small>${esc(p.content)}</span></div>`).join('');
   const repBlock=(label,r)=>r?
-   `<div class=repsec><div class=muted><b>${label}</b> · ${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</div>`+
-   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.cls}">${x.tier}</span></div>`).join('')+`</div>`:'';
+   `<details class=repsec open><summary><b>${label}</b> · ${r.count} · fixedAvoid ${r.fixed_avoid.length}</summary>`+
+   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.cls}">${x.tier}</span></div>`).join('')+`</details>`:'';
   const rep=d.reputation||{};
-  document.getElementById('rep').innerHTML=repBlock('에무',rep.emu)+repBlock('네네',rep.nene)||'<div class=muted>없음</div>';
+  const repInner=repBlock('에무',rep.emu)+repBlock('네네',rep.nene);
+  document.getElementById('rep').innerHTML=repInner?`<div class=repcols>${repInner}</div>`:'<div class=muted>없음</div>';
   document.getElementById('cmt').innerHTML=
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
@@ -286,5 +287,6 @@ function layout(){
  grid.style.height=Math.max(...colH)+'px';
 }
 window.addEventListener('resize', layout);
+document.addEventListener('toggle', ()=>layout(), true);   // details(평판·반박노트) 접기/펴기 시 masonry 재배치 — 카드 겹침 방지
 load(); setInterval(load, 15000);
 </script></body></html>"""
