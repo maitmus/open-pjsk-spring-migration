@@ -64,7 +64,9 @@ class ArenaPrepGeneratorTest {
         assertThat(used.get(1).text()).isEqualTo(blocks.cachedPrefix().get(1).text());
         assertThat(used.get(1).cache()).isTrue();
         assertThat(used.get(used.size() - 1).cache()).isFalse();
-        assertThat(used.get(used.size() - 1).text()).contains("토론 준비");
+        assertThat(used.get(used.size() - 1).text()).contains("토론 준비")
+                .contains("휘둘리지 말 것")          // 엉뚱한 상대 글에 견고화
+                .contains("찬반(pros/cons) 프레임");   // 토픽 앵커
     }
 
     @Test
