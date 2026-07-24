@@ -99,10 +99,13 @@ public class ArenaService {
             String lockedSide = stateStore.lockedSide(today, topicId).orElse(null);
             String selfNick = properties.fight().nickname();
 
-            // 반박노트 — 상대 글 수가 저장 시점보다 늘었을 때만 재생성·저장, 아니면 저장본 재사용(정체 토픽 헛수고 방지)
+            // 반박노트 — 상대(반대편) 글 수가 저장 시점보다 늘었을 때만 재생성·저장, 아니면 저장본 재사용(정체 토픽 헛수고 방지).
+            // ⚠️ 반대편 side만 센다 — 같은 편(아군) 글엔 prep이 반박 대상을 못 찾아 혼란 출력을 내므로. lockedSide 미정(첫 턴)이면 side 무관 전부.
             String rebuttalNotes = "";
+            String opposingSide = lockedSide == null ? null : ("CON".equalsIgnoreCase(lockedSide) ? "PRO" : "CON");
             int oppCount = (int) existing.stream()
-                    .filter(p -> !p.isBlinded() && (selfNick == null || !selfNick.equals(p.nickname())))
+                    .filter(p -> !p.isBlinded() && (selfNick == null || !selfNick.equals(p.nickname()))
+                            && (opposingSide == null || opposingSide.equalsIgnoreCase(p.side())))
                     .count();
             if (oppCount > 0) {
                 var stored = stateStore.notes(today, topicId);

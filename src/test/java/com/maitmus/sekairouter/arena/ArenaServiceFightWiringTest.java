@@ -226,4 +226,27 @@ class ArenaServiceFightWiringTest {
 
         verify(store).clearNotes(any(), eq("t1"));
     }
+
+    @Test
+    void prep_skipped_when_only_same_side_posts() {
+        // 네네=PRO 락인데 올라온 non-self 글이 전부 같은 편(PRO) — 반박할 상대(CON) 없음 → prep 안 함(혼란 출력 방지).
+        ArenaApiClient api = mock(ArenaApiClient.class);
+        when(api.status()).thenReturn(battleStatus());
+        java.time.OffsetDateTime t0 = java.time.OffsetDateTime.parse("2026-07-24T01:00:00Z");
+        java.time.OffsetDateTime t1 = java.time.OffsetDateTime.parse("2026-07-24T02:00:00Z");
+        when(api.fightPosts(any())).thenReturn(java.util.List.of(
+                new FightPost("m1","쿠사나기 네네","PRO","내 주장",0,0,false,t0),      // 자기 글(제외)
+                new FightPost("o1","특붕이","PRO","같은편 A",0,0,false,t1),           // 같은 편
+                new FightPost("o2","히후미","PRO","같은편 B",0,0,false,t1)));         // 같은 편
+        ArenaStateStore store = mock(ArenaStateStore.class);
+        when(store.lockedSide(any(), eq("t1"))).thenReturn(java.util.Optional.of("PRO"));   // 네네 PRO 락
+        ArenaPrepGenerator prep = mock(ArenaPrepGenerator.class);
+        ArenaFightGenerator fight = mock(ArenaFightGenerator.class);
+        when(fight.generate(any(),any(),any(),anyString(),anyString())).thenReturn(null);
+
+        svc(api, mock(ArenaProposeGenerator.class), fight, prep, store).runFightOnce();
+
+        verify(prep, never()).generate(any(),any(),any(),anyString());          // 같은 편만 있으니 반대편 count=0 → prep 안 함
+        verify(store, never()).saveNotes(any(),any(),anyString(),anyInt());
+    }
 }
