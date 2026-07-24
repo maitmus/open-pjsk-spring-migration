@@ -237,7 +237,8 @@ INDEX_HTML = """<!doctype html><html lang=ko><head><meta charset=utf-8>
   <div class=card><h2>최근 발화</h2><div id=utt></div></div>
  </div>
  <div class=item><div class=card><h2>아레나 토론</h2><div id=arena></div></div></div>
- <div class=item><div class=card><h2>평판 랭킹 <span class=muted>에무 | 네네</span></h2><div id=rep></div></div></div>
+ <div class=item><div class=card><h2>평판 랭킹 <span class=muted>에무</span></h2><div id=rep-emu></div></div></div>
+ <div class=item><div class=card><h2>평판 랭킹 <span class=muted>네네</span></h2><div id=rep-nene></div></div></div>
  <div class=item><div class=card><h2>최근 머슴 활동 <span class=muted>댓글·글</span></h2><div id=cmt></div></div></div>
  <div class=item><div class=card><h2>스킵 · 보류 <span class=muted>모든 파트</span></h2><div id=skip></div></div></div>
 </div>
@@ -256,12 +257,12 @@ async function load(){
    `<div class=row><span>side 락</span><span class=pill>${esc(lk.side||'-')}</span></div>`+
    (lk.rebuttalNotes?`<details class=notes><summary>반박 노트 <span class=muted>상대글 ${lk.notesOppCount??'-'}건 기준</span></summary><div class=notesbody>${esc(lk.rebuttalNotes)}</div></details>`:'')+
    a.nene_posts.map(p=>`<div class=nene><b>[${esc(p.side)}]</b> ↑${p.up} ↓${p.dn}<br><span class=small>${esc(p.content)}</span></div>`).join('');
-  const repBlock=(label,r)=>r?
-   `<details class=repsec open><summary><b>${label}</b> · ${r.count} · fixedAvoid ${r.fixed_avoid.length}</summary>`+
-   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.cls}">${x.tier}</span></div>`).join('')+`</details>`:'';
+  const repBlock=(r)=>r?
+   `<details class=repsec open><summary>${r.count} identities · fixedAvoid ${r.fixed_avoid.length}</summary>`+
+   r.rows.map(x=>`<div class=row><span><b>${x.rep>=0?'+':''}${x.rep}</b> ${esc(x.key)} ${x.call?'· '+esc(x.call):''}</span><span class="pill ${x.cls}">${x.tier}</span></div>`).join('')+`</details>`:'<div class=muted>없음</div>';
   const rep=d.reputation||{};
-  const repInner=repBlock('에무',rep.emu)+repBlock('네네',rep.nene);
-  document.getElementById('rep').innerHTML=repInner?`<div class=repcols>${repInner}</div>`:'<div class=muted>없음</div>';
+  document.getElementById('rep-emu').innerHTML=repBlock(rep.emu);
+  document.getElementById('rep-nene').innerHTML=repBlock(rep.nene);
   document.getElementById('cmt').innerHTML=
    d.comments.map(c=>`<div class=row><span><b>${esc(c.who)}</b> <span class=small>${esc(c.kind)}</span> ${esc(c.detail||'')} <span class=small>${esc(c.text||'')}</span></span><span class=muted>${esc(c.time)}</span></div>`).join('')||'<div class=muted>없음</div>';
   document.getElementById('utt').innerHTML=
