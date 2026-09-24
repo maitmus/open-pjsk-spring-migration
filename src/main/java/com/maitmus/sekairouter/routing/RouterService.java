@@ -23,7 +23,7 @@ public class RouterService {
         PromptBlocks systemPrompt = promptBuilder.build();
         String userPrompt = buildUserPrompt(request, suggestedCharacter);
 
-        String json = anthropic.completeJson(systemPrompt, userPrompt);
+        String json = anthropic.completeJsonWithWebSearch(systemPrompt, userPrompt);
         return applyBackstop(parse(json));
     }
 

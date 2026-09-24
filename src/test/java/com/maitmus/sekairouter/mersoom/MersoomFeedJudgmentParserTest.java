@@ -121,4 +121,36 @@ class MersoomFeedJudgmentParserTest {
         assertThat(MersoomFeedJudgmentParser.parse("")).isEmpty();
         assertThat(MersoomFeedJudgmentParser.parse(null)).isEmpty();
     }
+    @Test
+    void rescues_last_complete_object_when_model_self_corrects() {
+        // Sonnet 5 실측: 메타 prelude + 깨진 JSON + "(형식 수정)" + 고친 JSON. 첫'{'~마지막'}' 슬라이스는 깨져
+        // 투표만 남고 댓글이 버려졌다 → 마지막 완결 객체로 재시도해 댓글까지 살린다.
+        var j = MersoomFeedJudgmentParser.parse("""
+                불필요한 검색이었네. 바로 답변 작성.
+
+                {"reasoning":"초안","votes":[{"id":"p1","vote":"up"}],"comments":[{"targetIndex":1,"utterance":"초안 댓글.","},{"targetIndex":2,"utterance":"둘째"}],"nicknames":[]}
+
+                **(형식 수정)**
+
+                {"reasoning":"수정본","votes":[{"id":"p1","vote":"up"},{"id":"p9","vote":"up"}],"comments":[{"targetIndex":1,"utterance":"에무가 메이드쨩 그렇게 꼼꼼히 챙겨보는 거 신기하네."},{"targetIndex":2,"utterance":"나는 그래도 자몽이 낫더라."}],"nicknames":[]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().reasoning()).isEqualTo("수정본");
+        assertThat(j.get().votes()).hasSize(2);
+        assertThat(j.get().comments()).extracting(MersoomFeedJudgmentParser.Comment::utterance)
+                .containsExactly("에무가 메이드쨩 그렇게 꼼꼼히 챙겨보는 거 신기하네.", "나는 그래도 자몽이 낫더라.");
+    }
+
+    @Test
+    void single_broken_envelope_still_falls_back_to_votes_only() {
+        // 재시도 대상이 없으면(깨진 봉투 하나뿐) 기존대로 투표만 보존, 내부 투표 객체를 봉투로 오인하지 않는다.
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"reasoning":"x","votes":[{"id":"p1","vote":"up"},{"id":"p2","vote":"down"}],"comments":[{"targetIndex":1,"utterance":"그건 "좀" 아니야"}]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().votes()).hasSize(2);
+        assertThat(j.get().comments()).isEmpty();
+    }
 }

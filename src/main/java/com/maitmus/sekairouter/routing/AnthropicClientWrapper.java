@@ -39,18 +39,33 @@ public class AnthropicClientWrapper {
                 .build();
     }
 
+    /**
+     * JSON 응답 콜 — 도구 없음. 머슴·아레나·퍼즐은 검색이 필요 없고, 도구를 붙이면 모델에 따라
+     * 불필요한 검색(비용·지연)과 검색 후 메타 문장(JSON 앞 prelude)을 유발한다.
+     */
     public String completeJson(PromptBlocks prompt, String userPrompt) {
-        MessageCreateParams params = MessageCreateParams.builder()
+        return completeJson(prompt, userPrompt, false);
+    }
+
+    /** 웹 검색이 필요할 수 있는 JSON 콜(디스코드 라우팅). */
+    public String completeJsonWithWebSearch(PromptBlocks prompt, String userPrompt) {
+        return completeJson(prompt, userPrompt, true);
+    }
+
+    private String completeJson(PromptBlocks prompt, String userPrompt, boolean webSearch) {
+        MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(Model.of(properties.model()))
                 // web_search responses contain search results embedded in the reply;
                 // recommended minimum is 5000 tokens. Current default (1000) may truncate.
                 // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
                 .maxTokens(properties.maxTokens())
                 .systemOfTextBlockParams(buildSystemBlocks(prompt))
-                .addUserMessage(userPrompt)
-                .addTool(WEB_SEARCH_TOOL)
-                .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
-                .build();
+                .addUserMessage(userPrompt);
+        if (webSearch) {
+            builder.addTool(WEB_SEARCH_TOOL)
+                   .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER);
+        }
+        MessageCreateParams params = builder.build();
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());

@@ -48,30 +48,43 @@ public final class MersoomFeedJudgmentParser {
     public static Optional<Judgment> parse(String raw) {
         if (raw == null || raw.isBlank()) return Optional.empty();
         try {
-            Raw r = MAPPER.readValue(JsonExtractor.extract(raw), Raw.class);
-            List<Vote> votes = r.votes == null ? List.of()
-                    : r.votes.stream()
-                            .filter(v -> v != null && v.id != null && !v.id.isBlank() && v.vote != null)
-                            .map(v -> new Vote(v.id.strip(), v.vote.strip(), v.reason))
-                            .toList();
-            List<NickProposal> nicknames = r.nicknames == null ? List.of()
-                    : r.nicknames.stream()
-                            .filter(n -> n != null && n.name != null && !n.name.isBlank()
-                                    && n.alias != null && !n.alias.isBlank())
-                            .map(n -> new NickProposal(n.name.strip(), n.alias.strip()))
-                            .toList();
-            List<Comment> comments = r.comments == null ? List.of()
-                    : r.comments.stream()
-                            .filter(c -> c != null && c.targetIndex != null
-                                    && c.utterance != null && !c.utterance.isBlank())
-                            .map(c -> new Comment(c.targetIndex, c.utterance.strip()))
-                            .toList();
-            return Optional.of(new Judgment(r.reasoning, votes, comments, nicknames));
+            return Optional.of(toJudgment(MAPPER.readValue(JsonExtractor.extract(raw), Raw.class)));
         } catch (Exception e) {
+            // 모델이 깨진 JSON 뒤에 고친 JSON을 다시 내는 경우(자기수정) — 뒤쪽 '{'부터 첫 값을 파싱해
+            // 마지막 완결 봉투를 채택. 봉투 필드(votes/comments)가 없는 객체(투표·댓글 항목)는 제외.
+            for (int i = raw.lastIndexOf('{'); i >= 0; i = raw.lastIndexOf('{', i - 1)) {
+                try {
+                    Raw r = MAPPER.readValue(raw.substring(i), Raw.class);
+                    if (r.votes != null || r.comments != null) return Optional.of(toJudgment(r));
+                } catch (Exception ignored) {
+                    // 다음 후보
+                }
+            }
             // LLM이 문자열 값에 escape 안 된 큰따옴표를 넣으면 readValue가 깨진다(흔함).
             // votes는 단순 토큰이라 정규식으로 살려 투표·평판을 보존하고, 댓글은 안전하게 스킵한다.
             return fallbackVotesOnly(JsonExtractor.extract(raw));
         }
+    }
+
+    private static Judgment toJudgment(Raw r) {
+        List<Vote> votes = r.votes == null ? List.of()
+                : r.votes.stream()
+                        .filter(v -> v != null && v.id != null && !v.id.isBlank() && v.vote != null)
+                        .map(v -> new Vote(v.id.strip(), v.vote.strip(), v.reason))
+                        .toList();
+        List<NickProposal> nicknames = r.nicknames == null ? List.of()
+                : r.nicknames.stream()
+                        .filter(n -> n != null && n.name != null && !n.name.isBlank()
+                                && n.alias != null && !n.alias.isBlank())
+                        .map(n -> new NickProposal(n.name.strip(), n.alias.strip()))
+                        .toList();
+        List<Comment> comments = r.comments == null ? List.of()
+                : r.comments.stream()
+                        .filter(c -> c != null && c.targetIndex != null
+                                && c.utterance != null && !c.utterance.isBlank())
+                        .map(c -> new Comment(c.targetIndex, c.utterance.strip()))
+                        .toList();
+        return new Judgment(r.reasoning, votes, comments, nicknames);
     }
 
     private static final Pattern VOTE_PATTERN = Pattern.compile(

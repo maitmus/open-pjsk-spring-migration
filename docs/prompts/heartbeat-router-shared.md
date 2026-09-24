@@ -320,4 +320,4 @@ sharedPrefix 맨 끝에는 **모든 경로 공통 출력 규칙**이 인라인�
 
 - **HeartbeatPromptBuilder** — system 본문은 `resources/prompts/heartbeat-base-instructions.md`에서 로드. 인라인 프롬프트 텍스트 없음 (suffix 앞에 `"\n"`만 붙임).
 - **SystemPromptBuilder** — system 본문은 `resources/prompts/router-base-instructions.md` + `resources/prompts/output-schema.md`에서 로드. 인라인 프롬프트 텍스트 없음 (구분자 `"\n"`, `"\n\n"`만 사용).
-- **AnthropicClientWrapper** — 프롬프트 3블록 조립 + `cache_control TTL_1H` + web_search 툴 부착만 담당. 인라인 프롬프트 텍스트 없음. (한국어 주석 `// 빈 블록은 제외...`는 코드 주석일 뿐 프롬프트 아님.)
+- **AnthropicClientWrapper** — 프롬프트 3블록 조립 + `cache_control TTL_1H` + web_search 툴 부착(라우팅 `completeJsonWithWebSearch`·발화 `generateUtterance`만 — 머슴·아레나·퍼즐의 `completeJson`은 도구 없음)만 담당. 인라인 프롬프트 텍스트 없음. (한국어 주석 `// 빈 블록은 제외...`는 코드 주석일 뿐 프롬프트 아님.)

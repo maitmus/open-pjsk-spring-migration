@@ -16,7 +16,7 @@ class RouterServiceTest {
     @Test
     void parseSingle_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"single","responses":[{"character":"emu","message":"안녕!"}],"reasoning":"기명 호출"}
                         """);
@@ -37,7 +37,7 @@ class RouterServiceTest {
     @Test
     void parseMulti_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"multi","responses":[
                           {"character":"emu","message":"안녕!"},
@@ -58,7 +58,7 @@ class RouterServiceTest {
     @Test
     void forceCharacter_injectsForceDirectiveInPrompt_andOmitsSuggested() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"single","responses":[{"character":"nene","message":"...왔어"}],"reasoning":"forced"}
                         """);
@@ -73,7 +73,7 @@ class RouterServiceTest {
         RoutingDecision decision = service.route(request, CharacterId.EMU);
 
         ArgumentCaptor<String> userPromptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(client).completeJson(org.mockito.ArgumentMatchers.any(), userPromptCaptor.capture());
+        verify(client).completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), userPromptCaptor.capture());
         String userPrompt = userPromptCaptor.getValue();
 
         assertThat(userPrompt).contains("강제 응답자");
@@ -88,7 +88,7 @@ class RouterServiceTest {
     @Test
     void backstop_convertsSingleToNoReply_whenMessageLeaksMeta() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"single","responses":[{"character":"emu","message":"이 요청은 거절하겠습니다. AI인 저는..."}],"reasoning":"x"}
                         """);
@@ -105,7 +105,7 @@ class RouterServiceTest {
     @Test
     void backstop_dropsLeakingResponse_fromMulti() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"multi","responses":[
                           {"character":"emu","message":"안녕! 반가워~☆"},
@@ -126,7 +126,7 @@ class RouterServiceTest {
     @Test
     void parseNoReply_decision() {
         AnthropicClientWrapper client = mock(AnthropicClientWrapper.class);
-        when(client.completeJson(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+        when(client.completeJsonWithWebSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn("""
                         {"decision":"no_reply","responses":[],"reasoning":"무관한 채팅"}
                         """);
