@@ -58,6 +58,16 @@ class ArenaFightGeneratorTest {
     }
 
     @Test
+    void missing_shouldFight_still_fights() {
+        // Sonnet 5는 shouldFight 필드를 자주 생략한다(모의 3회 중 2회). 명시적 false만 보류 — 누락은 게시
+        // (머슴 글 생성기와 같은 규칙). 부적합은 side·content·백스톱 검증이 차단.
+        var d = gen("{\"side\":\"CON\",\"content\":\"그건 이 토론이랑 상관없는 얘기잖아.\"}")
+                .generate(TOPIC, List.of(), "CON", "쿠사나기 네네", "");
+        assertThat(d).isNotNull();
+        assertThat(d.side()).isEqualTo("CON");
+    }
+
+    @Test
     void returns_null_when_shouldFight_false() {
         assertThat(gen("{\"side\":\"\",\"content\":\"\",\"shouldFight\":false}").generate(TOPIC, List.of(), null, "쿠사나기 네네", "")).isNull();
     }

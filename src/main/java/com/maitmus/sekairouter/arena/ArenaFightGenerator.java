@@ -17,7 +17,7 @@ import java.util.Locale;
 
 /**
  * 아레나 토론 참여 (쿠사나기 네네). 공유 prefix(캐시) + 토론 모드 suffix.
- * {reasoning, side, content, shouldFight} 봉투. 극단 부적합이면 shouldFight=false → 보류({@code null}).
+ * {reasoning, side, content, shouldFight} 봉투. 극단 부적합이면 shouldFight=false → 보류({@code null}); 누락은 게시.
  * 네네는 분석적·직설 톤이라 논리 토론이 인캐릭터 — 단 인신공격(감정적 비난)은 금지.
  */
 @Slf4j
@@ -72,8 +72,10 @@ public class ArenaFightGenerator {
         if (e.reasoning() != null && !e.reasoning().isBlank()) {
             log.info("Arena fight reasoning (not posted): {}", e.reasoning());
         }
-        if (!Boolean.TRUE.equals(e.shouldFight())) {
-            log.info("Arena fight 보류 — shouldFight={} (극단 부적합)", e.shouldFight());
+        // 명시적 false만 보류 — 모델이 필드를 누락(null)하면 게시로 본다(머슴 글 생성기와 같은 규칙).
+        // 부적합은 아래 side·content·백스톱 검증이 차단.
+        if (Boolean.FALSE.equals(e.shouldFight())) {
+            log.info("Arena fight 보류 — shouldFight=false (극단 부적합)");
             return null;
         }
         // 락이 걸렸으면 LLM이 낸 side는 무시하고 고정 입장 유지(전향 방지).

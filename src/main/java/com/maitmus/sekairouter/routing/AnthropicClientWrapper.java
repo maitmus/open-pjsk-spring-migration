@@ -7,6 +7,7 @@ import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
 import com.anthropic.models.messages.TextBlockParam;
+import com.anthropic.models.messages.ThinkingConfigDisabled;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.WebSearchTool20250305;
 import com.maitmus.sekairouter.config.AnthropicProperties;
@@ -53,19 +54,7 @@ public class AnthropicClientWrapper {
     }
 
     private String completeJson(PromptBlocks prompt, String userPrompt, boolean webSearch) {
-        MessageCreateParams.Builder builder = MessageCreateParams.builder()
-                .model(Model.of(properties.model()))
-                // web_search responses contain search results embedded in the reply;
-                // recommended minimum is 5000 tokens. Current default (1000) may truncate.
-                // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
-                .maxTokens(properties.maxTokens())
-                .systemOfTextBlockParams(buildSystemBlocks(prompt))
-                .addUserMessage(userPrompt);
-        if (webSearch) {
-            builder.addTool(WEB_SEARCH_TOOL)
-                   .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER);
-        }
-        MessageCreateParams params = builder.build();
+        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), prompt, userPrompt, webSearch);
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
@@ -96,14 +85,7 @@ public class AnthropicClientWrapper {
      * block keeps serving routing reads.
      */
     public String generateUtterance(PromptBlocks prompt, String userPrompt) {
-        MessageCreateParams params = MessageCreateParams.builder()
-                .model(Model.of(properties.model()))
-                .maxTokens(properties.maxTokens())
-                .systemOfTextBlockParams(buildSystemBlocks(prompt))
-                .addUserMessage(userPrompt)
-                .addTool(WEB_SEARCH_TOOL)
-                .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER)
-                .build();
+        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), prompt, userPrompt, true);
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
@@ -122,6 +104,28 @@ public class AnthropicClientWrapper {
                 .orElseThrow(() -> new IllegalStateException("No text content in utterance response"));
         log.debug("Anthropic utterance: {}", text);
         return text;
+    }
+
+    /**
+     * 요청 파라미터 조립. thinking은 항상 명시적으로 끈다 — Sonnet 5 등은 생략 시 adaptive thinking이
+     * 켜져 비용이 늘고, 품질 검증(모의 비교)도 thinking off로 했다. package-private static — 테스트용.
+     */
+    static MessageCreateParams buildParams(String model, long maxTokens, PromptBlocks prompt,
+                                           String userPrompt, boolean webSearch) {
+        MessageCreateParams.Builder builder = MessageCreateParams.builder()
+                .model(Model.of(model))
+                // web_search responses contain search results embedded in the reply;
+                // recommended minimum is 5000 tokens. Current default (1000) may truncate.
+                // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
+                .maxTokens(maxTokens)
+                .thinking(ThinkingConfigDisabled.builder().build())
+                .systemOfTextBlockParams(buildSystemBlocks(prompt))
+                .addUserMessage(userPrompt);
+        if (webSearch) {
+            builder.addTool(WEB_SEARCH_TOOL)
+                   .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER);
+        }
+        return builder.build();
     }
 
     /**
