@@ -191,4 +191,69 @@ class ArenaServiceTest {
         new ArenaService(p, api, proposeGen, fightGen, prepGen, stateStore, clock).executePropose();
         verify(api, never()).status();
     }
+    /** 테스트용 가변 시계 — 쿨다운 경과를 흉내. */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+        MutableClock(Instant now) { this.now = now; }
+        void advanceMinutes(long m) { now = now.plusSeconds(m * 60); }
+        @Override public ZoneId getZone() { return ZoneId.of("Asia/Seoul"); }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
+    }
+
+    private static RuntimeException cooldown(int minutes) {
+        return new RuntimeException("429 Too Many Requests: \"{\"error\":\"Cooldown active. Wait " + minutes
+                + " minutes. (Tip: Get more upvotes to reduce cooldown)\"}\"");
+    }
+
+    private ArenaService battleService(Clock c) {
+        ArenaProperties p = mock(ArenaProperties.class);
+        when(p.enabled()).thenReturn(true);
+        when(p.fight()).thenReturn(nene);
+        when(stateStore.lockedSide(any(), any())).thenReturn(Optional.empty());
+        when(api.status()).thenReturn(new StatusResponse("2026-06-12", "BATTLE", TOPIC));
+        when(api.fightPosts(any())).thenReturn(List.of(new FightPost("a", "어떤찬성러", "PRO", "찬성", 0, 0, false, T1)));
+        when(prepGen.generate(any(), any(), any(), any())).thenReturn("- 노트");
+        when(fightGen.generate(any(), any(), any(), any(), any()))
+                .thenReturn(new ArenaFightGenerator.FightDecision("CON", "반박 내용"));
+        return new ArenaService(p, api, proposeGen, fightGen, prepGen, stateStore, c);
+    }
+
+    @Test
+    void short_cooldown_waits_and_retries_same_content_once() {
+        // 서버 쿨다운이 1분 남았다는 429 → 이미 생성한 글을 그만큼 기다렸다가 1회 재게시(추가 LLM 콜 없음).
+        ArenaService svc = battleService(clock);
+        List<Long> slept = new java.util.ArrayList<>();
+        svc.sleeper = slept::add;
+        when(api.fight(any(), any(), any())).thenThrow(cooldown(1)).thenReturn(new CreateResponse(true, "id"));
+
+        svc.executeFight();
+
+        verify(api, times(2)).fight(eq(nene), eq("CON"), eq("반박 내용"));
+        verify(fightGen, times(1)).generate(any(), any(), any(), any(), any());
+        org.assertj.core.api.Assertions.assertThat(slept).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(slept.get(0)).isGreaterThanOrEqualTo(60_000L);
+        verify(stateStore).recordSide(any(), eq("t1"), eq("CON"));
+    }
+
+    @Test
+    void long_cooldown_skips_generation_until_near_expiry() {
+        // 61분 쿨다운 429 → 재시도 없이 기록. 쿨다운 중 크론은 prep·fight 생성 자체를 건너뜀. 만료 2분 이내면 다시 시도.
+        MutableClock c = new MutableClock(Instant.parse("2026-06-12T04:00:00Z"));
+        ArenaService svc = battleService(c);
+        List<Long> slept = new java.util.ArrayList<>();
+        svc.sleeper = slept::add;
+        when(api.fight(any(), any(), any())).thenThrow(cooldown(61));
+
+        svc.executeFight();                 // 04:00 — 생성 1회, 429(61분), 재시도 없음
+        c.advanceMinutes(30);
+        svc.executeFight();                 // 04:30 — 쿨다운 중 → 생성 스킵
+        verify(fightGen, times(1)).generate(any(), any(), any(), any(), any());
+        verify(prepGen, times(1)).generate(any(), any(), any(), any());
+        org.assertj.core.api.Assertions.assertThat(slept).isEmpty();
+
+        c.advanceMinutes(30);
+        svc.executeFight();                 // 05:00 — 해제 1분 전(≤2분) → 다시 생성
+        verify(fightGen, times(2)).generate(any(), any(), any(), any(), any());
+    }
 }

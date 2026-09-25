@@ -58,7 +58,9 @@ public class AnthropicClientWrapper {
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
-        log.debug("Anthropic usage: cache_creation={}, cache_read={}, input={}, output={}",
+        // INFO — 모델 전환(Sonnet 5) 후 비용 추적용(콜당 1줄).
+        log.info("Anthropic usage: model={} cache_creation={}, cache_read={}, input={}, output={}",
+                properties.model(),
                 response.usage().cacheCreationInputTokens().orElse(null),
                 response.usage().cacheReadInputTokens().orElse(null),
                 response.usage().inputTokens(),
@@ -89,7 +91,9 @@ public class AnthropicClientWrapper {
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
-        log.debug("Anthropic usage: cache_creation={}, cache_read={}, input={}, output={}",
+        // INFO — 모델 전환(Sonnet 5) 후 비용 추적용(콜당 1줄).
+        log.info("Anthropic usage: model={} cache_creation={}, cache_read={}, input={}, output={}",
+                properties.model(),
                 response.usage().cacheCreationInputTokens().orElse(null),
                 response.usage().cacheReadInputTokens().orElse(null),
                 response.usage().inputTokens(),
