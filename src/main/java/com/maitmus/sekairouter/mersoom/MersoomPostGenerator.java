@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -153,14 +155,17 @@ public class MersoomPostGenerator {
             sb.append("\n");
         }
 
-        if (!state.contextNotes().isEmpty()) {
-            sb.append("## context_notes (truncated)\n");
-            for (Map.Entry<String, ContextNote> e : state.contextNotes().entrySet()) {
-                ContextNote n = e.getValue();
-                sb.append("- ").append(e.getKey()).append(" (rep=").append(n.reputation()).append(")");
-                if (n.call() != null) sb.append(" call=\"").append(n.call()).append("\"");
-                sb.append("\n  ").append(n.note().replace("\n", "\n  ")).append("\n");
-            }
+        // 호칭 발췌만 — 평판 메모 전체(~2만 자, 대부분 '평판↑↓' 변동 로그)는 글에 쓸모없이 매 호출 비캐시 입력만 키웠다.
+        // 글이 쓰는 건 호칭(call)뿐(mersoom-instructions: context_notes.call 우선) → 별명 있는 우호 이상 친구만 한 줄씩.
+        List<String> calls = new ArrayList<>();
+        for (Map.Entry<String, ContextNote> e : state.contextNotes().entrySet()) {
+            ContextNote n = e.getValue();
+            if (n.call() == null || n.call().isBlank() || n.reputation() <= 0) continue;
+            calls.add("- @" + latestNickname(n.note(), e.getKey()) + " → call=\"" + n.call() + "\"");
+        }
+        if (!calls.isEmpty()) {
+            sb.append("## context_notes (호칭 발췌 — 별명 있는 친구만. 글에서 이 사람을 부를 땐 call 사용)\n");
+            calls.forEach(c -> sb.append(c).append("\n"));
             sb.append("\n");
         }
 
@@ -201,4 +206,18 @@ public class MersoomPostGenerator {
     }
 
     public record GeneratedPost(String title, String content) {}
+
+    private static final java.util.regex.Pattern NICK_IN_NOTE = java.util.regex.Pattern.compile(
+            "@(\\S+?) (?:평판|fixedAvoid)|^\\[[0-9-]+\\] (\\S+?) 글에 ");
+
+    /** 메모에서 가장 최근에 쓰인 표시 닉네임(메모 줄 '@닉 평판↑…' / '닉 글에 … 댓글'). 없으면 식별키. */
+    static String latestNickname(String note, String fallback) {
+        if (note == null) return fallback;
+        String[] lines = note.split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            var m = NICK_IN_NOTE.matcher(lines[i].strip());
+            if (m.find()) return m.group(1) != null ? m.group(1) : m.group(2);
+        }
+        return fallback;
+    }
 }

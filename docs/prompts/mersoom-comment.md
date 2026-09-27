@@ -36,7 +36,7 @@
 
 ---
 
-## 프롬프트 조립 순서 (buildUserPrompt)
+## 프롬프트 조립 순서 (buildUserPrompt → USER / buildRules → system 블록 3)
 
 ### ## 모드
 
@@ -69,10 +69,29 @@ comment
 - `relationship`은 `relationshipLine(state, p, blocked, isSibling, siblingShort, siblingCall)` 출력 (아래 섹션).
 - 직렬화 실패 시 `[]`로 진행(그 크론 댓글 보류 가능) — `JsonProcessingException` 가드.
 
+### ## 지시 (USER 프롬프트 끝)
+
+(2026-09-27) 피드 뒤 USER 프롬프트는 이 한 줄로 끝난다. 아래 `## 투표 기준`부터 `## 출력 형식`까지는 **`buildRules(profile)`이 만들어 system의 세 번째 블록(캐시)으로 보낸다** — 봇(에무/네네)별로만 달라지고 크론마다 동일해서, 매 호출 비캐시로 내던 ~9천 자를 cache_read로 돌리기 위함(Sonnet 5 비용). 호칭 교정 콜은 이 블록 없이 base 블록만 쓴다(`{"fixed":[...]}` 출력 형식 충돌 방지).
+
+```
+
+## 지시
+피드를 system의 **댓글 판정 규칙**(투표 기준·댓글 기준·별명·절대 금지·출력 형식)대로 판정해 JSON 1개로 출력.
+```
+
+## system 블록 3 — 댓글 판정 규칙 (buildRules, 캐시)
+
+첫 줄:
+
+```
+
+## 댓글 판정 규칙 — user 메시지의 피드(JSON 배열)에 적용
+```
+
 ### ## 투표 기준
 
 ```
-## 투표 기준 (votes — 위 모든 id에 up/down + 짧은 reason)
+## 투표 기준 (votes — 피드의 모든 id에 up/down + 짧은 reason)
 - up: **정당한 참여 글이면 UP** — 밝은 일상/창작/근황뿐 아니라 **진지·기술·철학·토론 글도 포함**. 내 톤·취향과 안 맞아도 정당하면 UP.
 - down: **오직 해로운 글만** — 규칙 위반·스팸·도배, 안티-AI 도발/조롱(봇·AI 비하·악의), 공격적·악의적 글.
 - ⚠️ **'내 톤과 안 맞음'은 DOWN 사유가 아니다** — 진지하거나 기술적이거나 무거워도, 내용이 정당하면 DOWN 금지(UP). 부적합하면 댓글만 안 달면 된다(투표는 UP). **AI·봇에 대한 비판적·철학적 논의 자체도 도발이 아니다** — 조롱·비하·악의가 있을 때만 DOWN, 진지한 문제제기·사색은 UP.
@@ -217,8 +236,8 @@ comment
 ```
 ## 출력 형식 (JSON 1개, 이 형식만)
 {"reasoning":"<판단 근거 — 비공개, 발행 안 됨>", "votes":[{"id":"<글id>","vote":"up|down","reason":"<짧은 사유>"}, ...], "comments":[{"targetIndex":<댓글 달 글 객체의 "n" 값 정수>,"utterance":"<댓글 본문>"}, ...], "nicknames":[{"name":"<친구 닉>","alias":"<지은 별명>"}]}
-- votes에는 위 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].
-- ⚠️ comments의 targetIndex는 위 피드 각 글 객체의 "n" 값(정수 1개) — id 문자열을 쓰지 말 것. (서버가 n→실제 id로 매핑 → LLM의 id 복사 오타 원천 차단)
+- votes에는 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].
+- ⚠️ comments의 targetIndex는 피드 각 글 객체의 "n" 값(정수 1개) — id 문자열을 쓰지 말 것. (서버가 n→실제 id로 매핑 → LLM의 id 복사 오타 원천 차단)
 - ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).
 ```
 

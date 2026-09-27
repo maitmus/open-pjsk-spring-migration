@@ -89,14 +89,13 @@ post
 
 ```
 
-### ## context_notes (truncated) — `state.contextNotes()`가 비어있지 않을 때만
+### ## context_notes (호칭 발췌) — 별명(`call`) 있고 평판 > 0인 친구가 1명 이상일 때만
 
-`{key}` = 상대 식별자, `{reputation}` = 평판, `{call}` = 호칭(있을 때만), `{note}` = 메모(개행은 들여쓰기 유지).
+(2026-09-27) 예전엔 `state.contextNotes()` 전체(키·rep·call·누적 메모)를 붙였으나, 메모의 ~85%가 '평판↑↓' 변동 로그라 글에 쓸모없이 매 호출 비캐시 입력(~2만 자)만 키웠다. 글이 쓰는 건 호칭뿐(`mersoom-instructions*.md`: `context_notes.call` 우선)이라 **별명 있는 우호 친구만 한 줄씩**. `{nickname}` = 메모에서 가장 최근 표시 닉(`@닉 평판…` / `닉 글에 … 댓글`), 없으면 식별키(`latestNickname`).
 
 ```
-## context_notes (truncated)
-- {key} (rep={reputation}) call="{call}"
-  {note}
+## context_notes (호칭 발췌 — 별명 있는 친구만. 글에서 이 사람을 부를 땐 call 사용)
+- @{nickname} → call="{call}"
 
 ```
 

@@ -46,6 +46,53 @@ class MersoomCommentGeneratorTest {
         return c;
     }
 
+    /** 판정 콜의 system(댓글 판정 규칙 블록 포함) + USER 전체. 규칙이 system 캐시 블록으로 이동해도 문구 검증은 그대로. */
+    private static String full(ArgumentCaptor<PromptBlocks> sys, ArgumentCaptor<String> user) {
+        StringBuilder sb = new StringBuilder();
+        for (var b : sys.getValue().blocks()) sb.append(b.text()).append('\n');
+        return sb.append(user.getValue()).toString();
+    }
+
+    @Test
+    void judgment_rules_go_to_cached_system_block_not_user_prompt() {
+        // 비용: 봇별 고정 규칙(~9천 자)은 system 캐시 블록, USER엔 피드 등 가변분만.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<PromptBlocks> sys = ArgumentCaptor.forClass(PromptBlocks.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(sys.capture(), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, empty(), List.of(post("p1", "산책", "한강 걸었어요")));
+
+        var blocks = sys.getValue().blocks();
+        var last = blocks.get(blocks.size() - 1);
+        assertThat(last.cache()).isTrue();
+        assertThat(last.text()).contains("## 댓글 기준").contains("## 출력 형식").contains("피드의 모든 id");
+        assertThat(user.getValue()).contains("## 피드").contains("한강 걸었어요")
+                .doesNotContain("## 댓글 기준").doesNotContain("## 출력 형식");
+    }
+
+    @Test
+    void address_correction_call_uses_base_blocks_without_judgment_rules() {
+        // 교정 콜은 {"fixed":[...]} 형식 — 댓글 판정 규칙(votes/comments 출력 형식)이 섞이면 충돌하므로 base 블록만.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<PromptBlocks> sys = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sys.capture(), anyString()))
+                .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[{\"targetIndex\":1,\"utterance\":\"아오야기군이랑 자꾸 붙으니까 더 강해지는 거겠지~\"}]}")
+                .thenReturn("{\"fixed\":[{\"i\":0,\"text\":\"토우야군이랑 자꾸 붙으니까 더 강해지는 거겠지~\"}]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, empty(), List.of(post("p1", "게임", "서바이벌 한 판 했어")));
+
+        var calls = sys.getAllValues();
+        assertThat(calls).hasSize(2);
+        assertThat(calls.get(0).blocks()).hasSize(3);                       // base 2 + 판정 규칙
+        assertThat(calls.get(1).blocks()).hasSize(2);                       // 교정 = base만
+        assertThat(calls.get(1).blocks()).noneMatch(b -> b.text().contains("## 댓글 기준"));
+    }
+
     @Test
     void comment_address_gate_fixes_surname_echo() {
         // 힌트를 stochastic하게 무시하고 에무가 '아오야기군'(네네 호칭)을 echo하면 → 게이트가 findBareLeaks로 잡아 교정 콜로 '토우야군'.
@@ -89,7 +136,8 @@ class MersoomCommentGeneratorTest {
         // 에무가 형제봇 네네(nene_wonder) 글을 볼 때 — GRADES 호칭 지시 + 별명 금지가 프롬프트에 들어가야 함
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -104,7 +152,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(emuWithSibling, empty(), List.of(nenePost));
 
-        String prompt = userPrompt.getValue();
+        String prompt = full(sysPrompt, userPrompt);
         // 형제봇 라인 — 명시 호칭('네네쨩')·반말 강제·별명 금지가 들어가야 함 (에무 기본 존댓말 디폴트 무시).
         // GRADES 룩업 간접지시('너→네네')로는 에무 존댓말이 이겨 말투가 새서, 호칭·말투를 직접 박는다.
         assertThat(prompt).contains("원더랜즈×쇼타임").contains("네네쨩").contains("반말")
@@ -117,7 +165,8 @@ class MersoomCommentGeneratorTest {
         // 에무 분기에 '네네에겐 반말' 규칙 + 반말 예시를 항상 넣어 보강(피드에 네네 글이 없어도 존재).
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -132,7 +181,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(emu, empty(), List.of(normal));
 
-        String prompt = userPrompt.getValue();
+        String prompt = full(sysPrompt, userPrompt);
         assertThat(prompt).contains("네네에겐 반말")                 // 에무 분기의 강한 반말 보강 규칙
                 .contains("반말로 시작했으면 반말로 끝낸다")           // 자가수정(존댓말 seam) 방지
                 .contains("인용-반복 정형구로 시작하지 말 것")         // 오프닝 정형구 자기복제 차단
@@ -150,7 +199,8 @@ class MersoomCommentGeneratorTest {
         // 네네가 동료(에무) 글·자길 언급한 글에 제3자 관찰자처럼 분석하지 말고 관계 안에서 응답하도록 지시.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -165,7 +215,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(nene, empty(), List.of(emuPost));
 
-        String prompt = userPrompt.getValue();
+        String prompt = full(sysPrompt, userPrompt);
         assertThat(prompt).contains("그 관계 안의 당사자로 끼어든다");
         // ① 자기지목 힌트: 형제(에무) 글 본문이 나(네네)를 언급('네네쨩이랑…') → 그 글 relationship에 당사자 힌트 주입
         assertThat(prompt)
@@ -180,7 +230,8 @@ class MersoomCommentGeneratorTest {
     void self_mention_hint_absent_for_nonsibling_and_when_name_missing() {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -200,9 +251,9 @@ class MersoomCommentGeneratorTest {
 
         g.generate(nene, empty(), List.of(userPost, emuPostNoName));
 
-        assertThat(userPrompt.getValue()).doesNotContain("이 글 본문이 너(네네)를 언급/지목");
+        assertThat(full(sysPrompt, userPrompt)).doesNotContain("이 글 본문이 너(네네)를 언급/지목");
         // 이름 없을 때: ① 자기지목 힌트는 미발동하되, 제3자 칭찬을 가로채지 말라는 정적 가드는 항상 존재해야 함
-        assertThat(userPrompt.getValue())
+        assertThat(full(sysPrompt, userPrompt))
                 .contains("실제로 너를 향할 때만")                    // 칭찬 받기 가드 — 제3자 칭찬 false self-attribution 방지
                 .contains("제3자 향한 칭찬을 자기가 받은 양 가로챔");   // ❌ 앵커
     }
@@ -211,7 +262,8 @@ class MersoomCommentGeneratorTest {
     void nene_prompt_invites_cynical_reply_to_wary_emu_does_not() {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -222,12 +274,12 @@ class MersoomCommentGeneratorTest {
                 com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
 
         g.generate(nene, empty(), feed());
-        String nenePrompt = userPrompt.getValue();
+        String nenePrompt = full(sysPrompt, userPrompt);
         assertThat(nenePrompt).contains("경계(rep≤-1, 차단 아님)").contains("츳코미·직설 일침")  // 네네=경계에 시니컬
                 .contains("숨(을) 고르는·숨 쉴 틈");  // 침묵·정적 글을 무대/숨 메타포로 환원하는 자기복제 차단
 
         g.generate(EMU, empty(), feed());
-        String emuPrompt = userPrompt.getValue();
+        String emuPrompt = full(sysPrompt, userPrompt);
         assertThat(emuPrompt).doesNotContain("경계(rep≤-1, 차단 아님)");   // 에무 댓글 기준엔 경계 초대 없음
     }
 
@@ -236,7 +288,8 @@ class MersoomCommentGeneratorTest {
         // 형제봇 댓글이 본문 구체를 짚지 않고 일반 정서로 뭉뚱그리던 문제 → '본문 구체 충실' 룰이 프롬프트에 들어가야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -244,7 +297,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(EMU, empty(), feed());
 
-        assertThat(userPrompt.getValue())
+        assertThat(full(sysPrompt, userPrompt))
                 .contains("당사자 원칙").contains("무관한 구경꾼")  // 중앙 당사자 원칙 + 생성형 자가 테스트
                 .contains("목격 선언 정형구")               // 본문 구절+'봤어' 정형구 차단(당사자성)
                 .contains("(고교) 학생이다")               // 학생 register — 비평가·분석체 금지
@@ -260,7 +313,8 @@ class MersoomCommentGeneratorTest {
         // 에무 멀티비트는 허용하되 틀 반복만 막고, 시그니처(원더호~이) 클러스터도 상한을 둔다.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -268,7 +322,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(EMU, empty(), feed());
 
-        assertThat(userPrompt.getValue())
+        assertThat(full(sysPrompt, userPrompt))
                 .contains("인용-에코 오프닝")              // 되읊기 오프닝 차단
                 .contains("매번 같은 아크가 아니게")         // 완결 강제 해제 → 정형 반복 금지로 재초점(길이 가드 아님)
                 .contains("모든 댓글")                     // 형제봇 뿐 아니라 전 댓글로 넓힘
@@ -283,7 +337,8 @@ class MersoomCommentGeneratorTest {
         // 격언 승화 ❌, 글이 너를 가리킬 때 가정·일반화 회피 ❌가 그 한 룰의 예시로 들어가 있어야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -291,7 +346,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(EMU, empty(), feed());
 
-        assertThat(userPrompt.getValue())
+        assertThat(full(sysPrompt, userPrompt))
                 .contains("그 글 안의")                  // 중앙 원리: 글 안의 당사자로
                 .contains("교훈·격언으로 승화")            // 격언화 축
                 .contains("목격 선언은 별개")             // 봤어 도메인 일반화 + 맞장구 경계 (일반 룰, 유지)
@@ -306,7 +361,8 @@ class MersoomCommentGeneratorTest {
         // 네네 댓글이 문어 평서 독백체(~ㄴ다)로 드리프트하던 문제 → 구어 해체 지향 룰이 네네 프롬프트에 들어가야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> userPrompt = ArgumentCaptor.forClass(String.class);
-        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture()))
+        ArgumentCaptor<PromptBlocks> sysPrompt = ArgumentCaptor.forClass(PromptBlocks.class);
+        when(anthropic.completeJson(sysPrompt.capture(), userPrompt.capture()))
                 .thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
@@ -317,7 +373,7 @@ class MersoomCommentGeneratorTest {
 
         g.generate(nene, empty(), feed());
 
-        assertThat(userPrompt.getValue()).contains("문어 평서 독백체").contains("구어 해체");
+        assertThat(full(sysPrompt, userPrompt)).contains("문어 평서 독백체").contains("구어 해체");
     }
 
     private static List<Commentable> feed4() {

@@ -223,4 +223,35 @@ class MersoomPostGeneratorTest {
                 List.of(), List.of(), List.of(),
                 Map.of(), 8, List.of(), null, null, List.of(), List.of());
     }
+    @Test
+    void post_prompt_includes_only_nickname_calls_not_full_reputation_log() {
+        // 비용: 평판 메모 전체(~2만 자)를 USER에 붙이던 것 → 별명 있는 우호 친구 호칭 한 줄씩만.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> up = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), up.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
+        var notes = new java.util.LinkedHashMap<String, MersoomState.ContextNote>();
+        notes.put("maid_chibi", new MersoomState.ContextNote(0, null,
+                "[2026-09-20] @Maid-Chibi 평판↑(rep=9)\n[2026-09-27] Maid-Chibi 글에 에무 댓글", "메이드쨩", 10));
+        notes.put("ip:1.2.*.*", new MersoomState.ContextNote(0, null, "[2026-09-26] @그냥돌쇠 평판↑(rep=3)", null, 3));
+        notes.put("w8agi", new MersoomState.ContextNote(0, null, "[2026-07-25] @하얀이 평판↓(rep=-10): 비하", "밤의 별", -10));
+        MersoomState st = new MersoomState(List.of(), List.of(), List.of(), notes, 8, List.of(), null, null, List.of(), List.of());
+
+        g.generate(EMU, st, feed(), LocalDate.of(2026, 9, 27));
+
+        assertThat(up.getValue())
+                .contains("- @Maid-Chibi → call=\"메이드쨩\"")      // 별명 있는 우호 친구: 최근 닉 + 호칭
+                .doesNotContain("평판↑").doesNotContain("글에 에무 댓글")   // 평판 변동 로그는 안 붙임
+                .doesNotContain("그냥돌쇠")                              // 별명 없음 → 제외
+                .doesNotContain("밤의 별");                              // 음수 평판 → 제외
+    }
+
+    @Test
+    void latest_nickname_from_note_lines() {
+        assertThat(MersoomPostGenerator.latestNickname("[2026-09-01] @옛닉 평판↑(rep=5)\n[2026-09-27] 새닉 글에 에무 댓글", "k")).isEqualTo("새닉");
+        assertThat(MersoomPostGenerator.latestNickname("[2026-09-27] @돌쇠 fixedAvoid 진입(rep=-5): x", "k")).isEqualTo("돌쇠");
+        assertThat(MersoomPostGenerator.latestNickname("운영자 재량 상향", "ip:1.*")).isEqualTo("ip:1.*");
+    }
 }
