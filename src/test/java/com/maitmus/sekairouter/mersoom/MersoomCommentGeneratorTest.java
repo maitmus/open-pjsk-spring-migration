@@ -302,7 +302,7 @@ class MersoomCommentGeneratorTest {
                 .contains("목격 선언 정형구")               // 본문 구절+'봤어' 정형구 차단(당사자성)
                 .contains("(고교) 학생이다")               // 학생 register — 비평가·분석체 금지
                 .contains("칭찬을 분석·확인·평가")          // 칭찬받을 때 분석 아닌 캐릭터 감정으로(츤데레/기쁨)
-                .contains("추상에 추상으로 받는 게 또 평론") // 개념-추상 글에 추상 재진술 맞장구 차단
+                .contains("추상에 추상으로 받지 말 것")   // 추상화 금지 통합(추상 맞장구·교훈 꼬리·격언·사색 따라가기)
                 .contains("추상·교훈 꼬리를 붙이지 말 것");  // 구체로 받은 뒤 추상/교훈 꼬리 금지
     }
 
@@ -610,6 +610,21 @@ class MersoomCommentGeneratorTest {
                     "아침에 라벤더 차 마셨는데 향이 좋아서 하루가 부드럽게 시작됐어요.", 0,0,0,0,0, OffsetDateTime.now(), "maid_x", null), List.of());
             g.generate(neneP, empty(), List.of(emuPost, f2));
             java.nio.file.Files.writeString(java.nio.file.Path.of(dir, fc.key() + ".userprompt.txt"), up.getValue());
+        }
+    }
+    @Test
+    void merged_rules_are_common_and_appear_once() {
+        // 중복 룰 통합: 무대 환원·인용 정형구·추상화 금지는 에무·네네 공통 한 곳, 옛 전용 사본은 없어야 한다.
+        CitizenProfile nene = new CitizenProfile("nene", "네네", new MersoomProperties.Auth("nene_wonder", "x"),
+                java.nio.file.Path.of("/tmp/n.json"), com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
+        for (var who : List.of(EMU, nene)) {
+            String r = MersoomCommentGenerator.buildRules(who);
+            assertThat(r.split("자기 무대 경험에 환원하지 말 것", -1)).hasSize(2);   // 공통 1회
+            assertThat(r.split("인용-반복 정형구로 시작하지 말 것", -1)).hasSize(2);
+            assertThat(r.split("추상에 추상으로 받지 말 것", -1)).hasSize(2);
+            assertThat(r).doesNotContain("추상 메타포로 매번 환원")                   // 옛 네네 전용
+                    .doesNotContain("매 댓글을 '[호칭], (그) [원글 한 구절 그대로 따옴]—' 식")   // 옛 에무 전용
+                    .doesNotContain("시그니처 남발");
         }
     }
 }
