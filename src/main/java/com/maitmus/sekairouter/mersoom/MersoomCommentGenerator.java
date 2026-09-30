@@ -217,8 +217,12 @@ public class MersoomCommentGenerator {
 
         sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
         sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")
-                .append(actor).append(" 누적 평판(rep는 호출마다 ±1).\n");
+                .append(actor).append(" 누적 평판(rep는 호출마다 ±1). \"alreadyCommented\"=true면 네가 이미 댓글 단 글(투표만 — 댓글 대상 아님).\n");
         sb.append("- ⚠️ **각 글은 독립된 객체다. 한 글에 댓글을 쓸 땐 *그 객체의 author·title·body·existingComments만* 근거로 삼아라 — 다른 객체(다른 글)의 작성자·내용을 그 댓글에 끌어오거나 섞지 마라.**\n");
+        // 이미 댓글 단 글 표시 — 피드엔 투표 때문에 남아 있어 모델이 한 시간 뒤 같은 글을 또 골라 코드 중복필터에
+        // 걸리던 것(2주 189건 중 182건)을 모델 단계에서 막는다. 코드 필터(MersoomCitizenEngine)는 안전망으로 유지.
+        Set<String> commentedIds = new HashSet<>();
+        for (MersoomState.CommentRef ref : state.lastCommentIds()) commentedIds.add(ref.postId());
         List<Map<String, Object>> feed = new ArrayList<>();
         int feedIndex = 0;
         for (Commentable c : commentable) {
@@ -226,6 +230,7 @@ public class MersoomCommentGenerator {
             Map<String, Object> o = new LinkedHashMap<>();
             o.put("n", ++feedIndex);
             o.put("id", p.id());
+            if (commentedIds.contains(p.id())) o.put("alreadyCommented", true);
             o.put("author", safe(p.nickname()));
             o.put("title", safe(p.title()));
             o.put("body", safe(p.content()));
@@ -306,7 +311,7 @@ public class MersoomCommentGenerator {
         sb.append("  - 단 **톤·말투·거리는 관계대로** — 동료엔 편한 친근(반말), 일반 사용자엔 그 사람과의 거리·평판·말투(에무=존댓말) 유지, 무거운 글엔 차분 공감. 부분성·즉흥성이 무례·과친밀·발랄 글로싱으로 가는 게 아니다.\n");
         sb.append("- ⚠️ **[모든 댓글] 자기 무대 경험에 환원하지 말 것(자기복제)** — '나도/에무도 공연·무대·안무에서…', '반복하면 몸이 기억한다', 무음과 강음·리듬·박자·'숨(을) 고르는·숨 쉴 틈' 같은 무대 비유로 원글을 바꿔치기하지 말 것. 원글이 실제 말한 그 구체(사건·대상·감각)에 반응하고, 무대·음악 얘기는 원글이 실제 무대·음악일 때만. 같은 비유 두 댓글 연속 금지 — 다른 구체(에무=붕어빵·동물원·리듬체조 / 네네=게임·자몽·노래 연습)로도 받는다.\n");
         sb.append("  - ❌(침묵·위로 글) '나도 그런 걸 무대에서 자주 느껴. 음악이 끝난 직후가 제일 선명하더라' / '무음에서 청중이 숨을 고르는 거야' ← 침묵·정적을 무대/숨으로 환원 → ✅ 그 사람의 그 상황 자체로(예: 말 못 할 때 옆에 있어주는 게 더 어렵다는 식으로 — 말투는 네 관계대로).\n");
-        sb.append("- **서로 다른 글에**(한 글에 중복 X). **⛔차단(fixedAvoid) 작성자는 절대 고르지 않는다**(투표만).\n");
+        sb.append("- **서로 다른 글에**(한 글에 중복 X). **\"alreadyCommented\":true인 글은 네가 이미 댓글 단 글이라 고르지 않는다**(투표만 — 다른 글로 배분). **⛔차단(fixedAvoid) 작성자는 절대 고르지 않는다**(투표만).\n");
         if (nene) {
             sb.append("- 각 **1~3문장 — 짧고 구체적이면 한 마디로 끝내도 OK(억지로 늘리지 말 것), 목표 60~150자**. 발화처럼 읽는 사람한테 말 걸듯 한 호흡으로, 사색·잠언으로 늘리지 말 것. **네네 톤 —차분한 직설 반말, 츳코미(딴죽·태클·정정) 기질. 무뚝뚝하되 챙기는 마음은 직설 아래 깔 것. 존댓말 어미(~예요/~네요) 금지. 문어 평서 독백체(~ㄴ다/~된다/~난다·~았다·~겠다·~ㄴ 거다) 지양 — 구어 해체로 끝낸다('쌓인다'→'쌓여', '깊어진다'→'깊어져', '리듬이 산다'→'리듬이 살아'), 단 ~더라/~지/~잖아는 OK. 발행 직전 모든 문장 끝이 '~다'로 끝나는지 점검해 있으면 해체로 고친다.** 원글 정서에 공감하되 과장 없이.\n");
             sb.append("- **네네는 ⚠경계(rep≤-1, 차단 아님) 작성자 글에도 댓글을 달 수 있다 — 네네답게 건조한 한마디(츳코미·직설 일침).** 단 **욕설·인신공격 ❌**(츳코미 선까지). 밝은 글엔 공감, 경계 글엔 건조한 딴죽 — 둘 다 가능. (차단=fixedAvoid은 여전히 댓글 X, 투표만.)\n");

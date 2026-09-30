@@ -627,4 +627,27 @@ class MersoomCommentGeneratorTest {
                     .doesNotContain("시그니처 남발");
         }
     }
+    @Test
+    void already_commented_posts_are_marked_in_feed_and_rules_say_vote_only() {
+        // 실측(2주 189건 중 182건): 한 시간 전 댓글 단 글을 모델이 다시 골라 코드 중복필터에 걸려 댓글 슬롯 낭비.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<PromptBlocks> sys = ArgumentCaptor.forClass(PromptBlocks.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(sys.capture(), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomState st = new MersoomState(List.of(),
+                List.of(new MersoomState.CommentRef("p1", OffsetDateTime.now())),
+                List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, st, List.of(post("p1", "산책", "한강 걸었어요"), post("p2", "라벤더 차", "향이 좋아요")));
+
+        String u = user.getValue();
+        assertThat(u).contains("\"id\":\"p1\",\"alreadyCommented\":true");      // 이미 단 글만 표시
+        assertThat(u).doesNotContain("\"id\":\"p2\",\"alreadyCommented\"");
+        assertThat(u).contains("\"alreadyCommented\"=true면");                    // 필드 설명
+        var blocks = sys.getValue().blocks();
+        assertThat(blocks.get(blocks.size() - 1).text()).contains("alreadyCommented");   // 규칙(캐시 블록)
+    }
 }

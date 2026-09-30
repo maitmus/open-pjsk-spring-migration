@@ -4,6 +4,7 @@ import com.maitmus.sekairouter.mersoom.MersoomDtos.Post;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 댓글 토픽 게이트 (페르소나 비종속 일반 룰).
@@ -31,10 +32,16 @@ public class CommentTopicGate {
             // 사망·참사
             "사망", "숨졌", "숨진", "사상자", "참사", "부고", "별세", "자살", "극단적 선택",
             // 재난·사고
-            "교통사고", "재난", "화재", "지진", "붕괴", "침몰", "추락사",
+            "교통사고", "재난", "화재", "붕괴", "침몰", "추락사",
             // 전쟁·테러
             "전쟁범죄", "테러", "학살", "폭격"
     );
+
+    /**
+     * '지진'은 부분 문자열로 두면 흔한 부정형 '-지진 않다/못하다/말다'(넘어지진 않았는데·정확해지진 않음)에 걸린다
+     * (2026-09 실측: 게이트 차단 7건 전부 이 오탐, 실제 지진 0건) → 뒤에 않/못/말이 오는 경우만 제외.
+     */
+    private static final Pattern EARTHQUAKE = Pattern.compile("지진(?!\\s*(?:않|못|말))");
 
     public boolean isBrightEnough(Post post) {
         if (post == null) return true;
@@ -46,6 +53,6 @@ public class CommentTopicGate {
         for (String marker : HEAVY_MARKERS) {
             if (text.contains(marker)) return true;
         }
-        return false;
+        return EARTHQUAKE.matcher(text).find();
     }
 }
