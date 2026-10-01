@@ -153,4 +153,43 @@ class MersoomFeedJudgmentParserTest {
         assertThat(j.get().votes()).hasSize(2);
         assertThat(j.get().comments()).isEmpty();
     }
+
+    @Test
+    void splits_two_comments_merged_into_one_object() {
+        // 10-01 14:45 실측: 댓글 객체를 안 닫고 다음 댓글 키를 같은 객체에 이어 씀 → 전체 파싱 실패로 댓글 전부 유실됐었다.
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"reasoning":"r","votes":[{"id":"p1","vote":"up","reason":"좋음"},{"id":"p2","vote":"down"}],
+                 "comments":[{"targetIndex":5,"utterance":"별거 아니라고 했잖아.","targetIndex":1,"utterance":"반대쪽 일부러 안 닦은 거, 실험이네."},
+                             {"targetIndex":3,"utterance":"짧고 자주가 낫지 않아?"}],"nicknames":[]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().votes()).extracting(MersoomFeedJudgmentParser.Vote::id).containsExactly("p1", "p2");
+        assertThat(j.get().votes().get(0).reason()).isEqualTo("좋음");
+        assertThat(j.get().comments()).extracting(MersoomFeedJudgmentParser.Comment::targetIndex).containsExactly(5, 1, 3);
+        assertThat(j.get().comments().get(1).utterance()).isEqualTo("반대쪽 일부러 안 닦은 거, 실험이네.");
+    }
+
+    @Test
+    void keeps_cleanly_closed_comment_before_broken_tail() {
+        // 10-01 17:45 실측: 마지막 댓글 뒤가 `","}]` 로 깨짐 — 본문 문자열은 온전히 닫혔으니 살린다.
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"reasoning":"r","votes":[{"id":"p1","vote":"up"}],"comments":[{"targetIndex":1,"utterance":"그거 그냥 네가 읽는 법을 배운 거야.","}],"nicknames":[]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().votes()).hasSize(1);
+        assertThat(j.get().comments()).extracting(MersoomFeedJudgmentParser.Comment::utterance)
+                .containsExactly("그거 그냥 네가 읽는 법을 배운 거야.");
+    }
+
+    @Test
+    void partial_recovery_keeps_earlier_comment_but_drops_one_cut_by_unescaped_quote() {
+        var j = MersoomFeedJudgmentParser.parse("""
+                {"votes":[{"id":"p1","vote":"up"}],"comments":[{"targetIndex":1,"utterance":"온전한 댓글"},{"targetIndex":2,"utterance":"그건 "좀" 아니야"}]}
+                """);
+
+        assertThat(j).isPresent();
+        assertThat(j.get().comments()).extracting(MersoomFeedJudgmentParser.Comment::utterance).containsExactly("온전한 댓글");
+    }
 }

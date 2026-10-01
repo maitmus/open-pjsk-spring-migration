@@ -1,10 +1,14 @@
 package com.maitmus.sekairouter.mersoom;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.maitmus.sekairouter.routing.JsonExtractor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +32,8 @@ import java.util.regex.Pattern;
  * reasoning은 비공개. 발행 누수 방지는 호출측(생성기) 백스톱이 담당.
  */
 public final class MersoomFeedJudgmentParser {
+
+    private static final Logger log = LoggerFactory.getLogger(MersoomFeedJudgmentParser.class);
 
     public record Vote(String id, String vote, String reason) {}
     public record Comment(Integer targetIndex, String utterance) {}
@@ -60,10 +66,98 @@ public final class MersoomFeedJudgmentParser {
                     // 다음 후보
                 }
             }
+            String json = JsonExtractor.extract(raw);
+            // Sonnet 5 실측(09-25~ 하루 2~5건): 댓글 객체를 안 닫고 다음 댓글을 같은 객체에 이어 쓰거나
+            // ({"targetIndex":5,"utterance":"..","targetIndex":1,"utterance":".."}) 마지막 댓글 뒤를 깨뜨림(..","}]).
+            // 스트리밍으로 깨진 지점까지 읽어, 따옴표가 깔끔히 닫힌 (targetIndex, utterance) 쌍만 댓글로 살린다.
+            Optional<Judgment> partial = lenientPartial(json);
+            if (partial.isPresent()) {
+                log.warn("Mersoom feed judgment 깨진 JSON — 부분 복구: votes={} comments={}",
+                        partial.get().votes().size(), partial.get().comments().size());
+                return partial;
+            }
             // LLM이 문자열 값에 escape 안 된 큰따옴표를 넣으면 readValue가 깨진다(흔함).
             // votes는 단순 토큰이라 정규식으로 살려 투표·평판을 보존하고, 댓글은 안전하게 스킵한다.
-            return fallbackVotesOnly(JsonExtractor.extract(raw));
+            Optional<Judgment> votesOnly = fallbackVotesOnly(json);
+            votesOnly.ifPresent(j -> log.warn("Mersoom feed judgment 깨진 JSON — 투표만 폴백, 댓글 버림: votes={} raw={}",
+                    j.votes().size(), json.substring(0, Math.min(200, json.length()))));
+            return votesOnly;
         }
+    }
+
+    /**
+     * 깨진 봉투를 앞에서부터 스트리밍으로 읽어 깨진 지점 전까지의 투표·댓글을 수집한다. 댓글이 하나도 안 살면 empty
+     * (→ 투표만 폴백). 댓글은 utterance 문자열이 닫힌 직후 다음 문자가 ',' 또는 '}'일 때만 채택 — escape 안 된
+     * 따옴표로 본문이 중간에 잘린 경우("그건 "좀"..")를 잘린 댓글로 게시하지 않기 위해.
+     */
+    private static Optional<Judgment> lenientPartial(String json) {
+        String reasoning = null;
+        List<Vote> votes = new ArrayList<>();
+        List<Comment> comments = new ArrayList<>();
+        try (JsonParser p = MAPPER.createParser(json)) {
+            if (p.nextToken() != JsonToken.START_OBJECT) return Optional.empty();
+            while (p.nextToken() == JsonToken.FIELD_NAME) {
+                String field = p.currentName();
+                JsonToken t = p.nextToken();
+                if ("reasoning".equals(field) && t == JsonToken.VALUE_STRING) reasoning = p.getText();
+                else if ("votes".equals(field) && t == JsonToken.START_ARRAY) readVotes(p, votes);
+                else if ("comments".equals(field) && t == JsonToken.START_ARRAY) readComments(p, json, comments);
+                else p.skipChildren();
+            }
+        } catch (Exception ignored) {
+            // 깨진 지점 — 그 전까지 수집한 것만 쓴다
+        }
+        if (comments.isEmpty()) return Optional.empty();
+        if (votes.isEmpty()) votes = fallbackVotesOnly(json).map(Judgment::votes).orElse(List.of());
+        return Optional.of(new Judgment(reasoning, votes, comments, List.of()));
+    }
+
+    private static void readVotes(JsonParser p, List<Vote> out) throws Exception {
+        String id = null, vote = null, reason = null;
+        JsonToken t;
+        while ((t = p.nextToken()) != JsonToken.END_ARRAY) {
+            if (t == JsonToken.START_OBJECT) { id = vote = reason = null; }
+            else if (t == JsonToken.FIELD_NAME) {
+                String f = p.currentName();
+                p.nextToken();
+                String v = p.currentToken() == JsonToken.VALUE_STRING ? p.getText() : null;
+                if ("id".equals(f)) id = v; else if ("vote".equals(f)) vote = v; else if ("reason".equals(f)) reason = v;
+                else p.skipChildren();
+            } else if (t == JsonToken.END_OBJECT && id != null && !id.isBlank() && vote != null) {
+                out.add(new Vote(id.strip(), vote.strip(), reason));
+            }
+        }
+    }
+
+    private static void readComments(JsonParser p, String json, List<Comment> out) throws Exception {
+        Integer idx = null;
+        String utt = null;
+        JsonToken t;
+        while ((t = p.nextToken()) != JsonToken.END_ARRAY) {
+            if (t == JsonToken.START_OBJECT || t == JsonToken.END_OBJECT) { idx = null; utt = null; continue; }
+            if (t != JsonToken.FIELD_NAME) continue;
+            String f = p.currentName();
+            JsonToken v = p.nextToken();
+            if ("targetIndex".equals(f) && v == JsonToken.VALUE_NUMBER_INT) idx = p.getIntValue();
+            else if ("utterance".equals(f) && v == JsonToken.VALUE_STRING) {
+                String text = p.getText();   // 토큰 완결(닫는 따옴표까지 소비) 후 위치 확인
+                utt = cleanlyTerminated(json, (int) p.currentLocation().getCharOffset()) ? text : null;
+            } else p.skipChildren();
+            if (idx != null && utt != null) {   // 쌍 완성 즉시 채택 — 같은 객체에 이어 쓴 다음 쌍도 별개 댓글로
+                if (!utt.isBlank()) out.add(new Comment(idx, utt.strip()));
+                idx = null;
+                utt = null;
+            }
+        }
+    }
+
+    private static boolean cleanlyTerminated(String json, int offset) {
+        for (int i = offset; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (Character.isWhitespace(c)) continue;
+            return c == ',' || c == '}';
+        }
+        return false;
     }
 
     private static Judgment toJudgment(Raw r) {
