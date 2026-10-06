@@ -213,11 +213,13 @@ public class MersoomCommentGenerator {
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
-        sb.append(MersoomEventHint.todayLine(eventsCalendar, profile.persona()));   // 오늘 생일·기념일이면 point-of-use 힌트
+        var todayEvent = eventsCalendar.todayOverride();
+        sb.append(MersoomEventHint.commentLine(eventsCalendar, profile.persona()));   // 오늘 생일·기념일 — 언급한 글에서만
 
         sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
         sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")
                 .append(actor).append(" 누적 평판(rep는 호출마다 ±1). \"alreadyCommented\"=true면 네가 이미 댓글 단 글(투표만 — 댓글 대상 아님).\n");
+        if (todayEvent.isPresent()) sb.append("- \"mentionsEvent\"=true면 그 글이 오늘의 이벤트를 언급함(이벤트 반응은 이 글에서만).\n");
         sb.append("- ⚠️ **각 글은 독립된 객체다. 한 글에 댓글을 쓸 땐 *그 객체의 author·title·body·existingComments만* 근거로 삼아라 — 다른 객체(다른 글)의 작성자·내용을 그 댓글에 끌어오거나 섞지 마라.**\n");
         // 이미 댓글 단 글 표시 — 피드엔 투표 때문에 남아 있어 모델이 한 시간 뒤 같은 글을 또 골라 코드 중복필터에
         // 걸리던 것(2주 189건 중 182건)을 모델 단계에서 막는다. 코드 필터(MersoomCitizenEngine)는 안전망으로 유지.
@@ -231,6 +233,9 @@ public class MersoomCommentGenerator {
             o.put("n", ++feedIndex);
             o.put("id", p.id());
             if (commentedIds.contains(p.id())) o.put("alreadyCommented", true);
+            if (todayEvent.isPresent() && MersoomEventHint.mentions(todayEvent.get(), p.title() + " " + p.content())) {
+                o.put("mentionsEvent", true);
+            }
             o.put("author", safe(p.nickname()));
             o.put("title", safe(p.title()));
             o.put("body", safe(p.content()));
@@ -431,10 +436,23 @@ public class MersoomCommentGenerator {
         else if (rep <= -1) s.append(" ⚠경계");
         if (call != null && !call.isBlank()) s.append(" 별명='").append(call).append("'");
         else if (rep >= 4) s.append(" (별명 미정)");  // rep4(임박)부터 노출 → 5 되는 크론에 별명이 준비돼 즉시 적용
-        if (note != null && note.note() != null && !note.note().isBlank()) {
-            s.append(" | ").append(safe(note.note()).replace("\n", " "));
-        }
+        String history = commentHistory(note);
+        if (!history.isEmpty()) s.append(" | ").append(history);
         return s.append(pjskHint).toString();
+    }
+
+    /**
+     * 메모에서 평판 변동 줄('@닉 평판↑/↓(rep=N): 사유')을 빼고 댓글 이력만 남긴다. 수치는 rep·티어로 이미 보인다.
+     * 지난 DOWN 사유를 피드에 다시 보여주면 모델이 그 사유에 앵커돼 같은 작성자의 멀쩡한 글까지 같은 사유로 DOWN →
+     * 메모에 또 쌓이는 자기강화 루프가 난다(2026-10-05 13:15 도발글 1건 '안티AI 조롱'이 강쇠·쇠돌이·돌쇠 일상글로 번져
+     * 하루 0건 → 19건, 강쇠 rep 8→2). 차단 작성자 note 비주입과 같은 이유.
+     */
+    static String commentHistory(ContextNote note) {
+        if (note == null || note.note() == null || note.note().isBlank()) return "";
+        return note.note().lines()
+                .map(String::strip)
+                .filter(l -> !l.isEmpty() && !l.contains("평판↑") && !l.contains("평판↓"))
+                .collect(Collectors.joining(" "));
     }
 
     private static String safe(String s) {

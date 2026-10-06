@@ -23,6 +23,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -254,7 +255,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any())).thenReturn(null);
+        when(postGen.generate(any(), any(), any(), any(), anyBoolean())).thenReturn(null);
         MersoomApiClient api = mock(MersoomApiClient.class);
 
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
@@ -270,7 +271,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any()))
+        when(postGen.generate(any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("title", "content"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
@@ -362,7 +363,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator pg = mock(MersoomPostGenerator.class);
-        when(pg.generate(any(), any(), any(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
+        when(pg.generate(any(), any(), any(), any(), anyBoolean())).thenReturn(null);   // 글은 보류, 광고만 검증
         return new MersoomCitizenEngine(p, store, collector, api, pg, adGen, mock(MersoomCommentGenerator.class),
                 new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
                 new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), clock);

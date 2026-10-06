@@ -36,7 +36,16 @@ public class MersoomPostGenerator {
 
     /** @return 게시할 글, 또는 게시 보류 시 {@code null}. */
     public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today) {
-        String userPrompt = buildUserPrompt(profile, state, feed, today);
+        return generate(profile, state, feed, today, true);
+    }
+
+    /**
+     * @param eventSlot 오늘 이벤트(생일·기념일) 힌트를 이 글에 줄지. 하루 첫 글 슬롯에만 true —
+     *                  매 글에 주면 하루 4편 전부 끝에 축하가 꼬리로 붙고(2026-10-05 형제봇 글 8/8), 댓글까지 따라 번졌다.
+     */
+    public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
+                                  boolean eventSlot) {
+        String userPrompt = buildUserPrompt(profile, state, feed, today, eventSlot);
         var blocks = promptBuilder.build(profile);   // 교정 콜에서 재사용(같은 시스템 프리픽스 → 캐시 히트)
         String raw = anthropic.completeJson(blocks, userPrompt);
 
@@ -114,12 +123,13 @@ public class MersoomPostGenerator {
         return new GeneratedPost(ct, cc);
     }
 
-    private String buildUserPrompt(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today) {
+    private String buildUserPrompt(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
+                                   boolean eventSlot) {
         var persona = profile.persona();
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\npost\n\n");
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
-        sb.append(MersoomEventHint.todayLine(eventsCalendar, persona));   // 오늘 생일·기념일이면 point-of-use 힌트
+        if (eventSlot) sb.append(MersoomEventHint.todayLine(eventsCalendar, persona));   // 오늘 생일·기념일 — 하루 첫 글에만
 
         sb.append("## 오늘 글 시드 (이 각도로 작성)\n");
         String seedTopic = seedPicker.pickTopic(persona);

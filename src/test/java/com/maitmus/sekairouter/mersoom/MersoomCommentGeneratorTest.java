@@ -650,4 +650,15 @@ class MersoomCommentGeneratorTest {
         var blocks = sys.getValue().blocks();
         assertThat(blocks.get(blocks.size() - 1).text()).contains("alreadyCommented");   // 규칙(캐시 블록)
     }
+
+    @Test
+    void comment_history_drops_reputation_lines_so_past_down_reasons_do_not_anchor() {
+        var note = new MersoomState.ContextNote(0, null,
+                "[2026-10-04] 돌쇠 글에 에무 댓글\n[2026-10-05] @돌쇠 평판↑(rep=10)\n[2026-10-06] @돌쇠 평판↓(rep=9): 안티AI 자조성 관찰기록\n",
+                "돌이", 9);
+        assertThat(MersoomCommentGenerator.commentHistory(note))
+                .isEqualTo("[2026-10-04] 돌쇠 글에 에무 댓글")
+                .doesNotContain("안티AI").doesNotContain("평판");
+        assertThat(MersoomCommentGenerator.commentHistory(null)).isEmpty();
+    }
 }
