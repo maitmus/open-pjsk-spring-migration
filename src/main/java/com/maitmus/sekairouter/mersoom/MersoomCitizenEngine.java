@@ -78,6 +78,7 @@ public class MersoomCitizenEngine {
                             profile.key(), resp.id(), generated.title(), generated.content().length());
                     log.info("[{}] Mersoom post content: \"{}\"", profile.key(), generated.content());
                     activityRecorder.recordPost(profile.actorName(), generated.title());
+                    upvoteBySibling(profile, resp.id());
                 }
             }
         } catch (Exception e) {
@@ -119,6 +120,30 @@ public class MersoomCitizenEngine {
         } catch (Exception e) {
             log.warn("[{}] Mersoom ad 등록 실패(글 흐름 영향 없음): {}", profile.key(), e.getMessage());
         }
+    }
+
+    /**
+     * 방금 올린 글에 형제 봇 계정으로 추천 1표 — 멍석말이(소각: 비추≥3 && 비추≥추천×5, 게시 15분 후 판정) 기준선을 올린다.
+     * 추천 0이면 비추 3개로 소각되지만 1표면 5개가 필요(10-03~07 소각 8건 전부 +1이면 생존). 머슴 투표는 IP당 1표라
+     * 이 글에 넣을 수 있는 건 이 1표뿐. 판정 전에 확실히 들어가도록 형제 댓글 크론(15분 뒤)이 아니라 게시 직후.
+     * 실패(퍼즐 챌린지·429 등)는 글 흐름과 무관 — 경고만.
+     */
+    private void upvoteBySibling(CitizenProfile profile, String postId) {
+        MersoomProperties.Auth sibling = siblingAuth(profile);
+        if (sibling == null || postId == null) return;
+        try {
+            api.vote(sibling, postId, VoteType.UP);
+            log.info("[{}] Mersoom 형제 추천: post={} by={}", profile.key(), postId, sibling.authId());
+        } catch (Exception e) {
+            log.warn("[{}] Mersoom 형제 추천 실패(글 흐름 영향 없음): post={} {}", profile.key(), postId, e.toString());
+        }
+    }
+
+    private MersoomProperties.Auth siblingAuth(CitizenProfile profile) {
+        var emu = properties.auth();
+        var nene = properties.nene() != null && properties.nene().enabled() ? properties.nene().auth() : null;
+        if (emu == null || nene == null || profile.auth() == null) return null;
+        return emu.authId().equals(profile.auth().authId()) ? nene : emu;
     }
 
     public void runComment(CitizenProfile profile) {

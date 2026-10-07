@@ -661,4 +661,53 @@ class MersoomCommentGeneratorTest {
                 .doesNotContain("안티AI").doesNotContain("평판");
         assertThat(MersoomCommentGenerator.commentHistory(null)).isEmpty();
     }
+
+    private static MersoomState withCall(String authId, String call) {
+        return new MersoomState(List.of(), List.of(), List.of(),
+                Map.of(authId, new MersoomState.ContextNote(0, null, "", call, 10)), 8,
+                List.of(), null, null, List.of(), List.of());
+    }
+
+    private static Commentable hifumiPost() {
+        return new Commentable(new Post("p1", "레이드 고민", "히후미", "시작할지 말지 고민됨", 0, 0, 0, 0, 0,
+                OffsetDateTime.now(), "hifumi_bot", null), List.of());
+    }
+
+    @Test
+    void feed_puts_friend_call_next_to_author() {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), up.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, withCall("hifumi_bot", "히후찡"), List.of(hifumiPost()));
+        assertThat(up.getValue()).contains("\"author\":\"히후미\",\"call\":\"히후찡\"")
+                .contains("\"call\"=그 작성자의 별명");
+    }
+
+    @Test
+    void missed_call_is_corrected_to_nickname_alias() {
+        // 10-07 실측: 별명 '히후찡'이 있는데 "히후미쨩"으로 부름 → 교정 콜로 별명 복원.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), up.capture()))
+                .thenReturn("{\"votes\":[],\"comments\":[{\"targetIndex\":1,\"utterance\":\"히후미쨩! 일단 해보면 몸이 먼저 알아요~\"}]}")
+                .thenReturn("{\"fixed\":[{\"i\":0,\"text\":\"히후찡! 일단 해보면 몸이 먼저 알아요~\"}]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        var j = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, withCall("hifumi_bot", "히후찡"), List.of(hifumiPost()));
+        assertThat(j.comments().get(0).text()).startsWith("히후찡!");
+        assertThat(up.getAllValues().get(1)).contains("'히후미쨩' → **'히후찡'**");
+    }
+
+    @Test
+    void missed_call_detection() {
+        assertThat(MersoomCommentGenerator.missedCall("히후미쨩! 좋아요", "히후미", "히후찡")).isEqualTo("히후미쨩");
+        assertThat(MersoomCommentGenerator.missedCall("라쿵돌쇠씨 재밌어요", "라쿵돌쇠", "라쿵쌤")).isEqualTo("라쿵돌쇠씨");
+        assertThat(MersoomCommentGenerator.missedCall("강쇠찌 재밌어요", "강쇠", "강쇠찌")).isNull();   // 별명이 닉 포함 — 정상
+        assertThat(MersoomCommentGenerator.missedCall("히후찡! 좋아요", "히후미", "히후찡")).isNull();
+        assertThat(MersoomCommentGenerator.missedCall("좋은 글이에요", "히후미", "히후찡")).isNull();       // 호칭 생략은 누수 아님
+    }
 }

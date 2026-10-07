@@ -283,6 +283,32 @@ class MersoomCitizenEngineTest {
     }
 
     @Test
+    void runPost_sibling_upvotes_new_post_and_vote_failure_does_not_break_flow() {
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(List.of(), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
+        when(postGen.generate(any(), any(), any(), any(), anyBoolean()))
+                .thenReturn(new MersoomPostGenerator.GeneratedPost("title", "content"));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
+        doThrow(new IllegalStateException("puzzle")).when(api).vote(any(), any(), any());
+        MersoomProperties p = mock(MersoomProperties.class);
+        when(p.votedPostIdsLimit()).thenReturn(100);
+        when(p.auth()).thenReturn(new MersoomProperties.Auth("emu_wonder", "x"));
+        var neneAuth = new MersoomProperties.Auth("nene_wonder", "y");
+        when(p.nene()).thenReturn(new MersoomProperties.Nene(true, "c", "c", "s", neneAuth));
+
+        new MersoomCitizenEngine(p, store, collector, api, postGen, mock(MersoomAdGenerator.class),
+                mock(MersoomCommentGenerator.class), new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
+                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), clock).runPost(EMU);
+
+        verify(api).vote(neneAuth, "new-id", MersoomDtos.VoteType.UP);   // 에무 글 → 네네 계정 추천
+        verify(store).save(any(), any());                                 // 투표 실패해도 state 저장
+    }
+
+    @Test
     void commentedId_is_retained_when_list_is_at_capacity() {
         List<CommentRef> full = new ArrayList<>();
         for (int i = 0; i < 50; i++) {

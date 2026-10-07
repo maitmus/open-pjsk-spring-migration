@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -138,7 +139,14 @@ public class MersoomCommentGenerator {
 
         // 4) 호칭 검증 게이트 — 힌트를 모델이 stochastic하게 무시하고 원글의 호칭(예 네네 '아오야기군')을 echo하면,
         //    생성 후 findBareLeaks로 결정론적으로 잡아 같은 시스템 프롬프트로 1회 교정한다(글 게이트와 대칭, 캐시 히트).
-        comments = correctAddressInComments(blocks, profile.persona(), comments);
+        Map<String, String[]> nickToCallByTarget = new HashMap<>();   // targetId → {닉네임, 별명}
+        Set<String> sibIds = profile.siblingAuthIds() == null ? Set.of() : profile.siblingAuthIds();
+        for (Commentable c : commentable) {
+            String call = authorCall(state, c.post(), sibIds);
+            if (call != null && c.post().nickname() != null && !c.post().nickname().isBlank())
+                nickToCallByTarget.put(c.post().id(), new String[]{c.post().nickname().strip(), call});
+        }
+        comments = correctAddressInComments(blocks, profile.persona(), comments, nickToCallByTarget);
 
         // 결정론적 오타 정규화(에뮤→에무 등) — 발행 직전 마지막
         comments = comments.stream()
@@ -149,18 +157,24 @@ public class MersoomCommentGenerator {
     }
 
     /** 생성된 댓글들에서 맨이름·성 누수를 화자 호칭으로 고치는 1회 교정 콜(누수 있을 때만). 실패 시 원문 유지. */
-    private List<CommentItem> correctAddressInComments(PromptBlocks blocks, CharacterId speaker, List<CommentItem> comments) {
+    private List<CommentItem> correctAddressInComments(PromptBlocks blocks, CharacterId speaker, List<CommentItem> comments,
+                                                       Map<String, String[]> nickToCallByTarget) {
         List<Integer> idxs = new ArrayList<>();
         List<Map<String, String>> leaksList = new ArrayList<>();
         for (int i = 0; i < comments.size(); i++) {
-            Map<String, String> lk = PjskAddressBook.findBareLeaks(speaker, comments.get(i).text());
+            Map<String, String> lk = new LinkedHashMap<>(PjskAddressBook.findBareLeaks(speaker, comments.get(i).text()));
+            String[] nc = nickToCallByTarget.get(comments.get(i).targetId());
+            if (nc != null) {
+                String miss = missedCall(comments.get(i).text(), nc[0], nc[1]);
+                if (miss != null) lk.put(miss, nc[1]);
+            }
             if (!lk.isEmpty()) { idxs.add(i); leaksList.add(lk); }
         }
         if (idxs.isEmpty()) return comments;
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment-호칭교정\n\n");
-        sb.append("방금 네가 쓴 댓글이야. **내용·톤·길이는 그대로**, 아래 항목의 PJSK 인물 호칭만 고쳐 다시 내라")
+        sb.append("방금 네가 쓴 댓글이야. **내용·톤·길이는 그대로**, 아래 항목의 호칭만 고쳐 다시 내라")
           .append("(조사·어미도 새 호칭에 맞춰 맞춤법대로 자연스럽게):\n");
         for (int k = 0; k < idxs.size(); k++) {
             sb.append("[").append(k).append("] ").append(comments.get(idxs.get(k)).text()).append("\n");
@@ -184,12 +198,32 @@ public class MersoomCommentGenerator {
                 out.set(ci, new CommentItem(comments.get(ci).targetId(), t));
                 applied++;
             }
-            log.info("Mersoom comment 호칭 교정 적용: {}/{}건 (맨이름·성→호칭)", applied, idxs.size());
+            log.info("Mersoom comment 호칭 교정 적용: {}/{}건 (맨이름·성·별명 누락→호칭) {}", applied, idxs.size(), leaksList);
             return out;
         } catch (Exception ex) {
             log.warn("Mersoom comment 호칭 교정 실패 — 원문 유지: {}", ex.toString());
             return comments;
         }
+    }
+
+    /** 형제봇·차단 작성자가 아니고 별명(call)이 있으면 그 별명, 아니면 null. */
+    private static String authorCall(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post, Set<String> siblingIds) {
+        if (siblingIds.contains(post.identityKey())) return null;
+        if (state.fixedAvoid().stream().anyMatch(fa -> fa.name().equals(post.identityKey()))) return null;
+        ContextNote note = state.contextNotes().get(post.identityKey());
+        String call = note != null ? note.call() : null;
+        return (call == null || call.isBlank()) ? null : call.strip();
+    }
+
+    /**
+     * 별명 있는 친구를 닉네임으로 부른 누수 탐지 — 댓글에 별명은 없고 닉네임(+쨩/씨 등)이 있으면 그 닉네임 토큰을 반환.
+     * 2026-10-07 실측: 별명이 피드 relationship 안쪽에 묻혀 덜 익숙한 친구에게 "히후미쨩"·"라쿵돌쇠씨"로 샘(~6%).
+     */
+    static String missedCall(String text, String nickname, String call) {
+        if (text == null || nickname == null || call == null || nickname.equals(call)) return null;
+        if (text.contains(call) || !text.contains(nickname)) return null;
+        var m = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(nickname) + "(?:쨩|씨|님|군|짱|찡)?").matcher(text);
+        return m.find() ? m.group() : null;
     }
 
     private static VoteType toVoteType(String s) {
@@ -219,6 +253,7 @@ public class MersoomCommentGenerator {
         sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
         sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")
                 .append(actor).append(" 누적 평판(rep는 호출마다 ±1). \"alreadyCommented\"=true면 네가 이미 댓글 단 글(투표만 — 댓글 대상 아님).\n");
+        sb.append("- \"call\"=그 작성자의 별명 — 댓글에서 그 사람을 부를 땐 **이 별명으로**(author 닉네임에 쨩·씨를 붙여 부르지 말 것). 매번 이름을 부를 필요는 없다.\n");
         if (todayEvent.isPresent()) sb.append("- \"mentionsEvent\"=true면 그 글이 오늘의 이벤트를 언급함(이벤트 반응은 이 글에서만).\n");
         sb.append("- ⚠️ **각 글은 독립된 객체다. 한 글에 댓글을 쓸 땐 *그 객체의 author·title·body·existingComments만* 근거로 삼아라 — 다른 객체(다른 글)의 작성자·내용을 그 댓글에 끌어오거나 섞지 마라.**\n");
         // 이미 댓글 단 글 표시 — 피드엔 투표 때문에 남아 있어 모델이 한 시간 뒤 같은 글을 또 골라 코드 중복필터에
@@ -237,6 +272,8 @@ public class MersoomCommentGenerator {
                 o.put("mentionsEvent", true);
             }
             o.put("author", safe(p.nickname()));
+            String call = authorCall(state, p, siblingIds);
+            if (call != null) o.put("call", call);
             o.put("title", safe(p.title()));
             o.put("body", safe(p.content()));
             if (!c.comments().isEmpty()) {

@@ -67,6 +67,7 @@ comment
 ```
 ## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)
 - 필드: "n"=댓글 지정 번호(targetIndex), "id"=투표용, "author"=작성자, "title"·"body"=글, "existingComments"=기존 댓글[{author,content}], "relationship"=그 작성자에 대한 {actor} 누적 평판(rep는 호출마다 ±1). "alreadyCommented"=true면 네가 이미 댓글 단 글(투표만 — 댓글 대상 아님).
+- "call"=그 작성자의 별명 — 댓글에서 그 사람을 부를 땐 **이 별명으로**(author 닉네임에 쨩·씨를 붙여 부르지 말 것). 매번 이름을 부를 필요는 없다.
 - ⚠️ **각 글은 독립된 객체다. 한 글에 댓글을 쓸 땐 *그 객체의 author·title·body·existingComments만* 근거로 삼아라 — 다른 객체(다른 글)의 작성자·내용을 그 댓글에 끌어오거나 섞지 마라.**
 ```
 
@@ -74,11 +75,12 @@ comment
 
 ```
 [
-  {"n":1,"id":"{글 id}","alreadyCommented":true(이미 댓글 단 글일 때만),"author":"{닉}","title":"{제목}","body":"{본문}","existingComments":[{"author":"{댓글닉}","content":"{댓글내용}"}],"relationship":"{관계 라인}"},
+  {"n":1,"id":"{글 id}","alreadyCommented":true(이미 댓글 단 글일 때만),"author":"{닉}","call":"{별명}"(형제봇·차단 제외, 별명 있을 때만),"title":"{제목}","body":"{본문}","existingComments":[{"author":"{댓글닉}","content":"{댓글내용}"}],"relationship":"{관계 라인}"},
   {"n":2,...}
 ]
 ```
 
+- `call`(2026-10-07)은 `authorCall` — 형제봇·fixedAvoid가 아니고 `note.call()`이 있을 때만 author 바로 뒤에 들어간다. 별명이 relationship 문자열 안쪽에만 있어 덜 익숙한 친구에게 "히후미쨩"·"라쿵돌쇠씨"로 새던 것(~6%) 대응. 생성 후 안전망: `missedCall`이 댓글에 별명은 없고 닉네임(+쨩/씨/님/군/짱/찡)이 있으면 기존 호칭 교정 콜(`correctAddressInComments`)에 `'{닉네임…}' → '{별명}'` 항목으로 함께 넣어 1회 교정한다.
 - `alreadyCommented`(2026-09-30)는 `state.lastCommentIds()`에 있는 글에만 들어간다 — 피드엔 투표 때문에 남아 있는 이미 댓글 단 글을 모델이 다시 골라 코드 중복필터에 걸리던 것(2주 189건 중 182건) 방지. 코드 필터는 안전망으로 유지.
 - `existingComments`는 `c.comments()`가 비어있지 않을 때만 키가 들어간다(배열 of {author,content}). 옛 `" / "` join 닉 수프 해소.
 - `relationship`은 `relationshipLine(state, p, blocked, isSibling, siblingShort, siblingCall)` 출력 (아래 섹션).
