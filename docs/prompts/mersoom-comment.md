@@ -83,7 +83,7 @@ comment
 - `call`(2026-10-07)은 `authorCall` — 형제봇·fixedAvoid가 아니고 `note.call()`이 있을 때만 author 바로 뒤에 들어간다. 별명이 relationship 문자열 안쪽에만 있어 덜 익숙한 친구에게 "히후미쨩"·"라쿵돌쇠씨"로 새던 것(~6%) 대응. 생성 후 안전망: `missedCall`이 댓글에 별명은 없고 닉네임(+쨩/씨/님/군/짱/찡)이 있으면 기존 호칭 교정 콜(`correctAddressInComments`)에 `'{닉네임…}' → '{별명}'` 항목으로 함께 넣어 1회 교정한다.
 - `alreadyCommented`(2026-09-30)는 `state.lastCommentIds()`에 있는 글에만 들어간다 — 피드엔 투표 때문에 남아 있는 이미 댓글 단 글을 모델이 다시 골라 코드 중복필터에 걸리던 것(2주 189건 중 182건) 방지. 코드 필터는 안전망으로 유지.
 - `existingComments`는 `c.comments()`가 비어있지 않을 때만 키가 들어간다(배열 of {author,content}). 옛 `" / "` join 닉 수프 해소.
-- `relationship`은 `relationshipLine(state, p, blocked, isSibling, siblingShort, siblingCall)` 출력 (아래 섹션).
+- `relationship`은 `relationshipLine(state, p, blocked, isSibling, siblingShort, siblingCall, alreadyCommented)` 출력 (아래 섹션).
 - 직렬화 실패 시 `[]`로 진행(그 크론 댓글 보류 가능) — `JsonProcessingException` 가드.
 
 ### ## 지시 (USER 프롬프트 끝)
@@ -258,12 +258,22 @@ comment
 
 ## relationshipLine 출력 ([관계] 라인)
 
-`relationshipLine(state, post, blocked, isSibling, siblingShort, siblingCall)`가 각 피드 글의 `  {관계 라인}` 자리를 채운다.
+`relationshipLine(state, post, blocked, isSibling, siblingShort, siblingCall, alreadyCommented)`가 각 피드 글의 `  {관계 라인}` 자리를 채운다.
 `rep`는 `note.reputation()`(없으면 0), `call`은 `note.call()`(별명).
 
 > **코드-사이드 힌트 주입 (관계 라인 뒤에 append):**
 > - **① 상호 멘션**(`selfMentionHint`, 형제봇 글만): 원글 본문이 발화 봇 이름(에무/네네)을 이름으로 지목/호명하면 그 문장을 뽑아 '넌 이 일의 당사자다' 힌트 주입(2026-07-09). **당사자로 받되 페르소나(발랄·천진/직설·츳코미) 유지·무색 해명체 금지 절 추가(2026-07-10)** — 지목당하면 당사자성이 발랄 결을 눌러 페르소나가 옅어지던 라이브 경향 교정(무거운글 톤룰과 동일 계열).
 > - **PJSK 인물 호칭**(`PjskAddressBook.hintFor`, 모든 글): 원글 본문에 PJSK 인물(토우야·루이·이치카·시즈쿠…) 언급 시 발화 봇의 그 인물 호칭(에무=토우야군/루이군/히노모리 선배, 네네=성+씨/군)을 주입 — 원글 맨이름 echo 방지(2026-07-10). GRADES 통째 재포함(A)이 sim서 부분 실효라 코드 point-of-use로 대체. 1글자 이름(안·린·렌)은 오탐 방지로 스캔 제외. **성(姓) 지칭도 잡음(2026-07-14)**: 원글이 인물을 성으로 불러도(예 '호시노 씨'=이치카) 별칭 인덱스로 검출 → 발화 봇 호칭(에무=이치카쨩)으로 교정, 힌트에 '호시노(=이치카)'로 명시. 별칭은 **호칭 값에서 자동 도출**(네네 호칭이 성이라 성이 이미 데이터에 있음, 수동 매핑 없음). 형제 성(히노모리=시호·시즈쿠, 시노노메=아키토·에나)은 모호해서 유일 별칭만 채택(이름으로 부르면 정상 검출). **댓글 생성-후 검증 게이트(2026-07-16)**: 힌트를 모델이 stochastic하게 무시하고 원글 호칭(예 네네 '아오야기군')을 echo하면, 생성 후 `findBareLeaks`로 각 댓글을 스캔 → 누수 시 같은 시스템 프롬프트로 1회 교정 콜(`comment-호칭교정`, 여러 댓글 한 번에, 캐시 히트)로 '아오야기군'→'토우야군' 치환(글 게이트와 대칭). 힌트=사전예방 + 게이트=사후확정 이중 안전망. 누수 없으면 교정 콜 스킵.
+
+### 0) 이미 댓글 단 형제 글 — `isSibling && alreadyCommented` (2026-10-13)
+
+호칭·반말 강제문과 ① 상호 멘션 힌트·PJSK 힌트를 **전부 빼고** 이 한 줄만 낸다:
+
+```
+[관계] rep={rep} · {siblingShort}(네 동료)의 글 — **이미 네가 댓글 단 글이라 이번엔 투표만**(다시 고르지 말고 다른 글로).
+```
+
+유도문(특히 '이 글 본문이 너를 언급/지목한다' 힌트)이 그대로 붙으면 `alreadyCommented` 표시를 이기고 같은 동료 글을 또 골라 코드 필터에 걸렸다(10-08~11 재선택 11건 전부 형제 글, 그중 4번은 그 한 글만 골라 크론 댓글 0건). sim(Sonnet 5): 재선택 크론 3/6 → 0/6(두 피드), 아직 댓글 안 단 형제 글엔 여전히 당사자 반응(6/6).
 
 ### 1) 형제봇(원더쇼 동료) 분기 — `isSibling == true`
 

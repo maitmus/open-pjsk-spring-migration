@@ -288,7 +288,7 @@ public class MersoomCommentGenerator {
             }
             boolean isSibling = siblingIds.contains(p.identityKey());
             o.put("relationship", relationshipLine(state, p, fixedNames.contains(p.identityKey()),
-                    isSibling, siblingShort, siblingCall));
+                    isSibling, siblingShort, siblingCall, commentedIds.contains(p.id())));
             feed.add(o);
         }
         try {
@@ -442,7 +442,8 @@ public class MersoomCommentGenerator {
     }
 
     private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post,
-                                           boolean blocked, boolean isSibling, String siblingShort, String siblingCall) {
+                                           boolean blocked, boolean isSibling, String siblingShort, String siblingCall,
+                                           boolean alreadyCommented) {
         ContextNote note = state.contextNotes().get(post.identityKey());
         int rep = note != null ? note.reputation() : 0;
         String call = note != null ? note.call() : null;
@@ -451,6 +452,12 @@ public class MersoomCommentGenerator {
                 "네네".equals(siblingShort) ? com.maitmus.sekairouter.persona.CharacterId.EMU
                                             : com.maitmus.sekairouter.persona.CharacterId.NENE;
         String pjskHint = PjskAddressBook.hintFor(speaker, post.content());
+        if (isSibling && alreadyCommented) {
+            // 이미 댓글 단 동료 글엔 호칭·당사자 유도문(자기지목 힌트 포함)을 빼고 투표만 지시 — 유도문이 그대로 붙으면
+            // alreadyCommented 표시를 이기고 같은 동료 글을 또 골라 코드 필터에 걸렸다(10-08~11: 재선택 11건 전부 형제 글,
+            // 그중 4번은 그 한 글만 골라 크론 댓글 0건).
+            return "[관계] rep=" + rep + " · " + siblingShort + "(네 동료)의 글 — **이미 네가 댓글 단 글이라 이번엔 투표만**(다시 고르지 말고 다른 글로).";
+        }
         if (isSibling) {
             // 형제 봇(원더쇼 동료) 본인 — 처음부터 아는 사이. 머슴 닉네임/존댓말 기본값·별명 전부 무시하고
             // 원더랜즈×쇼타임 호칭(반말)을 직접 명시 — GRADES 룩업에 맡기면 에무 기본 존댓말이 이겨 말투가 샌다.

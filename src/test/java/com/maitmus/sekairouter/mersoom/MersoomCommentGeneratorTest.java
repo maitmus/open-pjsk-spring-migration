@@ -710,4 +710,31 @@ class MersoomCommentGeneratorTest {
         assertThat(MersoomCommentGenerator.missedCall("히후찡! 좋아요", "히후미", "히후찡")).isNull();
         assertThat(MersoomCommentGenerator.missedCall("좋은 글이에요", "히후미", "히후찡")).isNull();       // 호칭 생략은 누수 아님
     }
+
+    @Test
+    void already_commented_sibling_post_drops_insider_hints_and_says_vote_only() {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), up.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        CitizenProfile nene = new CitizenProfile("nene", "네네",
+                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+                com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
+        Commentable done = new Commentable(new Post("p1", "칭찬", "에무", "네네쨩이 칭찬해줬어요", 0, 0, 0, 0, 0,
+                OffsetDateTime.now(), "emu_wonder", null), List.of());
+        Commentable fresh = new Commentable(new Post("p2", "무대", "에무", "네네쨩이랑 무대 만드는 게 행복해요", 0, 0, 0, 0, 0,
+                OffsetDateTime.now(), "emu_wonder", null), List.of());
+        MersoomState st = new MersoomState(List.of(),
+                List.of(new MersoomState.CommentRef("p1", OffsetDateTime.now())), List.of(), Map.of(), 8,
+                List.of(), null, null, List.of(), List.of());
+
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents()).generate(nene, st, List.of(done, fresh));
+
+        String u = up.getValue();
+        String doneLine = u.substring(u.indexOf("\"id\":\"p1\""), u.indexOf("\"id\":\"p2\""));
+        assertThat(doneLine).contains("이미 네가 댓글 단 글이라 이번엔 투표만")
+                .doesNotContain("이 글 본문이 너(네네)를 언급/지목").doesNotContain("반말로 쓴다");
+        assertThat(u.substring(u.indexOf("\"id\":\"p2\""))).contains("이 글 본문이 너(네네)를 언급/지목");   // 새 형제 글은 그대로
+    }
 }
