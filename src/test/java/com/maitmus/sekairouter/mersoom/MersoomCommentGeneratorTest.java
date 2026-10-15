@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +28,9 @@ class MersoomCommentGeneratorTest {
     private static final CitizenProfile EMU = new CitizenProfile("emu", "에무",
             new MersoomProperties.Auth("emu_wonder", "x"), java.nio.file.Path.of("/tmp/e.json"),
             com.maitmus.sekairouter.persona.CharacterId.EMU, java.util.Set.of());
+    private static final CitizenProfile NENE = new CitizenProfile("nene", "네네",
+            new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
+            com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
 
     private MersoomCommentGenerator gen(String llmReturn) {
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
@@ -649,6 +653,56 @@ class MersoomCommentGeneratorTest {
         assertThat(u).contains("\"alreadyCommented\"=true면");                    // 필드 설명
         var blocks = sys.getValue().blocks();
         assertThat(blocks.get(blocks.size() - 1).text()).contains("alreadyCommented");   // 규칙(캐시 블록)
+    }
+
+    @Test
+    void recent_own_comments_are_shown_newest_first_capped_and_old_refs_without_text_skipped() {
+        // 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재(붕어빵·노래 연습)를 반복 — 최근 본문을 보여 막는다.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        List<MersoomState.CommentRef> refs = new ArrayList<>();
+        for (int i = 1; i <= 8; i++) refs.add(new MersoomState.CommentRef("c" + i, OffsetDateTime.now(), "댓글" + i + "\n줄바꿈"));
+        refs.add(2, new MersoomState.CommentRef("old", OffsetDateTime.now()));   // 구 state 항목(본문 없음)
+        MersoomState st = new MersoomState(List.of(), refs, List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, st, List.of(post("p9", "라벤더 차", "향이 좋아요")));
+
+        String u = user.getValue();
+        assertThat(u).contains("## 최근 네가 단 댓글 (이미 쓴 것 — 따라 쓰지 말 것)")
+                .contains("시그니처 구호는 예외")
+                .contains("댓글 달 글 고르기와는 무관")
+                .contains("  - 댓글1 줄바꿈\n  - 댓글2 줄바꿈\n  - 댓글3 줄바꿈")   // 최신순·한 줄로 접음·본문 없는 건 건너뜀
+                .contains("댓글6 줄바꿈").doesNotContain("댓글7");               // 최대 6개
+        assertThat(u.indexOf("## 최근 네가 단 댓글")).isLessThan(u.indexOf("## 지시"));
+    }
+
+    @Test
+    void no_recent_section_when_state_has_no_comment_text() {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomState st = new MersoomState(List.of(), List.of(new MersoomState.CommentRef("p1", OffsetDateTime.now())),
+                List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, st, List.of(post("p9", "라벤더 차", "향이 좋아요")));
+        assertThat(user.getValue()).doesNotContain("최근 네가 단 댓글");
+    }
+
+    @Test
+    void rules_point_to_persona_daily_material_not_fixed_topic_lists() {
+        // 고정 목록(에무=붕어빵·동물원·리듬체조 / 네네=게임·자몽·노래 연습)이 크론마다 같은 소재로 수렴시키던 원인.
+        for (var who : List.of(EMU, NENE)) {
+            String r = MersoomCommentGenerator.buildRules(who);
+            assertThat(r).doesNotContain("붕어빵·동물원·리듬체조").doesNotContain("게임·자몽·노래 연습")
+                    .contains("페르소나의 일상 소재");
+        }
+        assertThat(MersoomCommentGenerator.buildRules(EMU)).doesNotContain("두근두근·의성어로");
     }
 
     @Test

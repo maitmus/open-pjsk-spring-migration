@@ -42,8 +42,16 @@ public record MersoomState(
         if (votedPostIds == null) votedPostIds = List.of();
     }
 
+    /**
+     * 댓글 이력. text=게시한 댓글 본문(2026-10-15~, 구 state엔 없음=null) — 다음 크론 USER에 '최근 네 댓글'로
+     * 보여 크론 간 같은 소재·구절 반복을 막는다(매 크론이 백지라 피드가 비슷하면 같은 소재를 고르던 것).
+     */
     @JsonNaming(SnakeCaseStrategy.class)
-    public record CommentRef(String postId, OffsetDateTime timestamp) {}
+    public record CommentRef(String postId, OffsetDateTime timestamp, String text) {
+        public CommentRef(String postId, OffsetDateTime timestamp) {
+            this(postId, timestamp, null);
+        }
+    }
 
     @JsonNaming(SnakeCaseStrategy.class)
     public record FixedAvoid(String name, String reason, LocalDate added) {}

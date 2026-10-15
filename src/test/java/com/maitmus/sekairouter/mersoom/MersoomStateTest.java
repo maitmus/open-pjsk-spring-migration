@@ -39,6 +39,7 @@ class MersoomStateTest {
 
         assertThat(state.lastPostIds()).containsExactly("abc");
         assertThat(state.lastCommentIds()).hasSize(1);
+        assertThat(state.lastCommentIds().get(0).text()).isNull();   // 구 state(본문 없음) 호환
         assertThat(state.contextNotes()).containsKey("오호돌쇠");
         assertThat(state.contextNotes().get("오호돌쇠").call()).isEqualTo("오호");
         assertThat(state.contextNotes().get("오호돌쇠").resetCount()).isEqualTo(3);

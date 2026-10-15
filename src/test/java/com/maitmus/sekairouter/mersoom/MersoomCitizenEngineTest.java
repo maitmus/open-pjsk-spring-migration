@@ -338,6 +338,7 @@ class MersoomCitizenEngineTest {
         assertThat(ids).contains("p2");
         assertThat(ids.get(0)).isEqualTo("p2");
         assertThat(ids).doesNotContain("old49");
+        assertThat(cap.getValue().lastCommentIds().get(0).text()).isEqualTo("원더호~이 산책 좋았겠어요!");   // 본문도 저장(다음 크론 '최근 네 댓글')
     }
 
     @Test
