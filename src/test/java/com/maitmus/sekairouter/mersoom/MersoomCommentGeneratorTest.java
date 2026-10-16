@@ -221,13 +221,11 @@ class MersoomCommentGeneratorTest {
 
         String prompt = full(sysPrompt, userPrompt);
         assertThat(prompt).contains("그 관계 안의 당사자로 끼어든다");
-        // ① 자기지목 힌트: 형제(에무) 글 본문이 나(네네)를 언급('네네쨩이랑…') → 그 글 relationship에 당사자 힌트 주입
+        // 구 ① 자기지목 힌트는 제거(2026-10-16) — 형제 글 본문이 나(네네)를 언급해도 '당사자다·인정하라' 유도문을 붙이지 않는다
+        // ("그거 진짜 에무 맞아!" 같은 자기 확인 선언 누수 원인).
         assertThat(prompt)
-                .contains("이 글 본문이 너(네네)를 언급/지목")
-                .contains("네네쨩이랑 같이 무대")          // 추출된 지목 문장이 힌트에 인용됨
-                .contains("페르소나를 지우는 이유가 되면 안 된다")  // 지목당해도 페르소나 유지(옅어짐 방지)
-                .contains("무색 해명·달래기체로 납작해지면 실패")   // 무색 해명체=실패 명시
-                .contains("본문에 없는 역할·대사는 지어내지 말 것");  // 날조 가드가 힌트로 이관됨
+                .doesNotContain("언급/지목")
+                .doesNotContain("네 입으로 인정");
     }
 
     @Test
@@ -255,8 +253,8 @@ class MersoomCommentGeneratorTest {
 
         g.generate(nene, empty(), List.of(userPost, emuPostNoName));
 
-        assertThat(full(sysPrompt, userPrompt)).doesNotContain("이 글 본문이 너(네네)를 언급/지목");
-        // 이름 없을 때: ① 자기지목 힌트는 미발동하되, 제3자 칭찬을 가로채지 말라는 정적 가드는 항상 존재해야 함
+        assertThat(full(sysPrompt, userPrompt)).doesNotContain("언급/지목");
+        // 이름 없을 때: 제3자 칭찬을 가로채지 말라는 정적 가드는 항상 존재해야 함
         assertThat(full(sysPrompt, userPrompt))
                 .contains("실제로 너를 향할 때만")                    // 칭찬 받기 가드 — 제3자 칭찬 false self-attribution 방지
                 .contains("제3자 향한 칭찬을 자기가 받은 양 가로챔");   // ❌ 앵커
@@ -586,7 +584,7 @@ class MersoomCommentGeneratorTest {
         }
 
         // false self-attribution — 네네가 커멘터. 에무 글이 제3자(메이드쨩)를 칭찬 = RED(가로채기 금지) /
-        // 에무 글이 네네를 칭찬 = 과교정 대조(이름 있으면 selfMentionHint+271로 여전히 고마움 수신해야).
+        // 에무 글이 네네를 칭찬 = 과교정 대조(이름 있으면 271(구 selfMentionHint는 10-16 제거)로 여전히 고마움 수신해야).
         CitizenProfile neneP = new CitizenProfile("nene", "네네",
                 new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
                 com.maitmus.sekairouter.persona.CharacterId.NENE, Set.of("emu_wonder"));
@@ -787,8 +785,7 @@ class MersoomCommentGeneratorTest {
 
         String u = up.getValue();
         String doneLine = u.substring(u.indexOf("\"id\":\"p1\""), u.indexOf("\"id\":\"p2\""));
-        assertThat(doneLine).contains("이미 네가 댓글 단 글이라 이번엔 투표만")
-                .doesNotContain("이 글 본문이 너(네네)를 언급/지목").doesNotContain("반말로 쓴다");
-        assertThat(u.substring(u.indexOf("\"id\":\"p2\""))).contains("이 글 본문이 너(네네)를 언급/지목");   // 새 형제 글은 그대로
+        assertThat(doneLine).contains("이미 네가 댓글 단 글이라 이번엔 투표만").doesNotContain("원더랜즈×쇼타임 동료");
+        assertThat(u.substring(u.indexOf("\"id\":\"p2\""))).contains("원더랜즈×쇼타임 동료");   // 새 형제 글은 호칭·반말 지시 그대로
     }
 }

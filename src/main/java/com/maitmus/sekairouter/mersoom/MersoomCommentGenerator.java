@@ -437,33 +437,6 @@ public class MersoomCommentGenerator {
     }
 
     /** 작성자 평판/티어/별명을 한 줄로 — LLM이 기억 기반으로 판단하도록 주입. 키는 식별키, 표시는 닉. */
-    /**
-     * ① 자기지목 힌트 — 형제 글 본문(body)에 내 이름(ownName)이 있으면, 그 문장을 뽑아
-     * '넌 이 일의 당사자다' 조건부 힌트를 만든다. 없으면 빈 문자열. (탐지는 결정론적 substring)
-     */
-    private static String selfMentionHint(String body, String ownName) {
-        if (body == null || !body.contains(ownName)) return "";
-        StringBuilder q = new StringBuilder();
-        int n = 0;
-        for (String part : body.split("(?<=[.!?~\\n])")) {
-            String t = part.trim();
-            if (t.contains(ownName)) {
-                if (q.length() > 0) q.append(" ");
-                q.append(t.length() > 90 ? t.substring(0, 90) + "…" : t);
-                if (++n >= 2) break;
-            }
-        }
-        if (q.length() == 0) return "";   // 경계 분할 실패 방어(이론상 도달 안 함)
-        return "⚠️ **이 글 본문이 너(" + ownName + ")를 언급/지목한다** — 그 문장: '" + q + "'. "
-                + "이게 *네 말·행동·성향을 적은 지목·규정*이면 넌 그 일의 **당사자다** — "
-                + "관찰자('봤어')·무관 평행('나도 그래')로 비끼지 말고 그 문장 속 네 행동/말을 **네 입으로 인정하며** 받아라"
-                + "(교정당함=인정/멋쩍음 · 규정=인정or장난스런 정정 · 네가 물어봄/지적함=그 말 한 당사자로). "
-                + "단 **당사자로 받는 게 네 페르소나를 지우는 이유가 되면 안 된다** — 인정·정정·해명을 하더라도 "
-                + "네 평소 결(발랄·천진·의성어 / 직설·츳코미)을 유지해라(에너지 수위는 글의 무게 규칙대로). "
-                + "지목당했다고 무색 해명·달래기체로 납작해지면 실패(그건 당사자성이 아니라 페르소나 소거). "
-                + "단순 *곁가지 언급*이면 억지로 안 짚어도 OK. 본문에 없는 역할·대사는 지어내지 말 것.";
-    }
-
     private static String relationshipLine(MersoomState state, com.maitmus.sekairouter.mersoom.MersoomDtos.Post post,
                                            boolean blocked, boolean isSibling, String siblingShort, String siblingCall,
                                            boolean alreadyCommented) {
@@ -476,7 +449,7 @@ public class MersoomCommentGenerator {
                                             : com.maitmus.sekairouter.persona.CharacterId.NENE;
         String pjskHint = PjskAddressBook.hintFor(speaker, post.content());
         if (isSibling && alreadyCommented) {
-            // 이미 댓글 단 동료 글엔 호칭·당사자 유도문(자기지목 힌트 포함)을 빼고 투표만 지시 — 유도문이 그대로 붙으면
+            // 이미 댓글 단 동료 글엔 호칭·당사자 유도문을 빼고 투표만 지시 — 유도문이 그대로 붙으면
             // alreadyCommented 표시를 이기고 같은 동료 글을 또 골라 코드 필터에 걸렸다(10-08~11: 재선택 11건 전부 형제 글,
             // 그중 4번은 그 한 글만 골라 크론 댓글 0건).
             return "[관계] rep=" + rep + " · " + siblingShort + "(네 동료)의 글 — **이미 네가 댓글 단 글이라 이번엔 투표만**(다시 고르지 말고 다른 글로).";
@@ -487,10 +460,9 @@ public class MersoomCommentGenerator {
             String base = "[관계] rep=" + rep + " · 이건 " + siblingShort + " 본인(네 원더랜즈×쇼타임 동료, 원래 아는 사이)"
                     + " — **머슴 사용자 존댓말 기본값·닉네임·별명 적용 금지.** 반드시 **'" + siblingCall + "'로 부르고 반말**로 쓴다"
                     + "(원더쇼 유닛 내 전원 반말). **존댓말 어미(~요/~예요/~네요/~거에요) 금지, 반말 어미(~어/~지/~네/~거든/~잖아)로.** 별명 짓지 말 것.";
-            // ① 자기지목 탐지 — 형제 글 본문이 나(ownName)를 언급/지목하면 그 문장을 뽑아 당사자 힌트를 이 글 옆에 주입.
-            String ownName = "에무".equals(siblingShort) ? "네네" : "에무";
-            String hint = selfMentionHint(post.content(), ownName);
-            return (hint.isEmpty() ? base : base + " " + hint) + pjskHint;
+            // (구 ① 자기지목 힌트 selfMentionHint는 2026-10-16 제거 — '넌 당사자다·네 입으로 인정하라'가
+            //  "그거 진짜 에무 맞아!"·"들켰다" 같은 자기 확인 선언으로 새어 나옴. 힌트 없이도 당사자 반응 유지(sim 2피드×2회).)
+            return base + pjskHint;
         }
         StringBuilder s = new StringBuilder("[관계] rep=").append(rep);
         if (blocked) {
