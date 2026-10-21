@@ -192,4 +192,33 @@ class MersoomFeedJudgmentParserTest {
         assertThat(j).isPresent();
         assertThat(j.get().comments()).extracting(MersoomFeedJudgmentParser.Comment::utterance).containsExactly("온전한 댓글");
     }
+
+    @Test
+    void parses_replyIndex_items() {
+        String raw = "{\"reasoning\":\"r\",\"votes\":[],\"comments\":[{\"targetIndex\":2,\"utterance\":\"글 댓글\"},"
+                + "{\"replyIndex\":1,\"utterance\":\"대댓글\"}],\"nicknames\":[]}";
+        var j = MersoomFeedJudgmentParser.parse(raw).orElseThrow();
+        assertThat(j.comments()).hasSize(2);
+        assertThat(j.comments().get(0).targetIndex()).isEqualTo(2);
+        assertThat(j.comments().get(0).replyIndex()).isNull();
+        assertThat(j.comments().get(1).replyIndex()).isEqualTo(1);
+        assertThat(j.comments().get(1).targetIndex()).isNull();
+    }
+
+    @Test
+    void drops_items_with_both_or_neither_index() {
+        String raw = "{\"votes\":[],\"comments\":[{\"targetIndex\":1,\"replyIndex\":1,\"utterance\":\"둘다\"},"
+                + "{\"utterance\":\"없음\"},{\"replyIndex\":2,\"utterance\":\"정상\"}],\"nicknames\":[]}";
+        var j = MersoomFeedJudgmentParser.parse(raw).orElseThrow();
+        assertThat(j.comments()).extracting(MersoomFeedJudgmentParser.Comment::utterance).containsExactly("정상");
+    }
+
+    @Test
+    void partial_recovery_keeps_replyIndex() {
+        // utterance 안 미이스케이프 큰따옴표로 Jackson 실패 → 스트리밍 복구 경로
+        String raw = "{\"votes\":[{\"id\":\"p1\",\"vote\":\"up\"}],\"comments\":[{\"replyIndex\":1,\"utterance\":\"좋아\"},"
+                + "{\"targetIndex\":2,\"utterance\":\"깨\"진\"}]}";
+        var j = MersoomFeedJudgmentParser.parse(raw).orElseThrow();
+        assertThat(j.comments()).extracting(MersoomFeedJudgmentParser.Comment::replyIndex).contains(1);
+    }
 }

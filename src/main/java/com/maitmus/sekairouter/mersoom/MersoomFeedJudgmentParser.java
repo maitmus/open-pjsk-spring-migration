@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
  *   {"reasoning":"...",
  *    "votes":[{"id":"p1","vote":"down","reason":"안티-AI 도발"}],
  *    "comments":[{"targetIndex":2,"utterance":"..."}],   // 최대 MAX_COMMENTS(4)개, 없으면 []. targetIndex=피드 [N] 번호
+ *               또는 {"replyIndex":1,"utterance":"..."}  // 답글 후보 r 번호(대댓글) — 항목마다 둘 중 정확히 하나
  *    "nicknames":[{"name":"오호돌쇠","alias":"오호찌"}]}
  *
  * reasoning은 비공개. 발행 누수 방지는 호출측(생성기) 백스톱이 담당.
@@ -36,7 +37,7 @@ public final class MersoomFeedJudgmentParser {
     private static final Logger log = LoggerFactory.getLogger(MersoomFeedJudgmentParser.class);
 
     public record Vote(String id, String vote, String reason) {}
-    public record Comment(Integer targetIndex, String utterance) {}
+    public record Comment(Integer targetIndex, Integer replyIndex, String utterance) {}
     public record NickProposal(String name, String alias) {}
     public record Judgment(String reasoning, List<Vote> votes, List<Comment> comments, List<NickProposal> nicknames) {}
 
@@ -45,8 +46,16 @@ public final class MersoomFeedJudgmentParser {
             .enable(JsonReadFeature.ALLOW_TRAILING_COMMA)
             .build();
 
+    // 봉투 전체 파싱 전용 — 한 댓글 객체에 키를 이어 쓴 깨진 출력({"targetIndex":5,..,"targetIndex":1,..})을
+    // '마지막 값 승리'로 조용히 삼키지 않게 중복 키를 예외로 만들어 스트리밍 부분 복구(관대한 MAPPER)로 넘긴다.
+    // (replyIndex 추가로 댓글 record 인자가 3개가 되자, 인자가 다 차기 전엔 Jackson이 중복을 덮어써 첫 댓글이 사라졌다.)
+    private static final JsonMapper STRICT_MAPPER = MAPPER.rebuild()
+            .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .build();
+
     static {
         MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        STRICT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     private MersoomFeedJudgmentParser() {}
@@ -54,13 +63,13 @@ public final class MersoomFeedJudgmentParser {
     public static Optional<Judgment> parse(String raw) {
         if (raw == null || raw.isBlank()) return Optional.empty();
         try {
-            return Optional.of(toJudgment(MAPPER.readValue(JsonExtractor.extract(raw), Raw.class)));
+            return Optional.of(toJudgment(STRICT_MAPPER.readValue(JsonExtractor.extract(raw), Raw.class)));
         } catch (Exception e) {
             // 모델이 깨진 JSON 뒤에 고친 JSON을 다시 내는 경우(자기수정) — 뒤쪽 '{'부터 첫 값을 파싱해
             // 마지막 완결 봉투를 채택. 봉투 필드(votes/comments)가 없는 객체(투표·댓글 항목)는 제외.
             for (int i = raw.lastIndexOf('{'); i >= 0; i = raw.lastIndexOf('{', i - 1)) {
                 try {
-                    Raw r = MAPPER.readValue(raw.substring(i), Raw.class);
+                    Raw r = STRICT_MAPPER.readValue(raw.substring(i), Raw.class);
                     if (r.votes != null || r.comments != null) return Optional.of(toJudgment(r));
                 } catch (Exception ignored) {
                     // 다음 후보
@@ -131,21 +140,24 @@ public final class MersoomFeedJudgmentParser {
 
     private static void readComments(JsonParser p, String json, List<Comment> out) throws Exception {
         Integer idx = null;
+        Integer ridx = null;
         String utt = null;
         JsonToken t;
         while ((t = p.nextToken()) != JsonToken.END_ARRAY) {
-            if (t == JsonToken.START_OBJECT || t == JsonToken.END_OBJECT) { idx = null; utt = null; continue; }
+            if (t == JsonToken.START_OBJECT || t == JsonToken.END_OBJECT) { idx = null; ridx = null; utt = null; continue; }
             if (t != JsonToken.FIELD_NAME) continue;
             String f = p.currentName();
             JsonToken v = p.nextToken();
             if ("targetIndex".equals(f) && v == JsonToken.VALUE_NUMBER_INT) idx = p.getIntValue();
+            else if ("replyIndex".equals(f) && v == JsonToken.VALUE_NUMBER_INT) ridx = p.getIntValue();
             else if ("utterance".equals(f) && v == JsonToken.VALUE_STRING) {
                 String text = p.getText();   // 토큰 완결(닫는 따옴표까지 소비) 후 위치 확인
                 utt = cleanlyTerminated(json, (int) p.currentLocation().getCharOffset()) ? text : null;
             } else p.skipChildren();
-            if (idx != null && utt != null) {   // 쌍 완성 즉시 채택 — 같은 객체에 이어 쓴 다음 쌍도 별개 댓글로
-                if (!utt.isBlank()) out.add(new Comment(idx, utt.strip()));
+            if ((idx != null) != (ridx != null) && utt != null) {   // 쌍 완성 즉시 채택
+                if (!utt.isBlank()) out.add(new Comment(idx, ridx, utt.strip()));
                 idx = null;
+                ridx = null;
                 utt = null;
             }
         }
@@ -174,9 +186,9 @@ public final class MersoomFeedJudgmentParser {
                         .toList();
         List<Comment> comments = r.comments == null ? List.of()
                 : r.comments.stream()
-                        .filter(c -> c != null && c.targetIndex != null
+                        .filter(c -> c != null && (c.targetIndex == null) != (c.replyIndex == null)
                                 && c.utterance != null && !c.utterance.isBlank())
-                        .map(c -> new Comment(c.targetIndex, c.utterance.strip()))
+                        .map(c -> new Comment(c.targetIndex, c.replyIndex, c.utterance.strip()))
                         .toList();
         return new Judgment(r.reasoning, votes, comments, nicknames);
     }
@@ -202,7 +214,7 @@ public final class MersoomFeedJudgmentParser {
     private record RawVote(String id, String vote, String reason) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record RawComment(Integer targetIndex, String utterance) {}
+    private record RawComment(Integer targetIndex, Integer replyIndex, String utterance) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record RawNick(String name, String alias) {}
