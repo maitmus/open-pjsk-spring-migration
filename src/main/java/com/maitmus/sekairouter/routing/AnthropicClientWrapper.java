@@ -6,7 +6,9 @@ import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
+import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.TextBlockParam;
+import com.anthropic.models.messages.ThinkingConfigAdaptive;
 import com.anthropic.models.messages.ThinkingConfigDisabled;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.WebSearchTool20250305;
@@ -54,7 +56,7 @@ public class AnthropicClientWrapper {
     }
 
     private String completeJson(PromptBlocks prompt, String userPrompt, boolean webSearch) {
-        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), prompt, userPrompt, webSearch);
+        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), properties.effort(), prompt, userPrompt, webSearch);
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
@@ -87,7 +89,7 @@ public class AnthropicClientWrapper {
      * block keeps serving routing reads.
      */
     public String generateUtterance(PromptBlocks prompt, String userPrompt) {
-        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), prompt, userPrompt, true);
+        MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), properties.effort(), prompt, userPrompt, true);
 
         Message response = client.messages().create(params);
         log.debug("Anthropic stop_reason: {}", response.stopReason());
@@ -111,10 +113,12 @@ public class AnthropicClientWrapper {
     }
 
     /**
-     * 요청 파라미터 조립. thinking은 항상 명시적으로 끈다 — Sonnet 5 등은 생략 시 adaptive thinking이
-     * 켜져 비용이 늘고, 품질 검증(모의 비교)도 thinking off로 했다. package-private static — 테스트용.
+     * 요청 파라미터 조립. effort 미설정이면 thinking을 명시적으로 끈다 — Sonnet 5 등은 생략 시 adaptive
+     * thinking이 켜져 비용이 는다. effort 설정 시 adaptive + 그 effort — Opus 5.5는 disabled를 400으로
+     * 거부해 effort로만 사고량을 조절한다. 품질 검증(모의 비교)은 라이브와 같은 설정으로 한다.
+     * package-private static — 테스트용.
      */
-    static MessageCreateParams buildParams(String model, long maxTokens, PromptBlocks prompt,
+    static MessageCreateParams buildParams(String model, long maxTokens, String effort, PromptBlocks prompt,
                                            String userPrompt, boolean webSearch) {
         MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(Model.of(model))
@@ -122,9 +126,14 @@ public class AnthropicClientWrapper {
                 // recommended minimum is 5000 tokens. Current default (1000) may truncate.
                 // Raise AnthropicProperties.maxTokens to ≥5000 in production config.
                 .maxTokens(maxTokens)
-                .thinking(ThinkingConfigDisabled.builder().build())
                 .systemOfTextBlockParams(buildSystemBlocks(prompt))
                 .addUserMessage(userPrompt);
+        if (effort == null || effort.isBlank()) {
+            builder.thinking(ThinkingConfigDisabled.builder().build());
+        } else {
+            builder.thinking(ThinkingConfigAdaptive.builder().build())
+                   .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.of(effort)).build());
+        }
         if (webSearch) {
             builder.addTool(WEB_SEARCH_TOOL)
                    .putAdditionalHeader("anthropic-beta", WEB_SEARCH_BETA_HEADER);

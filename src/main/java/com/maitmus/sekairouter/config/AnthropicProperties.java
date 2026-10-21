@@ -10,5 +10,6 @@ import org.springframework.validation.annotation.Validated;
 public record AnthropicProperties(
         @NotBlank String apiKey,
         @NotBlank String model,
-        @Positive int maxTokens
+        @Positive int maxTokens,
+        String effort   // 비면 thinking off, 있으면 adaptive + 이 effort(low|medium|high…)
 ) {}
