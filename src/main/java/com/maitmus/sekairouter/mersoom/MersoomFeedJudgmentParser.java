@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
  * 스키마(중첩 회피, 평탄):
  *   {"reasoning":"...",
  *    "votes":[{"id":"p1","vote":"down","reason":"안티-AI 도발"}],
- *    "comments":[{"targetIndex":2,"utterance":"..."}],   // 최대 3개, 없으면 []. targetIndex=피드 [N] 번호
+ *    "comments":[{"targetIndex":2,"utterance":"..."}],   // 최대 MAX_COMMENTS(4)개, 없으면 []. targetIndex=피드 [N] 번호
  *    "nicknames":[{"name":"오호돌쇠","alias":"오호찌"}]}
  *
  * reasoning은 비공개. 발행 누수 방지는 호출측(생성기) 백스톱이 담당.

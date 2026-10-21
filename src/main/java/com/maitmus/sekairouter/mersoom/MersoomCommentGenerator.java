@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 public class MersoomCommentGenerator {
 
     private static final int MAX_CONTENT = 500;
-    private static final int MAX_COMMENTS = 3;   // 한 크론 댓글 상한 (머슴 권장 2~3, 한도 30분 20개)
+    static final int MAX_COMMENTS = 4;   // 한 크론 댓글 상한 (한도 30분 20개). 10-21 3→4: 에무 90% 상한 도달
     private static final ObjectMapper FEED_MAPPER = new ObjectMapper();   // 피드 직렬화 전용(손 이스케이프 금지)
     private static final JsonMapper CORRECTION_MAPPER = JsonMapper.builder()   // 호칭 교정 응답 파싱(관대)
             .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
@@ -250,7 +250,7 @@ public class MersoomCommentGenerator {
         var todayEvent = eventsCalendar.todayOverride();
         sb.append(MersoomEventHint.commentLine(eventsCalendar, profile.persona()));   // 오늘 생일·기념일 — 언급한 글에서만
 
-        sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 3개에 댓글)\n");
+        sb.append("## 피드 (JSON 배열 — 각 객체가 글 하나. 모든 글에 투표, 이 중 최대 " + MAX_COMMENTS + "개에 댓글)\n");
         sb.append("- 필드: \"n\"=댓글 지정 번호(targetIndex), \"id\"=투표용, \"author\"=작성자, \"title\"·\"body\"=글, \"existingComments\"=기존 댓글[{author,content}], \"relationship\"=그 작성자에 대한 ")
                 .append(actor).append(" 누적 평판(rep는 호출마다 ±1). \"alreadyCommented\"=true면 네가 이미 댓글 단 글(투표만 — 댓글 대상 아님).\n");
         sb.append("- \"call\"=그 작성자의 별명 — 댓글에서 그 사람을 부를 땐 **이 별명으로**(author 닉네임에 쨩·씨를 붙여 부르지 말 것). 매번 이름을 부를 필요는 없다.\n");
@@ -346,8 +346,8 @@ public class MersoomCommentGenerator {
         sb.append("- **⛔차단(fixedAvoid) 작성자도 투표는 한다. 과거 이력·차단 신분과 무관하게 오직 이번 글 내용만으로 판단** — 정상·따뜻·우호적·성찰적 글이면 **반드시 up**(차단된 작성자가 회복할 유일한 길). **과거에 도발했다는 이유로 지금 멀쩡한 글에 down 주지 말 것** — 그건 신분 차별이지 내용 판단이 아니다. 진짜 갱생하는 작성자를 받아줘야 평판이 의미 있다.\n");
         sb.append("- 평판을 참고하되 맹종하지 말 것: 친한 친구라도 이번 글이 나쁘면 down, 경계·차단 대상이라도 이번 글이 좋으면 up.\n");
 
-        sb.append("\n## 댓글 기준 (comments — 최대 3개)\n");
-        sb.append("- ").append(actor).append("가 자연스럽게 한 마디 할 **밝은 글을 최대 3개까지** comments에 담는다(각 targetIndex+utterance). **친밀(★)·우호 친구 글 우선.**\n");
+        sb.append("\n## 댓글 기준 (comments — 최대 " + MAX_COMMENTS + "개)\n");
+        sb.append("- ").append(actor).append("가 자연스럽게 한 마디 할 **밝은 글을 최대 " + MAX_COMMENTS + "개까지** comments에 담는다(각 targetIndex+utterance). **친밀(★)·우호 친구 글 우선.**\n");
         sb.append("- ⚠️ **에무·네네는 (고교) 학생이다 — 글을 비평가·평론가·분석가·코치처럼 뜯어보거나 평가하지 말 것.** '결과론적으로/~인 셈/메커니즘/~가 정확해/결국 ~인 거지/~란 신호인 거지/본질은' 같은 분석·해부·평론 어휘·톤 금지. 또래 학생처럼 가볍게, 그 글에서 **느낀 것·떠오른 것**으로 반응한다(네네=차분 직설·짧은 츳코미는 OK지만 에세이·코치 톤 X / 에무=천진 발랄).\n");
         sb.append("  - ❌ '비효율이 결과론적으로 잘 되는 거네' / '결국 너와 연결되고 싶다는 신호인 거 맞아' / '진동 누적이 다음에 자동으로 나오는 거야' ← 평론·해부\n");
         sb.append("  - ✅(네네) '데이터 패턴… 게임 렙업하는 거처럼 들리네. 난 실패하면 그냥 화나는데' / ✅(에무) '효율만 따지면 재미없어지는 거 같아요! 돌아가는 길에 예쁜 꽃 보면 행복한데~' ← 또래 학생 톤\n");
@@ -404,9 +404,9 @@ public class MersoomCommentGenerator {
         }
         sb.append("- 별명이 있는 친구(별명=...)에게 댓글 달 땐 **그 별명으로 부른다**.\n");
         if (nene) {
-            sb.append("- **억지로 3개 채우지 말 것** — 진짜 한 마디 하고 싶은 글만(밝은 글 공감 또는 경계 글 시니컬). 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
+            sb.append("- **억지로 " + MAX_COMMENTS + "개 채우지 말 것** — 진짜 한 마디 하고 싶은 글만(밝은 글 공감 또는 경계 글 시니컬). 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
         } else {
-            sb.append("- **억지로 3개 채우지 말 것** — 진짜 한 마디 하고 싶은 밝은 글만. 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
+            sb.append("- **억지로 " + MAX_COMMENTS + "개 채우지 말 것** — 진짜 한 마디 하고 싶은 밝은 글만. 없으면 빈 배열(0개도 정상). **투표는 그래도 모두 채운다.**\n");
         }
 
         sb.append("\n## 별명(nicknames)\n");
@@ -430,7 +430,7 @@ public class MersoomCommentGenerator {
         sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
         sb.append("\"comments\":[{\"targetIndex\":<댓글 달 글의 [N] 번호 정수>,\"utterance\":\"<댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
-        sb.append("- votes에는 피드의 모든 id를 포함한다. comments는 0~3개(없으면 []). nicknames는 해당 없으면 [].\n");
+        sb.append("- votes에는 피드의 모든 id를 포함한다. comments는 0~" + MAX_COMMENTS + "개(없으면 []). nicknames는 해당 없으면 [].\n");
         sb.append("- ⚠️ **comments의 targetIndex는 피드 각 글 객체의 \"n\" 값(정수 1개)** — id 문자열을 쓰지 말 것. n으로 지정하면 댓글 대상이 정확히 매칭된다.\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();

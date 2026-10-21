@@ -78,6 +78,24 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void comment_cap_is_four_in_prompt_and_enforced() {
+        // 10-21 3→4: 에무가 84회 중 76회 상한 도달. 프롬프트 숫자도 상수에서 나와 어긋나지 않는다.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<PromptBlocks> sys = ArgumentCaptor.forClass(PromptBlocks.class);
+        StringBuilder five = new StringBuilder("{\"votes\":[],\"comments\":[");
+        for (int i = 1; i <= 5; i++) five.append(i > 1 ? "," : "").append("{\"targetIndex\":").append(i).append(",\"utterance\":\"좋아요\"}");
+        when(anthropic.completeJson(sys.capture(), anyString())).thenReturn(five.append("]}").toString());
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        var feed = List.of(post("p1", "a", "a"), post("p2", "b", "b"), post("p3", "c", "c"), post("p4", "d", "d"), post("p5", "e", "e"));
+        var j = new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents()).generate(EMU, empty(), feed);
+
+        assertThat(j.comments()).hasSize(4);
+        var blocks = sys.getValue().blocks();
+        assertThat(blocks.get(blocks.size() - 1).text()).contains("최대 4개까지").contains("comments는 0~4개").doesNotContain("최대 3개");
+    }
+
+    @Test
     void address_correction_call_uses_base_blocks_without_judgment_rules() {
         // 교정 콜은 {"fixed":[...]} 형식 — 댓글 판정 규칙(votes/comments 출력 형식)이 섞이면 충돌하므로 base 블록만.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
@@ -410,16 +428,6 @@ class MersoomCommentGeneratorTest {
                 """);
         var j = gen.generate(EMU, empty(), feed4());
         assertThat(j.comments()).hasSize(3);
-    }
-
-    @Test
-    void caps_comments_at_3() {
-        var gen = gen("""
-                {"votes":[{"id":"p1","vote":"up"}],
-                 "comments":[{"targetIndex":1,"utterance":"하나"},{"targetIndex":2,"utterance":"둘"},
-                             {"targetIndex":3,"utterance":"셋"},{"targetIndex":4,"utterance":"넷"}]}
-                """);
-        assertThat(gen.generate(EMU, empty(), feed4()).comments()).hasSize(3);   // 4개 줘도 3개로
     }
 
     @Test

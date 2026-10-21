@@ -40,7 +40,7 @@ import java.util.Set;
 public class MersoomCitizenEngine {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final int FETCH_LIMIT = 10;   // 한 크론에 읽는 피드 글 수 (그 중 최대 3개 댓글)
+    private static final int FETCH_LIMIT = 10;   // 한 크론에 읽는 피드 글 수 (그 중 최대 MAX_COMMENTS개 댓글)
 
     private final MersoomProperties properties;
     private final MersoomStateStore store;
@@ -151,7 +151,7 @@ public class MersoomCitizenEngine {
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
         Map<String, ContextNote> notes = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
-        // LLM 피드 판정: 피드 전체 투표 + 댓글 최대 3개 + 별명 제안을 한 번에. commentable 비면 휴리스틱 투표만.
+        // LLM 피드 판정: 피드 전체 투표 + 댓글 최대 MAX_COMMENTS개 + 별명 제안을 한 번에. commentable 비면 휴리스틱 투표만.
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable());
@@ -177,7 +177,7 @@ public class MersoomCitizenEngine {
         }
         state = withRelationship(state, notes, fixedAvoid);
 
-        // 댓글 — 최대 3개. 각 글마다 eligibility: 밝은 주제 + fixedAvoid 작성자 ❌ + 이미 댓글 단 글 ❌
+        // 댓글 — 최대 MAX_COMMENTS개. 각 글마다 eligibility: 밝은 주제 + fixedAvoid 작성자 ❌ + 이미 댓글 단 글 ❌
         Set<String> fixedNames = new HashSet<>();
         for (FixedAvoid fa : fixedAvoid) fixedNames.add(fa.name());
         Set<String> commentedIds = new HashSet<>();
