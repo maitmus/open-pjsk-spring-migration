@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -149,13 +150,18 @@ public class MersoomCitizenEngine {
     public void runComment(CitizenProfile profile) {
         MersoomState state = store.load(profile.stateFile());
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
+        // 내 댓글에 달린 답글 — 판정 전에 모아 같은 콜에서 대댓글 후보로 보인다(피드 제목은 아는 글만).
+        Map<String, String> titles = new HashMap<>();
+        for (Commentable c : feed.commentable()) titles.put(c.post().id(), c.post().title());
+        List<MersoomReplyThreads.ReplyCandidate> replies = profile.auth() == null ? List.of()
+                : collector.collectReplies(state, profile.auth().authId(), titles, OffsetDateTime.now(clock.withZone(KST)));
         Map<String, ContextNote> notes = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
         // LLM 피드 판정: 피드 전체 투표 + 댓글 최대 MAX_COMMENTS개 + 별명 제안을 한 번에. commentable 비면 휴리스틱 투표만.
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable(),
-                        java.time.LocalDateTime.now(clock.withZone(KST)));
+                        java.time.LocalDateTime.now(clock.withZone(KST)), replies);
         // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
@@ -187,6 +193,34 @@ public class MersoomCitizenEngine {
         List<CommentItem> items = (judgment != null) ? judgment.comments() : List.of();
         int posted = 0;
         for (CommentItem item : items) {
+            if (item.isReply()) {
+                var cand = replies.stream().filter(r -> r.replyToId().equals(item.parentId())).findFirst().orElse(null);
+                String lastText = (cand == null || cand.thread().isEmpty()) ? "" : cand.thread().get(cand.thread().size() - 1).text();
+                boolean ok = cand != null && !fixedNames.contains(cand.replyAuthorKey())
+                        && commentTopicGate.isBrightEnough(new Post(cand.postId(), "", cand.replyAuthorNick(), lastText,
+                                0, 0, 0, 0, 0, null, null, null));
+                if (!ok) {
+                    log.info("[{}] Mersoom reply skip — eligibility 탈락 (post={}, parent={})",
+                            profile.key(), item.targetId(), item.parentId());
+                    continue;
+                }
+                try {
+                    var resp = api.createComment(profile.auth(), cand.postId(), cand.replyToId(), profile.actorName(), item.text());
+                    if (resp != null && resp.success()) {
+                        state = recordReply(profile, state, cand, item.text());
+                        posted++;
+                        log.info("[{}] Mersoom reply created: post={} parent={} target_nick={} content_len={}",
+                                profile.key(), cand.postId(), cand.replyToId(), cand.replyAuthorNick(), item.text().length());
+                        log.info("[{}] Mersoom reply target: @{} \"{}\"", profile.key(), cand.replyAuthorNick(), lastText.replace("\n", " "));
+                        log.info("[{}] Mersoom reply content: \"{}\"", profile.key(), item.text());
+                        activityRecorder.recordComment(profile.actorName(), cand.replyAuthorNick(), item.text());
+                        if (!sleepBetweenPosts()) break;
+                    }
+                } catch (Exception e) {
+                    log.error("[{}] Mersoom reply execution failed", profile.key(), e);
+                }
+                continue;
+            }
             Commentable target = feed.commentable().stream()
                     .filter(c -> c.post().id().equals(item.targetId()))
                     .findFirst().orElse(null);
@@ -216,12 +250,7 @@ public class MersoomCitizenEngine {
                             target.post().content() == null ? "" : target.post().content().replace("\n", " "));
                     log.info("[{}] Mersoom comment content: \"{}\"", profile.key(), content);
                     activityRecorder.recordComment(profile.actorName(), target.post().nickname(), content);
-                    try {
-                        if (properties.apiRateLimitSleepMs() > 0) Thread.sleep(properties.apiRateLimitSleepMs());
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    if (!sleepBetweenPosts()) break;
                 }
             } catch (Exception e) {
                 log.error("[{}] Mersoom comment execution failed", profile.key(), e);
@@ -333,6 +362,38 @@ public class MersoomCitizenEngine {
         return new MersoomState(
                 newPostIds, state.lastCommentIds(), state.fixedAvoid(),
                 tickedNotes, state.contextNotesCapacity(),
+                state.reservedNicknames(), state.summary(), state.summaryPrev(),
+                state.pendingReports(), state.votedPostIds());
+    }
+
+    /** 게시 사이 레이트리밋 간격. 인터럽트되면 false(호출측이 루프를 끊는다). */
+    private boolean sleepBetweenPosts() {
+        try {
+            if (properties.apiRateLimitSleepMs() > 0) Thread.sleep(properties.apiRateLimitSleepMs());
+            return true;
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /** 대댓글 기록 — 최근 내 댓글 기억(lastCommentIds)에 넣고, 답글 작성자 note엔 중립 마커만(본문 verbatim 금지는 recordComment와 같은 이유). */
+    private MersoomState recordReply(CitizenProfile profile, MersoomState state,
+                                     MersoomReplyThreads.ReplyCandidate cand, String content) {
+        var newCommentIds = new ArrayList<>(state.lastCommentIds());
+        newCommentIds.add(0, new CommentRef(cand.postId(), OffsetDateTime.now(clock.withZone(KST)), content));
+        if (newCommentIds.size() > 50) newCommentIds.subList(50, newCommentIds.size()).clear();
+        Map<String, ContextNote> updated = new LinkedHashMap<>(state.contextNotes());
+        String key = cand.replyAuthorKey();
+        if (key != null && !key.isBlank()) {
+            ContextNote prev = updated.get(key);
+            String event = "[%s] %s 답글에 %s 대댓글".formatted(
+                    LocalDate.now(clock.withZone(KST)), safeNick(cand.replyAuthorNick()), profile.actorName());
+            updated.put(key, contextNoteManager.upsertAfterInteraction(prev, event, prev != null ? prev.call() : null));
+        }
+        return new MersoomState(
+                state.lastPostIds(), newCommentIds, state.fixedAvoid(),
+                updated, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
                 state.pendingReports(), state.votedPostIds());
     }
