@@ -92,14 +92,18 @@ public class MersoomReputationTracker {
             out.put(key, withRepAndLine(prev, newRep, line));
         }
 
-        // 별명 적용 — 친밀(rep≥5) + call 비어 있을 때만
+        // 별명 적용 — 친밀(rep≥5) + call 비어 있을 때만. 다른 친구가 이미 쓰는 별명은 거절(사람 구분이 안 됨 —
+        // 10-22 네네 63개 중 '조용한이' 5명·'고요한이'/'관찰자' 3명씩 중복) → call 빈 채로 두면 다음 크론에 다시 짓는다.
+        Set<String> usedCalls = new HashSet<>();
+        for (ContextNote n : out.values()) if (n.call() != null && !n.call().isBlank()) usedCalls.add(n.call().strip());
         for (var e : coinedNicknames.entrySet()) {
-            String alias = e.getValue();
-            if (alias == null || alias.isBlank()) continue;
+            String alias = e.getValue() == null ? null : e.getValue().strip();
+            if (alias == null || alias.isBlank() || usedCalls.contains(alias)) continue;
             ContextNote note = out.get(e.getKey());
             if (note == null || note.reputation() < RECOVERY_TRIGGER) continue;
             if (note.call() == null || note.call().isBlank()) {
                 out.put(e.getKey(), new ContextNote(note.resetCount(), note.resetAt(), note.note(), alias, note.reputation()));
+                usedCalls.add(alias);
             }
         }
 

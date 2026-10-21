@@ -885,4 +885,11 @@ class MersoomCommentGeneratorTest {
         assertThat(j.comments().get(0).parentId()).isEqualTo("r1");
         assertThat(j.comments().get(0).text()).isEqualTo("히후미쨩 말대로 같이 해요!");
     }
+
+    @Test
+    void nene_nickname_rule_is_name_based_not_trait_based() {
+        String rules = MersoomCommentGenerator.buildRules(NENE);
+        assertThat(rules).contains("닉네임에서 따온 짧은 호칭").contains("성격·인상 묘사")
+                .doesNotContain("무심한 듯 챙기는, 과하게 귀엽지 않게");
+    }
 }

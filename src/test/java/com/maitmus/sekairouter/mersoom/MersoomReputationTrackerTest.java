@@ -48,6 +48,24 @@ class MersoomReputationTrackerTest {
     }
 
     @Test
+    void coined_nickname_already_used_by_another_friend_is_rejected() {
+        // 별명은 사람 구분용 — 다른 친구가 이미 쓰는 별명(또는 같은 크론에 먼저 붙은 별명)은 받지 않고 다음 크론에 다시 짓게 둔다.
+        var notes = new java.util.LinkedHashMap<String, ContextNote>();
+        notes.put("old", note(10, "조용한이"));
+        notes.put("a", note(5, null));
+        notes.put("b", note(5, null));
+        notes.put("c", note(5, null));
+        var coined = new java.util.LinkedHashMap<String, String>();
+        coined.put("a", "조용한이");
+        coined.put("b", "라쿵");
+        coined.put("c", "라쿵");
+        var r = apply(notes, List.of(), List.of(), coined);
+        assertThat(r.notes().get("a").call()).isNull();
+        assertThat(r.notes().get("b").call()).isEqualTo("라쿵");
+        assertThat(r.notes().get("c").call()).isNull();
+    }
+
+    @Test
     void multiple_pending_nicknames_all_applied_in_one_cycle() {
         // rep≥5 별명미정 친구가 여럿이면 한 크론에 전부 부여(라쿵 같은 누락 케이스 일괄 커버).
         var notes = new java.util.HashMap<String, ContextNote>();
