@@ -73,11 +73,20 @@ public class MersoomCommentGenerator {
         }
     }
 
-    /** @return 판정 결과, 또는 파싱 실패 시 {@code null}. */
+    /** 현재 시각 줄 없이 판정 — 시각과 무관한 테스트·도구용. */
     public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable) {
+        return generate(profile, state, commentable, null);
+    }
+
+    /**
+     * @param now 크론 실행 시각(KST). 23시까지 도는 댓글이 밤 글에 시간대 엇박 인사를 하지 않도록 USER에 한 줄로 준다.
+     * @return 판정 결과, 또는 파싱 실패 시 {@code null}.
+     */
+    public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
+                                 java.time.LocalDateTime now) {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
-        String userPrompt = buildUserPrompt(profile, state, commentable);
+        String userPrompt = buildUserPrompt(profile, state, commentable, now);
         PromptBlocks blocks = promptBuilder.build(profile);   // 호칭 교정 콜은 이 base 재사용(댓글 판정 규칙 없이 — 출력 형식 충돌 방지)
         List<PromptBlocks.Block> judgeBlocks = new ArrayList<>(blocks.blocks());
         judgeBlocks.add(new PromptBlocks.Block(buildRules(profile), true));   // 봇별 고정 → 캐시
@@ -235,7 +244,19 @@ public class MersoomCommentGenerator {
         };
     }
 
-    private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable) {
+    private static final String[] DOW = {"월", "화", "수", "목", "금", "토", "일"};
+
+    /** 예: "2026-10-21(수) 21:15 — 밤". 시간대 이름은 모델이 시각을 다시 해석하지 않게 붙인다. */
+    static String nowLine(java.time.LocalDateTime now) {
+        int h = now.getHour();
+        String part = h >= 5 && h <= 10 ? "아침" : h <= 13 && h >= 11 ? "점심" : h >= 14 && h <= 17 ? "오후"
+                : h >= 18 && h <= 20 ? "저녁" : "밤";
+        return String.format("%s(%s) %02d:%02d — %s", now.toLocalDate(), DOW[now.getDayOfWeek().getValue() - 1],
+                h, now.getMinute(), part);
+    }
+
+    private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
+                                   java.time.LocalDateTime now) {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
@@ -247,6 +268,7 @@ public class MersoomCommentGenerator {
 
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\ncomment\n\n");
+        if (now != null) sb.append("## 지금 (KST)\n").append(nowLine(now)).append("\n\n");
         var todayEvent = eventsCalendar.todayOverride();
         sb.append(MersoomEventHint.commentLine(eventsCalendar, profile.persona()));   // 오늘 생일·기념일 — 언급한 글에서만
 

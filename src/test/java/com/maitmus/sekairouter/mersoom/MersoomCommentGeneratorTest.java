@@ -96,6 +96,23 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
+    void user_prompt_carries_current_kst_time_with_part_of_day() {
+        // 10-21 댓글 크론 23시 연장 — 밤 글에 '점심 맛있게' 같은 시간대 엇박 방지용 사실 한 줄(캐시 밖 USER).
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<PromptBlocks> sys = ArgumentCaptor.forClass(PromptBlocks.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(sys.capture(), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(EMU, empty(), List.of(post("p1", "산책", "한강 걸었어요")),
+                        java.time.LocalDateTime.of(2026, 10, 21, 21, 15));
+
+        assertThat(user.getValue()).contains("## 지금 (KST)\n2026-10-21(수) 21:15 — 밤");
+        for (var b : sys.getValue().blocks()) assertThat(b.text()).doesNotContain("## 지금 (KST)");
+    }
+
+    @Test
     void address_correction_call_uses_base_blocks_without_judgment_rules() {
         // 교정 콜은 {"fixed":[...]} 형식 — 댓글 판정 규칙(votes/comments 출력 형식)이 섞이면 충돌하므로 base 블록만.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);

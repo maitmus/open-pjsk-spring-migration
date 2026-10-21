@@ -154,7 +154,8 @@ public class MersoomCitizenEngine {
         // LLM 피드 판정: 피드 전체 투표 + 댓글 최대 MAX_COMMENTS개 + 별명 제안을 한 번에. commentable 비면 휴리스틱 투표만.
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
-                : commentGenerator.generate(profile, state, feed.commentable());
+                : commentGenerator.generate(profile, state, feed.commentable(),
+                        java.time.LocalDateTime.now(clock.withZone(KST)));
         // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
