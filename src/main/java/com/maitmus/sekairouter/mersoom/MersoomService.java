@@ -58,7 +58,7 @@ public class MersoomService {
     @Scheduled(cron = "${mersoom.comment-cron}", zone = "Asia/Seoul")
     public void executeComment() {
         if (!properties.enabled()) return;
-        if (!isActiveHour()) {
+        if (!isCommentHour()) {
             log.warn("Mersoom comment triggered outside active hours, skip");
             return;
         }
@@ -67,8 +67,15 @@ public class MersoomService {
         }
     }
 
+    /** 글 활성창 09–19시. */
     private boolean isActiveHour() {
         int h = LocalTime.now(clock.withZone(KST)).getHour();
         return h >= 9 && h <= 19;
+    }
+
+    /** 댓글 활성창 09–23시 — 20시 이후 피드 글이 전량 미커버라 댓글만 저녁 연장(2026-10-21). */
+    private boolean isCommentHour() {
+        int h = LocalTime.now(clock.withZone(KST)).getHour();
+        return h >= 9 && h <= 23;
     }
 }
