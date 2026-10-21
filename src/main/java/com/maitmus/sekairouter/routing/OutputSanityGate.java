@@ -52,6 +52,26 @@ public class OutputSanityGate {
         for (String m : EN_MARKERS) {
             if (lower.contains(m)) return false;
         }
-        return true;
+        return !mostlyNonKorean(text);
+    }
+
+    /** 이 미만 글자 수(한글+라틴)는 언어 판정 안 함 — "OK!" 같은 짧은 감탄 오탐 방지. */
+    private static final int LANG_MIN_LETTERS = 8;
+    /** 한글 비율 하한. 10-13~21 라이브 706건 최저 0.78(영어 약어 섞인 문장) — 여유를 크게 둔 값. */
+    private static final double MIN_HANGUL_RATIO = 0.5;
+
+    /**
+     * 본문이 통째로 영어로 나온 경우(Opus 5.5가 한국어 프롬프트에도 가끔 영어로 답함). 고유명사·약어가 섞인
+     * 한국어는 통과하고, 라틴 글자가 한글보다 많을 때만 누수로 본다.
+     */
+    static boolean mostlyNonKorean(String text) {
+        int hangul = 0, latin = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ((c >= '가' && c <= '힣') || (c >= 'ㄱ' && c <= 'ㅣ')) hangul++;
+            else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) latin++;
+        }
+        int letters = hangul + latin;
+        return letters >= LANG_MIN_LETTERS && hangul < letters * MIN_HANGUL_RATIO;
     }
 }

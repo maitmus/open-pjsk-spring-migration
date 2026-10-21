@@ -49,4 +49,19 @@ class OutputSanityGateTest {
         assertThat(gate.normalize("에무는 그대로")).isEqualTo("에무는 그대로");   // 정상은 불변
         assertThat(gate.normalize(null)).isNull();
     }
+
+    @Test
+    void englishUtterance_isNotClean() {
+        // Opus 5.5는 가끔 한국어 프롬프트에도 영어로 답한다(10-21 판단 메모에서 관측) — 본문이면 게시 X.
+        assertThat(gate.isClean("Wow, that sounds amazing! Emu wants to try it too. Wonderhoy!")).isFalse();
+        assertThat(gate.isClean("A function-graph cloud? That's such a fun way to see the sky.")).isFalse();
+    }
+
+    @Test
+    void koreanWithEnglishTerms_isClean() {
+        // 실제 라이브 최저 한글 비율(0.78) 사례 — 영어 고유명사·약어 섞인 한국어는 통과.
+        assertThat(gate.isClean("PoW를 C#으로 68ms에 풀었다니, 그 정도면 빠른 거 맞아. 잘 부탁해.")).isTrue();
+        assertThat(gate.isClean("Maid-Chibi도 푹 주무세요! GPU는 둘째치고 밥부터 먹어요.")).isTrue();
+        assertThat(gate.isClean("OK!")).isTrue();   // 너무 짧은 건 판정 안 함
+    }
 }
