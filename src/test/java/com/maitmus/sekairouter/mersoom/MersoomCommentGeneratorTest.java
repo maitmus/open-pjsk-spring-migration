@@ -813,4 +813,76 @@ class MersoomCommentGeneratorTest {
         assertThat(doneLine).contains("이미 네가 댓글 단 글이라 이번엔 투표만").doesNotContain("원더랜즈×쇼타임 동료");
         assertThat(u.substring(u.indexOf("\"id\":\"p2\""))).contains("원더랜즈×쇼타임 동료");   // 새 형제 글은 호칭·반말 지시 그대로
     }
+
+    // ── 대댓글(내 댓글에 달린 답글) ──
+    private MersoomCommentGenerator genWith(AnthropicClientWrapper a) {
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        return new MersoomCommentGenerator(a, pb, new OutputSanityGate(), noEvents());
+    }
+
+    private static MersoomReplyThreads.ReplyCandidate replyCand(String postId, String replyId, String nick, String text) {
+        return new MersoomReplyThreads.ReplyCandidate(postId, "밤공기", List.of(
+                new MersoomReplyThreads.ThreadLine(true, "에무", "낙엽 놀이 최고예요!"),
+                new MersoomReplyThreads.ThreadLine(false, nick, text)),
+                replyId, "maid_chibi", nick, OffsetDateTime.now());
+    }
+
+    @Test
+    void reply_section_only_when_candidates() {
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> up = ArgumentCaptor.forClass(String.class);
+        when(a.completeJson(any(PromptBlocks.class), up.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        var g = genWith(a);
+        g.generate(EMU, empty(), feed4(), null, List.of());
+        assertThat(up.getValue()).doesNotContain("## 내 댓글에 달린 답글");
+        g.generate(EMU, empty(), feed4(), null, List.of(replyCand("px", "r1", "Maid-Chibi", "답글 고마워요 ✨")));
+        assertThat(up.getValue()).contains("## 내 댓글에 달린 답글 (받아칠지는 자유 — 0개가 정상)")
+                .contains("\"r\":1").contains("\"by\":\"나\"").contains("답글 고마워요 ✨");
+    }
+
+    @Test
+    void rules_mention_reply_skip_and_replyIndex() {
+        String rules = MersoomCommentGenerator.buildRules(EMU);
+        assertThat(rules).contains("답글이 고마움 인사·맞장구뿐이면 굳이 받지 않는다").contains("replyIndex");
+    }
+
+    @Test
+    void replyIndex_maps_to_parent_and_shares_cap() {
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        when(a.completeJson(any(PromptBlocks.class), anyString())).thenReturn("{\"votes\":[],\"comments\":["
+                + "{\"targetIndex\":1,\"utterance\":\"하나\"},{\"targetIndex\":2,\"utterance\":\"둘\"},"
+                + "{\"targetIndex\":3,\"utterance\":\"셋\"},{\"replyIndex\":1,\"utterance\":\"대댓\"},"
+                + "{\"replyIndex\":2,\"utterance\":\"넘침\"}]}");
+        var j = genWith(a).generate(EMU, empty(), feed4(), null,
+                List.of(replyCand("px", "r1", "M", "a"), replyCand("px", "r2", "M", "b")));
+        assertThat(j.comments()).hasSize(4);   // 합산 상한
+        var last = j.comments().get(3);
+        assertThat(last.isReply()).isTrue();
+        assertThat(last.parentId()).isEqualTo("r1");
+        assertThat(last.targetId()).isEqualTo("px");
+    }
+
+    @Test
+    void reply_index_invalid_and_duplicate_dropped() {
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        when(a.completeJson(any(PromptBlocks.class), anyString())).thenReturn("{\"votes\":[],\"comments\":["
+                + "{\"replyIndex\":9,\"utterance\":\"무효\"},{\"replyIndex\":1,\"utterance\":\"첫\"},"
+                + "{\"replyIndex\":1,\"utterance\":\"중복\"}]}");
+        var j = genWith(a).generate(EMU, empty(), feed4(), null, List.of(replyCand("px", "r1", "M", "a")));
+        assertThat(j.comments()).extracting(MersoomCommentGenerator.CommentItem::text).containsExactly("첫");
+    }
+
+    @Test
+    void address_correction_skips_reply_items() {
+        // 대댓글 상대는 답글 작성자 — 같은 글(p1, 히후미 글)이어도 원글 작성자 별명 누락 교정(missedCall)을 걸지 않는다.
+        AnthropicClientWrapper a = mock(AnthropicClientWrapper.class);
+        when(a.completeJson(any(PromptBlocks.class), anyString())).thenReturn(
+                "{\"votes\":[],\"comments\":[{\"replyIndex\":1,\"utterance\":\"히후미쨩 말대로 같이 해요!\"}]}");
+        var j = genWith(a).generate(EMU, withCall("hifumi_bot", "히후찡"), List.of(hifumiPost()), null,
+                List.of(replyCand("p1", "r1", "Maid-Chibi", "고마워요")));
+        verify(a, times(1)).completeJson(any(PromptBlocks.class), anyString());
+        assertThat(j.comments().get(0).parentId()).isEqualTo("r1");
+        assertThat(j.comments().get(0).text()).isEqualTo("히후미쨩 말대로 같이 해요!");
+    }
 }

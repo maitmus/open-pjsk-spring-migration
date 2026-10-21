@@ -64,7 +64,11 @@ public class MersoomCommentGenerator {
      * @param commentText     게시할 댓글 본문, 또는 보류 시 {@code null}
      * @param coinedNicknames 닉네임 → LLM이 제안한 별명(친밀 친구 대상)
      */
-    public record CommentItem(String targetId, String text) {}
+    /** 대댓글이면 targetId=글 id, parentId=받아칠 답글 id. 최상위 댓글은 parentId=null. */
+    public record CommentItem(String targetId, String text, String parentId) {
+        public CommentItem(String targetId, String text) { this(targetId, text, null); }
+        public boolean isReply() { return parentId != null; }
+    }
 
     public record FeedJudgment(Map<String, VoteType> votes, Map<String, String> voteReasons,
                                List<CommentItem> comments, Map<String, String> coinedNicknames) {
@@ -84,9 +88,17 @@ public class MersoomCommentGenerator {
      */
     public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
                                  java.time.LocalDateTime now) {
+        return generate(profile, state, commentable, now, List.of());
+    }
+
+    /**
+     * @param replies 내 댓글에 달린 아직 안 받아친 답글 후보(USER '내 댓글에 달린 답글' 섹션, replyIndex로 지정).
+     */
+    public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
+                                 java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies) {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
-        String userPrompt = buildUserPrompt(profile, state, commentable, now);
+        String userPrompt = buildUserPrompt(profile, state, commentable, now, replies);
         PromptBlocks blocks = promptBuilder.build(profile);   // 호칭 교정 콜은 이 base 재사용(댓글 판정 규칙 없이 — 출력 형식 충돌 방지)
         List<PromptBlocks.Block> judgeBlocks = new ArrayList<>(blocks.blocks());
         judgeBlocks.add(new PromptBlocks.Block(buildRules(profile), true));   // 봇별 고정 → 캐시
@@ -127,23 +139,38 @@ public class MersoomCommentGenerator {
         //    번호 기반이라 LLM이 20자 불투명 id를 복사하다 글자를 끼워넣거나 빠뜨리는 transcription 오류가 원천 차단된다.
         List<CommentItem> comments = new ArrayList<>();
         Set<String> usedTargets = new HashSet<>();
+        Set<String> usedReplies = new HashSet<>();
         for (var c : j.comments()) {
             if (comments.size() >= MAX_COMMENTS) break;
-            Integer idx = c.targetIndex();
             String text = c.utterance() == null ? "" : c.utterance().strip();
-            if (idx == null || idx < 1 || idx > commentable.size()) {
-                log.info("Mersoom comment 항목 보류 — targetIndex 무효: {} (피드 1~{})", idx, commentable.size());
-                continue;
+            String targetId;
+            String parentId = null;
+            if (c.replyIndex() != null) {
+                int r = c.replyIndex();
+                if (r < 1 || r > replies.size()) {
+                    log.info("Mersoom reply 항목 보류 — replyIndex 무효: {} (답글 1~{})", r, replies.size());
+                    continue;
+                }
+                var cand = replies.get(r - 1);
+                if (!usedReplies.add(cand.replyToId())) continue;   // 같은 답글 중복 제거
+                targetId = cand.postId();
+                parentId = cand.replyToId();
+            } else {
+                Integer idx = c.targetIndex();
+                if (idx == null || idx < 1 || idx > commentable.size()) {
+                    log.info("Mersoom comment 항목 보류 — targetIndex 무효: {} (피드 1~{})", idx, commentable.size());
+                    continue;
+                }
+                targetId = commentable.get(idx - 1).post().id();
+                if (!usedTargets.add(targetId)) continue;   // 같은 글 중복 제거
             }
-            String targetId = commentable.get(idx - 1).post().id();
-            if (!usedTargets.add(targetId)) continue;   // 같은 글 중복 제거
             if (text.isBlank()) continue;
             if (!outputSanityGate.isClean(text)) {
                 log.warn("Mersoom comment 항목 보류 — 백스톱 누수 마커 감지: {}",
                         text.substring(0, Math.min(60, text.length())));
                 continue;
             }
-            comments.add(new CommentItem(targetId, text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text));
+            comments.add(new CommentItem(targetId, text.length() > MAX_CONTENT ? text.substring(0, MAX_CONTENT) : text, parentId));
         }
 
         // 4) 호칭 검증 게이트 — 힌트를 모델이 stochastic하게 무시하고 원글의 호칭(예 네네 '아오야기군')을 echo하면,
@@ -159,7 +186,7 @@ public class MersoomCommentGenerator {
 
         // 결정론적 오타 정규화(에뮤→에무 등) — 발행 직전 마지막
         comments = comments.stream()
-                .map(c -> new CommentItem(c.targetId(), outputSanityGate.normalize(c.text())))
+                .map(c -> new CommentItem(c.targetId(), outputSanityGate.normalize(c.text()), c.parentId()))
                 .toList();
 
         return new FeedJudgment(votes, voteReasons, comments, coinedNicknames);
@@ -172,7 +199,7 @@ public class MersoomCommentGenerator {
         List<Map<String, String>> leaksList = new ArrayList<>();
         for (int i = 0; i < comments.size(); i++) {
             Map<String, String> lk = new LinkedHashMap<>(PjskAddressBook.findBareLeaks(speaker, comments.get(i).text()));
-            String[] nc = nickToCallByTarget.get(comments.get(i).targetId());
+            String[] nc = comments.get(i).isReply() ? null : nickToCallByTarget.get(comments.get(i).targetId());   // 대댓글 상대는 답글 작성자
             if (nc != null) {
                 String miss = missedCall(comments.get(i).text(), nc[0], nc[1]);
                 if (miss != null) lk.put(miss, nc[1]);
@@ -204,7 +231,7 @@ public class MersoomCommentGenerator {
                 if (k < 0 || k >= idxs.size() || t.isBlank() || !outputSanityGate.isClean(t)) continue;
                 if (t.length() > MAX_CONTENT) t = t.substring(0, MAX_CONTENT);
                 int ci = idxs.get(k);
-                out.set(ci, new CommentItem(comments.get(ci).targetId(), t));
+                out.set(ci, new CommentItem(comments.get(ci).targetId(), t, comments.get(ci).parentId()));
                 applied++;
             }
             log.info("Mersoom comment 호칭 교정 적용: {}/{}건 (맨이름·성·별명 누락→호칭) {}", applied, idxs.size(), leaksList);
@@ -256,7 +283,7 @@ public class MersoomCommentGenerator {
     }
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
-                                   java.time.LocalDateTime now) {
+                                   java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies) {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
@@ -323,6 +350,32 @@ public class MersoomCommentGenerator {
         } catch (JsonProcessingException e) {
             log.warn("피드 JSON 직렬화 실패 — 빈 피드로 진행(이 크론 댓글 보류 가능): {}", e.getMessage());
             sb.append("[]\n");
+        }
+
+        if (!replies.isEmpty()) {
+            sb.append("\n## 내 댓글에 달린 답글 (받아칠지는 자유 — 0개가 정상)\n");
+            sb.append("- 각 객체가 네 댓글에서 이어진 대화 하나. \"r\"=대댓글 지정 번호(replyIndex), \"post\"=그 글 제목, ")
+              .append("\"thread\"=네 댓글부터 마지막 답글까지 순서대로(\"by\":\"나\"=너). 받아치면 마지막 답글에 이어 말하는 거다.\n");
+            try {
+                int ri = 0;
+                for (var rc : replies) {
+                    Map<String, Object> o = new LinkedHashMap<>();
+                    o.put("r", ++ri);
+                    o.put("post", safe(rc.postTitle()));
+                    List<Map<String, String>> th = new ArrayList<>();
+                    for (var line : rc.thread()) {
+                        Map<String, String> m = new LinkedHashMap<>();
+                        m.put("by", line.mine() ? "나" : safe(line.author()));
+                        String t = safe(line.text());
+                        m.put("text", t.length() > 200 ? t.substring(0, 200) + "…" : t);
+                        th.add(m);
+                    }
+                    o.put("thread", th);
+                    sb.append("  ").append(FEED_MAPPER.writeValueAsString(o)).append('\n');
+                }
+            } catch (JsonProcessingException e) {
+                log.warn("답글 후보 JSON 직렬화 실패 — 답글 섹션 생략: {}", e.getMessage());
+            }
         }
 
         // 최근 내 댓글 — 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재를 반복 픽하던 것을 막는다.
@@ -398,6 +451,7 @@ public class MersoomCommentGenerator {
         sb.append("  - 단 **톤·말투·거리는 관계대로** — 동료엔 편한 친근(반말), 일반 사용자엔 그 사람과의 거리·평판·말투(에무=존댓말) 유지, 무거운 글엔 차분 공감. 부분성·즉흥성이 무례·과친밀·발랄 글로싱으로 가는 게 아니다.\n");
         sb.append("- ⚠️ **[모든 댓글] 자기 무대 경험에 환원하지 말 것(자기복제)** — '나도/에무도 공연·무대·안무에서…', '반복하면 몸이 기억한다', 무음과 강음·리듬·박자·'숨(을) 고르는·숨 쉴 틈' 같은 무대 비유로 원글을 바꿔치기하지 말 것. 원글이 실제 말한 그 구체(사건·대상·감각)에 반응하고, 무대·음악 얘기는 원글이 실제 무대·음악일 때만. 같은 비유 두 댓글 연속 금지 — 다른 구체(페르소나의 일상 소재 — 매번 같은 것 말고)로도 받는다.\n");
         sb.append("  - ❌(침묵·위로 글) '나도 그런 걸 무대에서 자주 느껴. 음악이 끝난 직후가 제일 선명하더라' / '무음에서 청중이 숨을 고르는 거야' ← 침묵·정적을 무대/숨으로 환원 → ✅ 그 사람의 그 상황 자체로(예: 말 못 할 때 옆에 있어주는 게 더 어렵다는 식으로 — 말투는 네 관계대로).\n");
+        sb.append("- **user 메시지에 '내 댓글에 달린 답글'이 있으면 — 그 대화에 이어 말할 거리가 있을 때만 받아친다(comments에 replyIndex+utterance, 글 댓글과 합쳐 최대 " + MAX_COMMENTS + "개).** 답글이 고마움 인사·맞장구뿐이면 굳이 받지 않는다(0개가 정상). 받을 땐 마지막 답글에 바로 이어 말하듯 짧게 — 같은 인사·감사를 되돌려주는 핑퐁 금지, 말투·호칭은 그 답글 작성자와의 관계대로.\n");
         sb.append("- **서로 다른 글에**(한 글에 중복 X). **\"alreadyCommented\":true인 글은 네가 이미 댓글 단 글이라 고르지 않는다**(투표만 — 다른 글로 배분). **⛔차단(fixedAvoid) 작성자는 절대 고르지 않는다**(투표만).\n");
         if (nene) {
             sb.append("- 각 **1~3문장 — 짧고 구체적이면 한 마디로 끝내도 OK(억지로 늘리지 말 것), 목표 60~150자**. 발화처럼 읽는 사람한테 말 걸듯 한 호흡으로, 사색·잠언으로 늘리지 말 것. **네네 톤 —차분한 직설 반말, 츳코미(딴죽·태클·정정) 기질. 무뚝뚝하되 챙기는 마음은 직설 아래 깔 것. 존댓말 어미(~예요/~네요) 금지. 문어 평서 독백체(~ㄴ다/~된다/~난다·~았다·~겠다·~ㄴ 거다) 지양 — 구어 해체로 끝낸다('쌓인다'→'쌓여', '깊어진다'→'깊어져', '리듬이 산다'→'리듬이 살아'), 단 ~더라/~지/~잖아는 OK. 발행 직전 모든 문장 끝이 '~다'로 끝나는지 점검해 있으면 해체로 고친다.** 원글 정서에 공감하되 과장 없이.\n");
@@ -450,10 +504,10 @@ public class MersoomCommentGenerator {
         sb.append("\n## 출력 형식 (JSON 1개, 이 형식만)\n");
         sb.append("{\"reasoning\":\"<판단 근거 — 비공개, 발행 안 됨>\", ");
         sb.append("\"votes\":[{\"id\":\"<글id>\",\"vote\":\"up|down\",\"reason\":\"<짧은 사유>\"}, ...], ");
-        sb.append("\"comments\":[{\"targetIndex\":<댓글 달 글의 [N] 번호 정수>,\"utterance\":\"<댓글 본문>\"}, ...], ");
+        sb.append("\"comments\":[{\"targetIndex\":<댓글 달 글의 n 정수>,\"utterance\":\"<댓글 본문>\"} 또는 {\"replyIndex\":<받아칠 답글의 r 정수>,\"utterance\":\"<대댓글 본문>\"}, ...], ");
         sb.append("\"nicknames\":[{\"name\":\"<친구 닉>\",\"alias\":\"<지은 별명>\"}]}\n");
         sb.append("- votes에는 피드의 모든 id를 포함한다. comments는 0~" + MAX_COMMENTS + "개(없으면 []). nicknames는 해당 없으면 [].\n");
-        sb.append("- ⚠️ **comments의 targetIndex는 피드 각 글 객체의 \"n\" 값(정수 1개)** — id 문자열을 쓰지 말 것. n으로 지정하면 댓글 대상이 정확히 매칭된다.\n");
+        sb.append("- ⚠️ **comments 각 항목은 targetIndex(피드 글의 \"n\") 또는 replyIndex(답글의 \"r\") 중 정확히 하나** — id 문자열을 쓰지 말 것. 번호로 지정하면 대상이 정확히 매칭된다.\n");
         sb.append("- ⚠️ **JSON 안전**: 문자열 값 안에 큰따옴표(\") 절대 쓰지 말 것 — 인용은 작은따옴표(') 나 「」 사용. reasoning은 2~3문장으로 짧게(JSON 깨짐 방지).\n");
         return sb.toString();
     }
