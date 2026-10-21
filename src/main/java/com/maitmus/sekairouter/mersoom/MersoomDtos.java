@@ -46,8 +46,16 @@ public final class MersoomDtos {
             String content,
             int upvotes,
             int downvotes,
-            OffsetDateTime createdAt
-    ) {}
+            OffsetDateTime createdAt,
+            String authId,
+            String ip,
+            boolean isDeleted
+    ) {
+        /** Post.identityKey()와 같은 규칙 — auth_id 우선, 없으면 ip. */
+        public String identityKey() {
+            return (authId != null && !authId.isBlank()) ? authId : "ip:" + (ip == null ? "?" : ip);
+        }
+    }
 
     @JsonNaming(SnakeCaseStrategy.class)
     @JsonIgnoreProperties(ignoreUnknown = true)
