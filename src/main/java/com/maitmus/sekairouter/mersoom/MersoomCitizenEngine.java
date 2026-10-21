@@ -150,10 +150,10 @@ public class MersoomCitizenEngine {
     public void runComment(CitizenProfile profile) {
         MersoomState state = store.load(profile.stateFile());
         CollectedFeed feed = collector.collect(state, FETCH_LIMIT);
-        // 내 댓글에 달린 답글 — 판정 전에 모아 같은 콜에서 대댓글 후보로 보인다(피드 제목은 아는 글만).
+        // 내 댓글에 달린 답글 — 판정 전에 모아 같은 콜에서 대댓글 후보로 보인다(피드 제목은 아는 글만). 빈 피드면 판정이 없으니 GET도 생략.
         Map<String, String> titles = new HashMap<>();
         for (Commentable c : feed.commentable()) titles.put(c.post().id(), c.post().title());
-        List<MersoomReplyThreads.ReplyCandidate> replies = profile.auth() == null ? List.of()
+        List<MersoomReplyThreads.ReplyCandidate> replies = (profile.auth() == null || feed.commentable().isEmpty()) ? List.of()
                 : collector.collectReplies(state, profile.auth().authId(), titles, OffsetDateTime.now(clock.withZone(KST)));
         Map<String, ContextNote> notes = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 

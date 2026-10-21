@@ -103,6 +103,7 @@ public final class MersoomFeedJudgmentParser {
         String reasoning = null;
         List<Vote> votes = new ArrayList<>();
         List<Comment> comments = new ArrayList<>();
+        List<NickProposal> nicknames = new ArrayList<>();
         try (JsonParser p = MAPPER.createParser(json)) {
             if (p.nextToken() != JsonToken.START_OBJECT) return Optional.empty();
             while (p.nextToken() == JsonToken.FIELD_NAME) {
@@ -110,6 +111,7 @@ public final class MersoomFeedJudgmentParser {
                 JsonToken t = p.nextToken();
                 if ("reasoning".equals(field) && t == JsonToken.VALUE_STRING) reasoning = p.getText();
                 else if ("votes".equals(field) && t == JsonToken.START_ARRAY) readVotes(p, votes);
+                else if ("nicknames".equals(field) && t == JsonToken.START_ARRAY) readNicknames(p, nicknames);
                 else if ("comments".equals(field) && t == JsonToken.START_ARRAY) readComments(p, json, comments);
                 else p.skipChildren();
             }
@@ -118,7 +120,25 @@ public final class MersoomFeedJudgmentParser {
         }
         if (comments.isEmpty()) return Optional.empty();
         if (votes.isEmpty()) votes = fallbackVotesOnly(json).map(Judgment::votes).orElse(List.of());
-        return Optional.of(new Judgment(reasoning, votes, comments, List.of()));
+        return Optional.of(new Judgment(reasoning, votes, comments, nicknames));
+    }
+
+    /** 부분 복구에서도 별명 제안을 살린다 — 중복 키 등으로 엄격 파싱만 실패한 정상 출력에서 별명이 조용히 사라지지 않게. */
+    private static void readNicknames(JsonParser p, List<NickProposal> out) throws Exception {
+        String name = null, alias = null;
+        JsonToken t;
+        while ((t = p.nextToken()) != JsonToken.END_ARRAY) {
+            if (t == JsonToken.START_OBJECT) { name = alias = null; }
+            else if (t == JsonToken.FIELD_NAME) {
+                String f = p.currentName();
+                p.nextToken();
+                String v = p.currentToken() == JsonToken.VALUE_STRING ? p.getText() : null;
+                if ("name".equals(f)) name = v; else if ("alias".equals(f)) alias = v;
+                else p.skipChildren();
+            } else if (t == JsonToken.END_OBJECT && name != null && !name.isBlank() && alias != null && !alias.isBlank()) {
+                out.add(new NickProposal(name.strip(), alias.strip()));
+            }
+        }
     }
 
     private static void readVotes(JsonParser p, List<Vote> out) throws Exception {

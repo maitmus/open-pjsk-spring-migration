@@ -48,7 +48,7 @@ class MersoomCitizenEngineTest {
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), mock(MersoomApiClient.class))
                 .runComment(EMU);
 
-        verify(commentGen, never()).generate(any(), any(), any(), any(), any());
+        verify(commentGen, never()).generate(any(), any(), any(), any(), any());        verify(collector, never()).collectReplies(any(), any(), any(), any());   // 빈 피드면 답글 GET도 안 함
     }
 
     @Test

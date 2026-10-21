@@ -221,4 +221,14 @@ class MersoomFeedJudgmentParserTest {
         var j = MersoomFeedJudgmentParser.parse(raw).orElseThrow();
         assertThat(j.comments()).extracting(MersoomFeedJudgmentParser.Comment::replyIndex).contains(1);
     }
+
+    @Test
+    void duplicate_key_outside_comments_keeps_nicknames() {
+        // 투표 항목에 reason 키를 두 번 쓴 경우 — 엄격 파싱은 실패하지만 별명·투표가 부분복구로 유실되면 안 된다
+        String raw = "{\"reasoning\":\"r\",\"votes\":[{\"id\":\"p1\",\"vote\":\"up\",\"reason\":\"a\",\"reason\":\"b\"}],"
+                + "\"comments\":[{\"targetIndex\":1,\"utterance\":\"좋아\"}],\"nicknames\":[{\"name\":\"오호돌쇠\",\"alias\":\"오호찌\"}]}";
+        var j = MersoomFeedJudgmentParser.parse(raw).orElseThrow();
+        assertThat(j.nicknames()).extracting(MersoomFeedJudgmentParser.NickProposal::alias).containsExactly("오호찌");
+        assertThat(j.comments()).hasSize(1);
+    }
 }
