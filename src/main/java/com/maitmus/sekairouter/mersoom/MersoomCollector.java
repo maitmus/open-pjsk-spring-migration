@@ -6,8 +6,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** /api/posts 수집 → 분류 (내 글 / 댓글 가능 / 투표 대상). */
@@ -46,6 +51,53 @@ public class MersoomCollector {
                 recent.size(), votable.size(), commentable.size(), myTracked.size());
 
         return new CollectedFeed(commentable, myTracked, votable);
+    }
+
+    static final int REPLY_WINDOW_HOURS = 12;
+    static final int REPLY_POSTS = 6;
+    static final int MAX_REPLY_CANDIDATES = 4;
+
+    private long replyFetchGapMs = 3000;   // 6/14 IP 버스트 차단 재발 방지 — 글 사이 간격
+
+    void setReplyFetchGapMs(long ms) { this.replyFetchGapMs = ms; }
+
+    /**
+     * 내 최근 댓글이 달린 글들의 댓글 트리를 당겨, 내 댓글에 달린 아직 안 받아친 답글을 후보로 모은다(댓글 크론 전용).
+     * 생성 응답엔 댓글 id가 없어서 state엔 글 id만 있다 → 트리에서 auth_id로 내 댓글을 찾는다. 실패한 글은 건너뛴다.
+     */
+    public List<MersoomReplyThreads.ReplyCandidate> collectReplies(MersoomState state, String myAuthId,
+                                                                  Map<String, String> titlesByPostId,
+                                                                  OffsetDateTime now) {
+        OffsetDateTime since = now.minusHours(REPLY_WINDOW_HOURS);
+        LinkedHashSet<String> postIds = new LinkedHashSet<>();
+        for (MersoomState.CommentRef ref : state.lastCommentIds()) {
+            if (ref.timestamp() == null || ref.timestamp().isBefore(since)) continue;
+            postIds.add(ref.postId());
+            if (postIds.size() >= REPLY_POSTS) break;
+        }
+        Set<String> blocked = new HashSet<>();
+        for (var fa : state.fixedAvoid()) blocked.add(fa.name());
+
+        List<MersoomReplyThreads.ReplyCandidate> all = new ArrayList<>();
+        boolean first = true;
+        for (String pid : postIds) {
+            if (!first && replyFetchGapMs > 0) {
+                try { Thread.sleep(replyFetchGapMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+            first = false;
+            try {
+                String title = titlesByPostId.getOrDefault(pid, "(예전 글)");
+                all.addAll(MersoomReplyThreads.candidates(pid, title, api.commentsOf(pid), myAuthId, blocked));
+            } catch (Exception e) {
+                log.info("Mersoom reply 수집 스킵 — post={} {}", pid, e.toString());
+            }
+        }
+        all.sort(Comparator.comparing(MersoomReplyThreads.ReplyCandidate::replyCreatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        List<MersoomReplyThreads.ReplyCandidate> out = all.size() > MAX_REPLY_CANDIDATES
+                ? List.copyOf(all.subList(0, MAX_REPLY_CANDIDATES)) : List.copyOf(all);
+        log.info("Mersoom replies collected: posts={}, candidates={}", postIds.size(), out.size());
+        return out;
     }
 
     public record Commentable(Post post, List<Comment> comments) {}
