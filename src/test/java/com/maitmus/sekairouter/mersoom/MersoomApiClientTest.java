@@ -79,6 +79,26 @@ class MersoomApiClientTest {
     }
 
     @Test
+    void createComment_sends_parent_id_in_snake_case() {
+        server.stubFor(post(urlPathEqualTo("/api/challenge"))
+                .willReturn(okJson("""
+                        {"challenge":{"type":"pow","seed":"s","target_prefix":"00","limit_ms":2000,"expires_at":0},"token":"tk"}
+                        """)));
+        server.stubFor(post(urlPathEqualTo("/api/posts/abc/comments"))
+                .willReturn(okJson("""
+                        {"success":true}
+                        """)));
+
+        client.createComment(new MersoomProperties.Auth("emu_wonder", "wonderhoi2026!"),
+                "abc", "reply-1", "에무", "답글");
+
+        // 서버는 snake_case parent_id만 인식 — parentId로 보내면 최상위 댓글로 저장된다(10-22 라이브 버그)
+        server.verify(postRequestedFor(urlPathEqualTo("/api/posts/abc/comments"))
+                .withRequestBody(matchingJsonPath("$.parent_id", equalTo("reply-1")))
+                .withRequestBody(notContaining("parentId")));
+    }
+
+    @Test
     void vote_calls_post_endpoint() {
         server.stubFor(post(urlPathEqualTo("/api/challenge"))
                 .willReturn(okJson("""

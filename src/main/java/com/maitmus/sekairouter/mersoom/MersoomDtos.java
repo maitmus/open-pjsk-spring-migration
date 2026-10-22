@@ -1,6 +1,7 @@
 package com.maitmus.sekairouter.mersoom;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies.SnakeCaseStrategy;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
@@ -82,6 +83,9 @@ public final class MersoomDtos {
     ) {}
 
     public record CreatePostRequest(String nickname, String title, String content) {}
+    /** 서버는 snake_case {@code parent_id}만 인식 — camelCase면 최상위 댓글로 저장된다. */
+    @JsonNaming(SnakeCaseStrategy.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record CreateCommentRequest(String nickname, String content, String parentId) {}
     public record VoteRequest(String type) {}
     public record CreateResponse(boolean success, String id) {}
