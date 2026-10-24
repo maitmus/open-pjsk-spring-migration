@@ -56,13 +56,15 @@ public class MersoomCollector {
     static final int REPLY_WINDOW_HOURS = 12;
     static final int REPLY_POSTS = 6;
     static final int MAX_REPLY_CANDIDATES = 4;
+    static final int REPLY_MY_POSTS = 2;   // 내 최근 글(하루 4편 → 반나절치) — 남의 최상위 댓글도 후보
 
     private long replyFetchGapMs = 3000;   // 6/14 IP 버스트 차단 재발 방지 — 글 사이 간격
 
     void setReplyFetchGapMs(long ms) { this.replyFetchGapMs = ms; }
 
     /**
-     * 내 최근 댓글이 달린 글들의 댓글 트리를 당겨, 내 댓글에 달린 아직 안 받아친 답글을 후보로 모은다(댓글 크론 전용).
+     * 내 최근 댓글이 달린 글들 + 내 최근 글 2개의 댓글 트리를 당겨, 내 댓글에 달린 답글·내 글에 달린 남의 최상위 댓글 중
+     * 아직 안 받아친 것을 후보로 모은다(댓글 크론 전용).
      * 생성 응답엔 댓글 id가 없어서 state엔 글 id만 있다 → 트리에서 auth_id로 내 댓글을 찾는다. 실패한 글은 건너뛴다.
      */
     public List<MersoomReplyThreads.ReplyCandidate> collectReplies(MersoomState state, String myAuthId,
@@ -78,12 +80,27 @@ public class MersoomCollector {
         Set<String> blocked = new HashSet<>();
         for (var fa : state.fixedAvoid()) blocked.add(fa.name());
 
+        List<String> myPosts = state.lastPostIds().stream().limit(REPLY_MY_POSTS).toList();
+        postIds.removeAll(myPosts);   // 내 글은 아래서 한 번에(답글 + 최상위 댓글) — 중복 조회 X
+
         List<MersoomReplyThreads.ReplyCandidate> all = new ArrayList<>();
         boolean first = true;
-        for (String pid : postIds) {
-            if (!first && replyFetchGapMs > 0) {
-                try { Thread.sleep(replyFetchGapMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        for (String pid : myPosts) {
+            if (!first && !gap()) break;
+            first = false;
+            try {
+                Post p = api.post(pid);
+                if (!gap()) break;
+                List<Comment> cs = api.commentsOf(pid);
+                String title = p == null ? "(내 글)" : p.title();
+                all.addAll(MersoomReplyThreads.candidates(pid, title, cs, myAuthId, blocked));
+                all.addAll(MersoomReplyThreads.myPostCandidates(pid, title, p == null ? null : p.content(), cs, myAuthId, blocked, since));
+            } catch (Exception e) {
+                log.info("Mersoom reply 수집 스킵(내 글) — post={} {}", pid, e.toString());
             }
+        }
+        for (String pid : postIds) {
+            if (!first && !gap()) break;
             first = false;
             try {
                 String title = titlesByPostId.getOrDefault(pid, "(예전 글)");
@@ -96,8 +113,15 @@ public class MersoomCollector {
                 Comparator.nullsLast(Comparator.reverseOrder())));
         List<MersoomReplyThreads.ReplyCandidate> out = all.size() > MAX_REPLY_CANDIDATES
                 ? List.copyOf(all.subList(0, MAX_REPLY_CANDIDATES)) : List.copyOf(all);
-        log.info("Mersoom replies collected: posts={}, candidates={}", postIds.size(), out.size());
+        log.info("Mersoom replies collected: posts={}, my_posts={}, candidates={}", postIds.size(), myPosts.size(), out.size());
         return out;
+    }
+
+    /** 요청 사이 간격(IP 버스트 방지). 인터럽트면 false — 수집 중단. */
+    private boolean gap() {
+        if (replyFetchGapMs <= 0) return true;
+        try { Thread.sleep(replyFetchGapMs); return true; }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
     }
 
     public record Commentable(Post post, List<Comment> comments) {}

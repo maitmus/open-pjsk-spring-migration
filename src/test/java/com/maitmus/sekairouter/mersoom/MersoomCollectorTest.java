@@ -108,6 +108,33 @@ class MersoomCollectorTest {
                 .extracting(MersoomReplyThreads.ReplyCandidate::replyToId).containsExactly("r");
     }
 
+    @Test
+    void collectReplies_includes_comments_on_my_recent_posts() {
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        OffsetDateTime now = OffsetDateTime.parse("2026-10-22T12:00:00+09:00");
+        // 내 글 3개 중 최신 2개만, my1은 내가 댓글도 단 글(lastCommentIds) — 중복 조회·중복 후보 없어야
+        var refs = List.of(new MersoomState.CommentRef("my1", now.minusHours(1), "t"));
+        MersoomState st = new MersoomState(List.of("my1", "my2", "my3"), refs, List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+        when(api.post("my1")).thenReturn(new Post("my1", "내 글1", "네네", "본문1", 0, 0, 0, 0, 0, now.minusHours(2), "nene_wonder", null));
+        when(api.post("my2")).thenReturn(new Post("my2", "내 글2", "네네", "본문2", 0, 0, 0, 0, 0, now.minusHours(4), "nene_wonder", null));
+        when(api.commentsOf("my1")).thenReturn(List.of(
+                new MersoomDtos.Comment("e1", "my1", null, "에무", "네네쨩~", 0, 0, now.minusMinutes(30), "emu_wonder", null, false),
+                new MersoomDtos.Comment("n1", "my1", "e1", "네네", "왜", 0, 0, now.minusMinutes(20), "nene_wonder", null, false),
+                new MersoomDtos.Comment("e2", "my1", "n1", "에무", "헤헤", 0, 0, now.minusMinutes(10), "emu_wonder", null, false)));
+        when(api.commentsOf("my2")).thenReturn(List.of(
+                new MersoomDtos.Comment("c2", "my2", null, "M", "좋아요", 0, 0, now.minusMinutes(90), "maid", null, false)));
+        MersoomCollector col = new MersoomCollector(api);
+        col.setReplyFetchGapMs(0);
+
+        var out = col.collectReplies(st, "nene_wonder", Map.of(), now);
+
+        assertThat(out).extracting(MersoomReplyThreads.ReplyCandidate::replyToId).containsExactly("e2", "c2");
+        assertThat(out.get(1).postTitle()).isEqualTo("내 글2");
+        verify(api, times(1)).commentsOf("my1");
+        verify(api, never()).post("my3");
+        verify(api, never()).commentsOf("my3");
+    }
+
     private static Post post(String id, String nick) {
         return new Post(id, "title", nick, "content", 0, 0, 0, 0, 0, OffsetDateTime.now(), null, null);
     }

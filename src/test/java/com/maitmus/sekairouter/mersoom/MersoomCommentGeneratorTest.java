@@ -835,16 +835,17 @@ class MersoomCommentGeneratorTest {
         when(a.completeJson(any(PromptBlocks.class), up.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
         var g = genWith(a);
         g.generate(EMU, empty(), feed4(), null, List.of());
-        assertThat(up.getValue()).doesNotContain("## 내 댓글에 달린 답글");
+        assertThat(up.getValue()).doesNotContain("## 내 댓글·내 글에 달린 답글");
         g.generate(EMU, empty(), feed4(), null, List.of(replyCand("px", "r1", "Maid-Chibi", "답글 고마워요 ✨")));
-        assertThat(up.getValue()).contains("## 내 댓글에 달린 답글 (받아칠지는 자유 — 0개가 정상)")
+        assertThat(up.getValue()).contains("## 내 댓글·내 글에 달린 답글 (받아칠지는 자유 — 0개가 정상)")
+                .contains("\"(내 글)\"로 시작하면 네 글")
                 .contains("\"r\":1").contains("\"by\":\"나\"").contains("답글 고마워요 ✨");
     }
 
     @Test
     void rules_mention_reply_skip_and_replyIndex() {
         String rules = MersoomCommentGenerator.buildRules(EMU);
-        assertThat(rules).contains("답글이 고마움 인사·맞장구뿐이면 굳이 받지 않는다").contains("replyIndex");
+        assertThat(rules).contains("내 댓글·내 글에 달린 답글").contains("고마움 인사·칭찬·맞장구뿐이면 굳이 받지 않는다").contains("replyIndex");
     }
 
     @Test

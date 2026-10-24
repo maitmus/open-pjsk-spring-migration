@@ -45,6 +45,13 @@ public class MersoomApiClient {
         return resp == null || resp.posts() == null ? List.of() : resp.posts();
     }
 
+    public Post post(String postId) {
+        return restClient().get()
+                .uri("/posts/{id}", postId)
+                .retrieve()
+                .body(Post.class);
+    }
+
     public List<Comment> commentsOf(String postId) {
         CommentsResponse resp = restClient().get()
                 .uri("/posts/{id}/comments", postId)

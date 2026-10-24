@@ -86,4 +86,39 @@ class MersoomReplyThreadsTest {
         assertThat(MersoomReplyThreads.depth(a, byId)).isEqualTo(1);
         assertThat(MersoomReplyThreads.depth(cc, byId)).isEqualTo(3);
     }
+
+    // ── 내 글에 달린 최상위 댓글 ──
+    private static final OffsetDateTime SINCE = T0.minusHours(12);
+
+    @Test
+    void top_level_comment_on_my_post_is_candidate_with_post_line() {
+        var cs = List.of(c("a", null, "emu_wonder", "에무", "네네쨩 완승이라니~!", 5));
+        var out = MersoomReplyThreads.myPostCandidates("p1", "오늘 에무한테 완승", "다섯 판 다 이겼어", cs, ME, Set.of(), SINCE);
+        assertThat(out).hasSize(1);
+        var r = out.get(0);
+        assertThat(r.replyToId()).isEqualTo("a");
+        assertThat(r.replyAuthorKey()).isEqualTo("emu_wonder");
+        assertThat(r.thread()).extracting(MersoomReplyThreads.ThreadLine::mine).containsExactly(true, false);
+        assertThat(r.thread().get(0).text()).isEqualTo("(내 글) 오늘 에무한테 완승 — 다섯 판 다 이겼어");
+    }
+
+    @Test
+    void my_post_comment_already_answered_or_mine_or_reply_is_not_candidate() {
+        var cs = List.of(c("a", null, "m", "M", "x", 0), c("b", "a", ME, "네네", "y", 1),   // 이미 받아침
+                c("c", null, ME, "네네", "내가 단 최상위", 2),                              // 내 댓글
+                c("d", "c", "m", "M", "내 댓글에 단 답글", 3));                              // 최상위 아님(기존 경로 담당)
+        assertThat(MersoomReplyThreads.myPostCandidates("p1", "t", "b", cs, ME, Set.of(), SINCE)).isEmpty();
+    }
+
+    @Test
+    void my_post_comment_older_than_window_or_blocked_is_not_candidate() {
+        var cs = List.of(c("old", null, "m", "M", "x", -13 * 60), c("blk", null, "troll", "T", "y", 0));
+        assertThat(MersoomReplyThreads.myPostCandidates("p1", "t", "b", cs, ME, Set.of("troll"), SINCE)).isEmpty();
+    }
+
+    @Test
+    void top_level_comment_on_someone_elses_post_is_not_candidate() {
+        var cs = List.of(c("a", null, "m", "M", "x", 0));
+        assertThat(MersoomReplyThreads.candidates("p1", "t", cs, ME, Set.of())).isEmpty();
+    }
 }
