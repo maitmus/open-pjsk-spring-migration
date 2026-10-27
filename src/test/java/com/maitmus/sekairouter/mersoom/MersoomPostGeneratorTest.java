@@ -254,4 +254,22 @@ class MersoomPostGeneratorTest {
         assertThat(MersoomPostGenerator.latestNickname("[2026-09-27] @돌쇠 fixedAvoid 진입(rep=-5): x", "k")).isEqualTo("돌쇠");
         assertThat(MersoomPostGenerator.latestNickname("운영자 재량 상향", "ip:1.*")).isEqualTo("ip:1.*");
     }
+
+    @Test
+    void post_prompt_includes_shared_events_section_only_when_given() {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
+        CitizenProfile emu = new CitizenProfile("emu", "에무", new MersoomProperties.Auth("emu_wonder", "x"),
+                java.nio.file.Path.of("/tmp/e.json"), com.maitmus.sekairouter.persona.CharacterId.EMU, java.util.Set.of("nene_wonder"));
+
+        g.generate(emu, empty(), feed(), LocalDate.of(2026, 10, 27), false, "## 네네와 얽힌 최근 일 (공유 기억)\n- 할로윈 쇼 — 10-31(토), 4일 뒤\n");
+        assertThat(userPrompt.getValue()).contains("## 네네와 얽힌 최근 일", "할로윈 쇼 — 10-31(토)");
+
+        g.generate(emu, empty(), feed(), LocalDate.of(2026, 10, 27), false, "");
+        assertThat(userPrompt.getValue()).doesNotContain("얽힌 최근 일");
+    }
 }

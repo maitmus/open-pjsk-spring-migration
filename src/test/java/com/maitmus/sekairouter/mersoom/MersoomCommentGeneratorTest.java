@@ -893,4 +893,41 @@ class MersoomCommentGeneratorTest {
         assertThat(rules).contains("닉네임에서 따온 짧은 호칭").contains("성격·인상 묘사")
                 .doesNotContain("무심한 듯 챙기는, 과하게 귀엽지 않게");
     }
+
+    private static final String SHARED = "## 에무와 얽힌 최근 일 (공유 기억)\n- 할로윈 쇼 — 10-31(토), 4일 뒤\n";
+
+    private static String sharedPrompt(List<Commentable> feed, List<MersoomReplyThreads.ReplyCandidate> replies) {
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(NENE, empty(), feed, java.time.LocalDateTime.of(2026, 10, 27, 16, 45), replies, SHARED);
+        return user.getValue();
+    }
+
+    private static Commentable emuPost() {
+        return new Commentable(new Post("e1", "의상 못 고르겠어요~!", "에무", "할로윈 쇼까지 나흘!", 0, 0, 0, 0, 0,
+                OffsetDateTime.now(), "emu_wonder", null), List.of());
+    }
+
+    @Test
+    void shared_events_shown_when_sibling_post_in_feed() {
+        assertThat(sharedPrompt(List.of(post("p1", "산책", "한강"), emuPost()), List.of())).contains("## 에무와 얽힌 최근 일");
+    }
+
+    @Test
+    void shared_events_hidden_without_sibling_context() {
+        assertThat(sharedPrompt(List.of(post("p1", "산책", "한강")), List.of())).doesNotContain("얽힌 최근 일");
+    }
+
+    @Test
+    void shared_events_shown_when_sibling_reply_candidate_exists() {
+        var reply = new MersoomReplyThreads.ReplyCandidate("x1", "내 글", List.of(
+                new MersoomReplyThreads.ThreadLine(true, null, "(내 글) 리허설"),
+                new MersoomReplyThreads.ThreadLine(false, "에무", "의상 같이 골라줘!")),
+                "r1", "emu_wonder", "에무", OffsetDateTime.now());
+        assertThat(sharedPrompt(List.of(post("p1", "산책", "한강")), List.of(reply))).contains("## 에무와 얽힌 최근 일");
+    }
 }

@@ -45,7 +45,15 @@ public class MersoomPostGenerator {
      */
     public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
                                   boolean eventSlot) {
-        String userPrompt = buildUserPrompt(profile, state, feed, today, eventSlot);
+        return generate(profile, state, feed, today, eventSlot, "");
+    }
+
+    /**
+     * @param sharedSection 형제와 얽힌 공유 이벤트 섹션({@link SharedEventPrompt#postSection}) — 비면 생략.
+     */
+    public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
+                                  boolean eventSlot, String sharedSection) {
+        String userPrompt = buildUserPrompt(profile, state, feed, today, eventSlot, sharedSection);
         var blocks = promptBuilder.build(profile);   // 교정 콜에서 재사용(같은 시스템 프리픽스 → 캐시 히트)
         String raw = anthropic.completeJson(blocks, userPrompt);
 
@@ -124,7 +132,7 @@ public class MersoomPostGenerator {
     }
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
-                                   boolean eventSlot) {
+                                   boolean eventSlot, String sharedSection) {
         var persona = profile.persona();
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\npost\n\n");
@@ -141,6 +149,8 @@ public class MersoomPostGenerator {
         String pjskHint = PjskAddressBook.hintForSeed(persona, seedTopic + " " + seedTone);
         if (!pjskHint.isEmpty()) sb.append(pjskHint).append("\n");
         sb.append("\n");
+        // 형제와 얽힌 공유 이벤트 — 소재 강제가 아니라, 그 일을 쓸 때 날짜·사실이 어긋나지 않게 하는 배경(가드 포함)
+        if (sharedSection != null && !sharedSection.isBlank()) sb.append(sharedSection);
 
         if (!feed.myTracked().isEmpty()) {
             sb.append("## 최근 내 글 (3개, reply 추적)\n");

@@ -96,9 +96,19 @@ public class MersoomCommentGenerator {
      */
     public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
                                  java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies) {
+        return generate(profile, state, commentable, now, replies, "");
+    }
+
+    /**
+     * @param sharedSection 형제와 얽힌 공유 이벤트 섹션({@link SharedEventPrompt#commentSection}) — 피드에 형제 글이 있거나
+     *                      형제 답글 후보가 있을 때만 USER에 넣는다(일반 유저 댓글 끝에 이벤트 꼬리가 붙지 않게).
+     */
+    public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
+                                 java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies,
+                                 String sharedSection) {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
-        String userPrompt = buildUserPrompt(profile, state, commentable, now, replies);
+        String userPrompt = buildUserPrompt(profile, state, commentable, now, replies, sharedSection);
         PromptBlocks blocks = promptBuilder.build(profile);   // 호칭 교정 콜은 이 base 재사용(댓글 판정 규칙 없이 — 출력 형식 충돌 방지)
         List<PromptBlocks.Block> judgeBlocks = new ArrayList<>(blocks.blocks());
         judgeBlocks.add(new PromptBlocks.Block(buildRules(profile), true));   // 봇별 고정 → 캐시
@@ -283,7 +293,8 @@ public class MersoomCommentGenerator {
     }
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
-                                   java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies) {
+                                   java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies,
+                                   String sharedSection) {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
@@ -376,6 +387,12 @@ public class MersoomCommentGenerator {
             } catch (JsonProcessingException e) {
                 log.warn("답글 후보 JSON 직렬화 실패 — 답글 섹션 생략: {}", e.getMessage());
             }
+        }
+
+        boolean siblingContext = commentable.stream().anyMatch(c -> siblingIds.contains(c.post().identityKey()))
+                || replies.stream().anyMatch(r -> siblingIds.contains(r.replyAuthorKey()));
+        if (siblingContext && sharedSection != null && !sharedSection.isBlank()) {
+            sb.append('\n').append(sharedSection);
         }
 
         // 최근 내 댓글 — 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재를 반복 픽하던 것을 막는다.
