@@ -54,6 +54,7 @@ public class MersoomCitizenEngine {
     private final MersoomReputationTracker reputationTracker;
     private final CommentTopicGate commentTopicGate;
     private final ActivityRecorder activityRecorder;
+    private final SharedEventMemory sharedEvents;
     private final Clock clock;
 
     public void runPost(CitizenProfile profile) {
@@ -67,7 +68,8 @@ public class MersoomCitizenEngine {
         try {
             // 이벤트 힌트는 하루 첫 글 슬롯(오전 10:00·10:30)에만 — 이후 글엔 축하 꼬리를 안 붙이게.
             boolean eventSlot = java.time.LocalTime.now(clock.withZone(KST)).getHour() < 12;
-            var generated = postGenerator.generate(profile, state, feed, LocalDate.now(clock.withZone(KST)), eventSlot);
+            var generated = postGenerator.generate(profile, state, feed, LocalDate.now(clock.withZone(KST)), eventSlot,
+                    sharedEvents.postSection(profile));
             if (generated == null) {
                 log.info("[{}] Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)", profile.key());
                 state = withContextNotes(state, ticked);
@@ -80,6 +82,8 @@ public class MersoomCitizenEngine {
                     log.info("[{}] Mersoom post content: \"{}\"", profile.key(), generated.content());
                     activityRecorder.recordPost(profile.actorName(), generated.title());
                     upvoteBySibling(profile, resp.id());
+                    sharedEvents.observe(profile, resp.id(), "글", "",
+                            "제목: " + generated.title() + "\n본문: " + generated.content());
                 }
             }
         } catch (Exception e) {
@@ -161,7 +165,7 @@ public class MersoomCitizenEngine {
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable(),
-                        java.time.LocalDateTime.now(clock.withZone(KST)), replies);
+                        java.time.LocalDateTime.now(clock.withZone(KST)), replies, sharedEvents.commentSection(profile));
         // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
@@ -214,6 +218,9 @@ public class MersoomCitizenEngine {
                         log.info("[{}] Mersoom reply target: @{} \"{}\"", profile.key(), cand.replyAuthorNick(), lastText.replace("\n", " "));
                         log.info("[{}] Mersoom reply content: \"{}\"", profile.key(), item.text());
                         activityRecorder.recordComment(profile.actorName(), cand.replyAuthorNick(), item.text());
+                        if (isSibling(profile, cand.replyAuthorKey())) {
+                            sharedEvents.observe(profile, cand.postId(), "대댓글", threadText(profile, cand), item.text());
+                        }
                         if (!sleepBetweenPosts()) break;
                     }
                 } catch (Exception e) {
@@ -250,6 +257,11 @@ public class MersoomCitizenEngine {
                             target.post().content() == null ? "" : target.post().content().replace("\n", " "));
                     log.info("[{}] Mersoom comment content: \"{}\"", profile.key(), content);
                     activityRecorder.recordComment(profile.actorName(), target.post().nickname(), content);
+                    if (isSibling(profile, target.post().identityKey())) {
+                        sharedEvents.observe(profile, target.post().id(), "댓글",
+                                "(원글) @" + target.post().nickname() + " \"" + target.post().title() + "\": "
+                                        + (target.post().content() == null ? "" : target.post().content()), content);
+                    }
                     if (!sleepBetweenPosts()) break;
                 }
             } catch (Exception e) {
@@ -284,6 +296,19 @@ public class MersoomCitizenEngine {
             out.put(e.getKey(), e.getValue());
         }
         return out;
+    }
+
+    private static boolean isSibling(CitizenProfile profile, String identityKey) {
+        return identityKey != null && profile.siblingAuthIds() != null && profile.siblingAuthIds().contains(identityKey);
+    }
+
+    /** 대댓글 추출 맥락 — 스레드를 '작성자: 텍스트' 줄로(내 줄은 내 이름). */
+    private static String threadText(CitizenProfile profile, MersoomReplyThreads.ReplyCandidate cand) {
+        StringBuilder sb = new StringBuilder("(글) ").append(cand.postTitle()).append('\n');
+        for (var line : cand.thread()) {
+            sb.append(line.mine() ? profile.actorName() : line.author()).append(": ").append(line.text()).append('\n');
+        }
+        return sb.toString();
     }
 
     /** 형제 봇 글에 대한 DOWN인지 — 무마 대상이면 true. */

@@ -59,6 +59,7 @@ mersoom:
   comment-cron: ${MERSOOM_COMMENT_CRON:0 15 9-23 * * *}    # 매시 15분 09:15~23:15 (15회/일, 1h 간격)
   skills-sync-cron: ${MERSOOM_SKILLS_CRON:0 0 9 * * *}   # 매일 09:00 KST
   state-file: ${MERSOOM_STATE_FILE:/app/mersoom-state.json}
+  shared-events-file: ${MERSOOM_SHARED_EVENTS_FILE:/app/shared-events.json}  # 에무·네네 공유 이벤트 기억(둘이 얽힌 일) — 볼륨 마운트
   skills-cache-path: ${MERSOOM_SKILLS_CACHE:/app/mersoom-flags/skills-cache.md}
   context-note-bytes-per-friend: 1024
   voted-post-ids-limit: 100

@@ -26,6 +26,8 @@ services:
       - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/app/arena-state.json:rw
       # 대시보드 활동 피드 (read-write) — 댓글·글·발화 이벤트 영속, 재시작에도 안 비워짐
       - /home/maitmus/.openclaw/workspace-cron-worker/activity-feed.json:/app/activity-feed.json:rw
+      # 형제봇 공유 이벤트 기억 (read-write) — 에무·네네 공용
+      - /home/maitmus/.openclaw/workspace-cron-worker/shared-events.json:/app/shared-events.json:rw
     # No ports needed — Discord bot with no embedded web server
 
   # 운영 대시보드 (read-only 사이드카). 봇 앱과 독립 — state/로그/arena API만 읽음.
@@ -41,4 +43,5 @@ services:
       - /home/maitmus/.openclaw/workspace-cron-worker/nene-mersoom-state.json:/data/nene-mersoom-state.json:ro
       - /home/maitmus/.openclaw/workspace-cron-worker/arena-state.json:/data/arena-state.json:ro
       - /home/maitmus/.openclaw/workspace-cron-worker/activity-feed.json:/data/activity-feed.json:ro
+      - /home/maitmus/.openclaw/workspace-cron-worker/shared-events.json:/data/shared-events.json:ro
       - /home/maitmus/sekai-router-logs:/logs:ro
