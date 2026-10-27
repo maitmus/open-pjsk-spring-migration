@@ -53,6 +53,28 @@ class ContextNoteManagerTest {
     }
 
     @Test
+    void capByReputation_evicts_dormant_weak_before_recent_newcomer() {
+        // 10-27 라이브: 6~7월 이후 안 보인 +2 계정들이 자리를 차지해, 지금 활발한 +1 신규가 매 크론 밀려났다
+        Map<String, ContextNote> notes = new LinkedHashMap<>();
+        notes.put("dormantWeak", note("2026-03-01", 2));
+        notes.put("dormantFriend", note("2026-03-01", 8));
+        notes.put("newcomer", note("2026-05-07", 1));
+
+        // 휴면(30일+)·약한 관계부터 정리, 친밀(|rep|≥5)은 휴면이어도 보존
+        assertThat(mgr.capByReputation(notes, 2)).containsOnlyKeys("dormantFriend", "newcomer");
+    }
+
+    @Test
+    void capByReputation_reads_last_seen_from_note_lines_when_resetAt_missing() {
+        // 평판 판정만 받은 노트는 resetAt이 null — 노트 줄의 [날짜]로 마지막 활동을 본다
+        Map<String, ContextNote> notes = new LinkedHashMap<>();
+        notes.put("judgedRecently", new ContextNote(0, null, "[2026-03-01] @a 평판↑(rep=1)\n[2026-05-06] @a 평판↑(rep=2)", null, 2));
+        notes.put("judgedLongAgo", new ContextNote(0, null, "[2026-03-02] @b 평판↑(rep=2)", null, 2));
+
+        assertThat(mgr.capByReputation(notes, 1)).containsOnlyKeys("judgedRecently");
+    }
+
+    @Test
     void upsertAfterInteraction_creates_new_note() {
         ContextNote result = mgr.upsertAfterInteraction(null, "[2026-05-08] 첫 교류", "오호");
 
