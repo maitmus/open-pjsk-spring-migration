@@ -47,10 +47,17 @@ final class SharedEventLog {
             alive.add(e);
         }
         if (alive.size() <= MAX_EVENTS) return alive;
+        // 다가오는 날짜 있는 일정(쇼·약속일)이 먼저 — 날짜 없는 작은 약속이 더 최근이어도 일정을 밀어내지 않게
         List<SharedEvent> byRecent = new ArrayList<>(alive);
-        byRecent.sort(Comparator.comparing((SharedEvent e) -> e.updatedAt() == null ? "" : e.updatedAt()).reversed());
+        byRecent.sort(Comparator.comparing((SharedEvent e) -> !upcomingScheduled(e, today))
+                .thenComparing(Comparator.comparing((SharedEvent e) -> e.updatedAt() == null ? "" : e.updatedAt()).reversed()));
         Set<SharedEvent> keep = new LinkedHashSet<>(byRecent.subList(0, MAX_EVENTS));
         return alive.stream().filter(keep::contains).toList();
+    }
+
+    private static boolean upcomingScheduled(SharedEvent e, LocalDate today) {
+        LocalDate d = parse(e.date());
+        return "upcoming".equals(e.status()) && d != null && !d.isBefore(today);
     }
 
     static ApplyResult apply(List<SharedEvent> current, List<Op> ops, LocalDate today,

@@ -113,4 +113,14 @@ class SharedEventLogTest {
                 TODAY, "emu", "p", NOW);
         assertThat(r2.events().get(0).title()).hasSize(30);
     }
+
+    @Test
+    void prune_cap_keeps_upcoming_scheduled_event_over_newer_undated_chatter() {
+        // 최종 리뷰: 날짜 없는 작은 약속 8개가 더 최근이면 4일 뒤 쇼가 상한에서 밀렸다 — 다가오는 일정은 우선 보존
+        List<SharedEvent> events = new ArrayList<>();
+        events.add(ev("show", "2026-10-31", "upcoming", "2026-10-25T10:00"));
+        for (int i = 0; i < 8; i++) events.add(ev("chat" + i, null, "upcoming", "2026-10-26T1" + i + ":00"));
+        var kept = SharedEventLog.prune(events, TODAY);
+        assertThat(kept).hasSize(8).extracting(SharedEvent::id).contains("show").doesNotContain("chat0");
+    }
 }
