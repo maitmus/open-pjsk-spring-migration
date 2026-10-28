@@ -46,4 +46,17 @@ class SharedEventPromptTest {
         assertThat(SharedEventPrompt.postSection(events, TODAY, "에무")).contains("## 에무와 얽힌 최근 일", "이번 글 소재로 고를 필요 없음");
         assertThat(SharedEventPrompt.commentSection(events, TODAY, "에무")).contains("일반 유저 글 댓글엔 꺼내지 말 것");
     }
+
+    @Test
+    void post_section_lists_only_upcoming_schedule_without_facts() {
+        // 10-28 sim: 사실까지 다 준 8개 목록을 글에 넣자 네네 글 3/3이 이벤트를 소재로 골랐다 — 글엔 날짜 정합용 일정만
+        String s = SharedEventPrompt.postSection(List.of(
+                ev("할로윈 쇼", "2026-10-31", "upcoming", "에무 의상 호박 망토"),
+                ev("크레페 약속", null, "upcoming", "평일 낮"),
+                ev("공중제비 촬영", "2026-10-26", "upcoming"),
+                ev("영화", "2026-10-29", "done")), TODAY, "네네");
+        assertThat(s).contains("- 할로윈 쇼 — 10-31(토), 4일 뒤")
+                .doesNotContain("호박 망토", "크레페", "공중제비", "영화");
+        assertThat(SharedEventPrompt.postSection(List.of(ev("크레페 약속", null, "upcoming")), TODAY, "네네")).isEmpty();
+    }
 }

@@ -66,10 +66,11 @@ public class MersoomCitizenEngine {
         Map<String, ContextNote> ticked = contextNoteManager.capByReputation(state.contextNotes(), state.contextNotesCapacity());
 
         try {
-            // 이벤트 힌트는 하루 첫 글 슬롯(오전 10:00·10:30)에만 — 이후 글엔 축하 꼬리를 안 붙이게.
+            // 이벤트 힌트·형제 공유 일정은 하루 첫 글 슬롯(오전 10:00·10:30)에만 — 이후 글엔 축하·일정 꼬리를 안 붙이게
+            // (공유 일정을 매 글에 주자 10-28 sim에서 에무 글 8/8 끝에 '할로윈 쇼 사흘 뒤'가 붙었다).
             boolean eventSlot = java.time.LocalTime.now(clock.withZone(KST)).getHour() < 12;
             var generated = postGenerator.generate(profile, state, feed, LocalDate.now(clock.withZone(KST)), eventSlot,
-                    sharedEvents.postSection(profile));
+                    eventSlot ? sharedEvents.postSection(profile) : "");
             if (generated == null) {
                 log.info("[{}] Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)", profile.key());
                 state = withContextNotes(state, ticked);

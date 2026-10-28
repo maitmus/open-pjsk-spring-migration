@@ -31,7 +31,7 @@ import static org.mockito.Mockito.*;
 class MersoomCitizenEngineTest {
 
     // 13:30 KST — 활성 시간 안 (엔진은 게이트 없지만 clock은 KST 기준 평판 날짜에 쓰임)
-    private final Clock clock = Clock.fixed(Instant.parse("2026-05-08T04:30:00Z"), ZoneId.of("Asia/Seoul"));
+    private Clock clock = Clock.fixed(Instant.parse("2026-05-08T04:30:00Z"), ZoneId.of("Asia/Seoul"));
     private final SharedEventMemory memory = mock(SharedEventMemory.class);
 
     private static final CitizenProfile EMU = new CitizenProfile("emu", "에무",
@@ -482,7 +482,7 @@ class MersoomCitizenEngineTest {
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
         when(memory.postSection(EMU)).thenReturn("## 네네와 얽힌 최근 일\n");
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), eq("## 네네와 얽힌 최근 일\n")))
+        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("의상 고민", "할로윈 쇼까지 나흘"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
@@ -490,6 +490,24 @@ class MersoomCitizenEngineTest {
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
 
         verify(memory).observe(eq(EMU), eq("new-id"), eq("글"), eq(""), contains("할로윈 쇼까지 나흘"));
+    }
+
+    @Test
+    void runPost_injects_shared_events_only_in_first_post_slot() {
+        // 10-28 sim: 매 글에 일정을 주자 에무 글 8/8 끝에 '할로윈 쇼 사흘 뒤' 꼬리가 붙었다 — 이벤트 힌트처럼 첫 글 슬롯만
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(List.of(), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
+        when(memory.postSection(EMU)).thenReturn("## 네네와 얽힌 최근 일\n");
+
+        engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);   // 13:30
+        verify(postGen).generate(any(), any(), any(), any(), eq(false), eq(""));
+
+        clock = Clock.fixed(Instant.parse("2026-05-08T01:00:00Z"), ZoneId.of("Asia/Seoul"));   // 10:00
+        engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);
+        verify(postGen).generate(any(), any(), any(), any(), eq(true), eq("## 네네와 얽힌 최근 일\n"));
     }
 
     @Test

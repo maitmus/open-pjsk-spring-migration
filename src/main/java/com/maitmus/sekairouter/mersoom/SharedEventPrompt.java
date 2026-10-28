@@ -29,10 +29,28 @@ final class SharedEventPrompt {
         return sb.toString();
     }
 
+    /**
+     * 글엔 다가오는 날짜 있는 일정만, 사실 없이 — 10-28 sim에서 사실까지 다 준 목록을 넣자 네네 글 3/3이 이벤트를 소재로 골랐다.
+     * 글에서 어긋나면 티 나는 건 날짜라 그것만 맞추고, 사실 정합은 형제 글을 받는 댓글 쪽에서 맡는다.
+     */
     static String postSection(List<SharedEvent> events, LocalDate today, String siblingName) {
-        String body = render(events, today, siblingName);
+        if (events == null) return "";
+        List<SharedEvent> upcoming = events.stream()
+                .filter(e -> "upcoming".equals(e.status()) && !unscheduledOrPast(e.date(), today))
+                .map(e -> new SharedEvent(e.id(), e.title(), e.date(), e.status(), List.of(), e.createdBy(), e.updatedAt(), e.sources()))
+                .toList();
+        String body = render(upcoming, today, siblingName);
         if (body.isEmpty()) return "";
-        return body + "→ 이번 글 소재로 고를 필요 없음 — 이 일을 쓸 때만 날짜·사실이 여기와 어긋나지 않게.\n\n";
+        return body + "→ 이번 글 소재로 고를 필요 없음 — 이 일을 쓸 때만 날짜가 여기와 어긋나지 않게.\n\n";
+    }
+
+    /** 날짜가 없거나(미정) 깨졌으면 일정이 아니므로 true로 걸러낸다. */
+    private static boolean unscheduledOrPast(String date, LocalDate today) {
+        try {
+            return date == null || LocalDate.parse(date).isBefore(today);
+        } catch (DateTimeParseException ex) {
+            return true;
+        }
     }
 
     static String commentSection(List<SharedEvent> events, LocalDate today, String siblingName) {
