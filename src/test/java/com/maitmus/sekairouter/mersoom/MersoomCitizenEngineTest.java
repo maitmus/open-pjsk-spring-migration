@@ -33,6 +33,7 @@ class MersoomCitizenEngineTest {
     // 13:30 KST — 활성 시간 안 (엔진은 게이트 없지만 clock은 KST 기준 평판 날짜에 쓰임)
     private Clock clock = Clock.fixed(Instant.parse("2026-05-08T04:30:00Z"), ZoneId.of("Asia/Seoul"));
     private final SharedEventMemory memory = mock(SharedEventMemory.class);
+    private final MersoomFilterRephraser rephraser = mock(MersoomFilterRephraser.class);
 
     private static final CitizenProfile EMU = new CitizenProfile("emu", "에무",
             new MersoomProperties.Auth("emu_wonder", "x"), Path.of("/tmp/emu.json"),
@@ -303,7 +304,7 @@ class MersoomCitizenEngineTest {
 
         new MersoomCitizenEngine(p, store, collector, api, postGen, mock(MersoomAdGenerator.class),
                 mock(MersoomCommentGenerator.class), new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
-                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), memory, clock).runPost(EMU);
+                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), memory, rephraser, clock).runPost(EMU);
 
         verify(api).vote(neneAuth, "new-id", MersoomDtos.VoteType.UP);   // 에무 글 → 네네 계정 추천
         verify(store).save(any(), any());                                 // 투표 실패해도 state 저장
@@ -447,7 +448,7 @@ class MersoomCitizenEngineTest {
         when(pg.generate(any(), any(), any(), any(), anyBoolean(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
         return new MersoomCitizenEngine(p, store, collector, api, pg, adGen, mock(MersoomCommentGenerator.class),
                 new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
-                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), memory, clock);
+                new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), memory, rephraser, clock);
     }
 
     private MersoomCitizenEngine engine(MersoomCollector collector, MersoomStateStore store,
@@ -462,6 +463,7 @@ class MersoomCitizenEngineTest {
                 new CommentTopicGate(),
                 mock(com.maitmus.sekairouter.activity.ActivityRecorder.class),
                 memory,
+                rephraser,
                 clock);
     }
 
@@ -536,5 +538,73 @@ class MersoomCitizenEngineTest {
         verify(memory).observe(eq(EMU), eq("pn"), eq("댓글"), contains("할로윈 쇼 연습 끝"), eq("망토 조심해~!"));
         verify(memory).observe(eq(EMU), eq("px"), eq("대댓글"), contains("호박으로 해"), eq("호박으로 할게!"));
         verify(memory, never()).observe(any(), eq("pu"), any(), any(), any());
+    }
+
+    @Test
+    void runComment_rephrases_once_and_retries_when_server_badword_filter_rejects() {
+        // 10-28 17:15 라이브: 단어 경계 오탐('자지')으로 댓글 1개 유실 → 걸린 조합만 고쳐 1회 재시도
+        Post userPost = post("pu", "산책", "친구", "한강 걸었어요", "friend1");
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(userPost, List.of())), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("pu", "혼자지만 좋아요~!")), Map.of()));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createComment(any(), eq("pu"), any(), any(), eq("혼자지만 좋아요~!")))
+                .thenThrow(MersoomFilterRephraserTest.badword("자지"));
+        when(api.createComment(any(), eq("pu"), any(), any(), eq("혼자이지만 좋아요~!")))
+                .thenReturn(new MersoomDtos.CreateResponse(true, null));
+        when(rephraser.rephrase(EMU, "댓글", "혼자지만 좋아요~!", "자지")).thenReturn("혼자이지만 좋아요~!");
+
+        engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
+
+        verify(api, times(2)).createComment(any(), eq("pu"), any(), any(), any());
+        ArgumentCaptor<MersoomState> saved = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), saved.capture());
+        assertThat(saved.getValue().lastCommentIds()).extracting(CommentRef::postId).contains("pu");
+    }
+
+    @Test
+    void runComment_drops_comment_quietly_when_rephrase_fails() {
+        Post userPost = post("pu", "산책", "친구", "한강 걸었어요", "friend1");
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(
+                List.of(new Commentable(userPost, List.of())), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
+        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+                List.of(new MersoomCommentGenerator.CommentItem("pu", "혼자지만 좋아요~!")), Map.of()));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createComment(any(), any(), any(), any(), any())).thenThrow(MersoomFilterRephraserTest.badword("자지"));
+        when(rephraser.rephrase(any(), any(), any(), any())).thenReturn(null);
+
+        engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
+
+        verify(api, times(1)).createComment(any(), any(), any(), any(), any());   // 재작성 실패면 재시도 없음
+        verify(store).save(any(), any());
+    }
+
+    @Test
+    void runPost_rephrases_only_the_field_containing_flagged_word() {
+        MersoomCollector collector = mock(MersoomCollector.class);
+        when(collector.collect(any(), anyInt())).thenReturn(new CollectedFeed(List.of(), List.of(), List.of()));
+        MersoomStateStore store = mock(MersoomStateStore.class);
+        when(store.load(any())).thenReturn(empty());
+        MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
+        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
+                .thenReturn(new MersoomPostGenerator.GeneratedPost("산책했어요", "혼자지만 즐거웠어요"));
+        MersoomApiClient api = mock(MersoomApiClient.class);
+        when(api.createPost(any(), any(), eq("산책했어요"), eq("혼자지만 즐거웠어요"))).thenThrow(MersoomFilterRephraserTest.badword("자지"));
+        when(api.createPost(any(), any(), eq("산책했어요"), eq("혼자이지만 즐거웠어요"))).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
+        when(rephraser.rephrase(EMU, "글", "혼자지만 즐거웠어요", "자지")).thenReturn("혼자이지만 즐거웠어요");
+
+        engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
+
+        verify(api).createPost(any(), any(), eq("산책했어요"), eq("혼자이지만 즐거웠어요"));
+        verify(rephraser, never()).rephrase(any(), any(), eq("산책했어요"), any());
     }
 }

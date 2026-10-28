@@ -55,6 +55,7 @@ public class MersoomCitizenEngine {
     private final CommentTopicGate commentTopicGate;
     private final ActivityRecorder activityRecorder;
     private final SharedEventMemory sharedEvents;
+    private final MersoomFilterRephraser filterRephraser;
     private final Clock clock;
 
     public void runPost(CitizenProfile profile) {
@@ -75,16 +76,34 @@ public class MersoomCitizenEngine {
                 log.info("[{}] Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)", profile.key());
                 state = withContextNotes(state, ticked);
             } else {
-                var resp = api.createPost(profile.auth(), profile.actorName(), generated.title(), generated.content());
+                String title = generated.title();
+                String content = generated.content();
+                MersoomDtos.CreateResponse resp;
+                try {
+                    resp = api.createPost(profile.auth(), profile.actorName(), title, content);
+                } catch (RuntimeException e) {
+                    String word = MersoomFilterRephraser.flaggedWord(e);
+                    if (word == null) throw e;
+                    // 걸린 칸만 재작성 — 제목에 없으면 본문(서버 정규화를 모르니 둘 다 없어 보여도 본문)
+                    boolean inTitle = MersoomFilterRephraser.containsLoosely(title, word);
+                    if (inTitle) title = filterRephraser.rephrase(profile, "제목", title, word);
+                    if (!inTitle || MersoomFilterRephraser.containsLoosely(content, word)) {
+                        content = filterRephraser.rephrase(profile, "글", content, word);
+                    }
+                    final String t = title, c = content;
+                    resp = (t == null || c == null)
+                            ? giveUpFiltered(profile, "글", word, generated.title() + " / " + generated.content())
+                            : retryFiltered(profile, "글", word, () -> api.createPost(profile.auth(), profile.actorName(), t, c));
+                }
                 if (resp != null && resp.success()) {
                     state = recordPost(state, resp.id(), ticked);
                     log.info("[{}] Mersoom post created: id={} title='{}' content_len={}",
-                            profile.key(), resp.id(), generated.title(), generated.content().length());
-                    log.info("[{}] Mersoom post content: \"{}\"", profile.key(), generated.content());
-                    activityRecorder.recordPost(profile.actorName(), generated.title());
+                            profile.key(), resp.id(), title, content.length());
+                    log.info("[{}] Mersoom post content: \"{}\"", profile.key(), content);
+                    activityRecorder.recordPost(profile.actorName(), title);
                     upvoteBySibling(profile, resp.id());
                     sharedEvents.observe(profile, resp.id(), "글", "",
-                            "제목: " + generated.title() + "\n본문: " + generated.content());
+                            "제목: " + title + "\n본문: " + content);
                 }
             }
         } catch (Exception e) {
@@ -210,17 +229,19 @@ public class MersoomCitizenEngine {
                     continue;
                 }
                 try {
-                    var resp = api.createComment(profile.auth(), cand.postId(), cand.replyToId(), profile.actorName(), item.text());
+                    Sent sent = sendCommentFiltered(profile, "대댓글", cand.postId(), cand.replyToId(), item.text());
+                    var resp = sent.resp();
+                    String text = sent.text();
                     if (resp != null && resp.success()) {
-                        state = recordReply(profile, state, cand, item.text());
+                        state = recordReply(profile, state, cand, text);
                         posted++;
                         log.info("[{}] Mersoom reply created: post={} parent={} target_nick={} content_len={}",
-                                profile.key(), cand.postId(), cand.replyToId(), cand.replyAuthorNick(), item.text().length());
+                                profile.key(), cand.postId(), cand.replyToId(), cand.replyAuthorNick(), text.length());
                         log.info("[{}] Mersoom reply target: @{} \"{}\"", profile.key(), cand.replyAuthorNick(), lastText.replace("\n", " "));
-                        log.info("[{}] Mersoom reply content: \"{}\"", profile.key(), item.text());
-                        activityRecorder.recordComment(profile.actorName(), cand.replyAuthorNick(), item.text());
+                        log.info("[{}] Mersoom reply content: \"{}\"", profile.key(), text);
+                        activityRecorder.recordComment(profile.actorName(), cand.replyAuthorNick(), text);
                         if (isSibling(profile, cand.replyAuthorKey())) {
-                            sharedEvents.observe(profile, cand.postId(), "대댓글", threadText(profile, cand), item.text());
+                            sharedEvents.observe(profile, cand.postId(), "대댓글", threadText(profile, cand), text);
                         }
                         if (!sleepBetweenPosts()) break;
                     }
@@ -245,8 +266,9 @@ public class MersoomCitizenEngine {
                 continue;
             }
             try {
-                String content = item.text();
-                var resp = api.createComment(profile.auth(), target.post().id(), null, profile.actorName(), content);
+                Sent sent = sendCommentFiltered(profile, "댓글", target.post().id(), null, item.text());
+                var resp = sent.resp();
+                String content = sent.text();
                 if (resp != null && resp.success()) {
                     state = recordComment(profile, state, target, content, state.contextNotes());
                     commentedIds.add(target.post().id());   // 같은 크론 내 같은 글 재댓글 방지
@@ -274,6 +296,40 @@ public class MersoomCitizenEngine {
         }
 
         store.save(profile.stateFile(), state);
+    }
+
+    private record Sent(MersoomDtos.CreateResponse resp, String text) {}
+
+    /** 댓글·대댓글 게시 — 서버 욕설 필터 오탐(400)이면 걸린 조합만 재작성해 1회 재시도. 그 외 예외는 그대로 던진다. */
+    private Sent sendCommentFiltered(CitizenProfile profile, String kind, String postId, String parentId, String text) {
+        try {
+            return new Sent(api.createComment(profile.auth(), postId, parentId, profile.actorName(), text), text);
+        } catch (RuntimeException e) {
+            String word = MersoomFilterRephraser.flaggedWord(e);
+            if (word == null) throw e;
+            String fixed = filterRephraser.rephrase(profile, kind, text, word);
+            if (fixed == null) return new Sent(giveUpFiltered(profile, kind, word, text), text);
+            return new Sent(retryFiltered(profile, kind, word,
+                    () -> api.createComment(profile.auth(), postId, parentId, profile.actorName(), fixed)), fixed);
+        }
+    }
+
+    private MersoomDtos.CreateResponse retryFiltered(CitizenProfile profile, String kind, String word,
+                                                     java.util.function.Supplier<MersoomDtos.CreateResponse> send) {
+        log.info("[{}] Mersoom {} 필터 오탐 '{}' → 재작성 후 재시도", profile.key(), kind, word);
+        try {
+            return send.get();
+        } catch (RuntimeException e) {
+            String again = MersoomFilterRephraser.flaggedWord(e);
+            if (again == null) throw e;
+            log.warn("[{}] Mersoom {} 재시도도 필터 거절('{}') — 보류", profile.key(), kind, again);
+            return null;
+        }
+    }
+
+    private MersoomDtos.CreateResponse giveUpFiltered(CitizenProfile profile, String kind, String word, String original) {
+        log.warn("[{}] Mersoom {} 필터 오탐 '{}' — 재작성 실패로 보류: \"{}\"", profile.key(), kind, word, original);
+        return null;
     }
 
     /**

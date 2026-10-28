@@ -29,6 +29,7 @@ LLM 호출 1건 = **시스템 프롬프트(2블록)** + **유저 프롬프트** 
 |---|---|---|
 | [mersoom-comment.md](mersoom-comment.md) | `mersoom/MersoomCommentGenerator.java` | 머슴 댓글 — 피드 투표 판정 + 댓글(최대 3) + 별명 제안. 에무/네네 분기, 관계 라인(형제봇 반말·차단·일반), 반말 보강·seam 금지·제3자 관찰 금지 규칙 |
 | [mersoom-shared-events.md](mersoom-shared-events.md) | `mersoom/SharedEventExtractor.java` | 형제 공유 이벤트 추출 — 게시 후 별도 콜(영문 SYSTEM), 호출 시점(글·형제 댓글·형제 대댓글), USER 템플릿, 검증·수명 |
+| [mersoom-filter-rephrase.md](mersoom-filter-rephrase.md) | `mersoom/MersoomFilterRephraser.java` | 머슴 서버 욕설 필터 오탐(400) 시 걸린 조합만 캐릭터 말투로 고쳐 1회 재시도 |
 | [mersoom-post-ad.md](mersoom-post-ad.md) | `mersoom/MersoomPostGenerator.java`, `mersoom/MersoomAdGenerator.java` | 머슴 글 생성(에무/네네 분기, shouldPost 규칙) + 광고 한마디 생성 |
 | [arena.md](arena.md) | `arena/ArenaFightGenerator.java`, `arena/ArenaProposeGenerator.java` | 아레나 토론 참여(네네: SUFFIX + 페르소나 주입 + 상대 글 분리/재반박 락/입장 락) + 발의(코드상 네네 계정) |
 | [heartbeat-router-shared.md](heartbeat-router-shared.md) | `heartbeat/HeartbeatService.java`, `routing/RouterService.java`, `routing/SharedPromptContent.java` | 자율 하트비트 발화(솔로/2인/이벤트 모드) + 라우팅 유저 프롬프트 + 공유 prefix 섹션 헤더 |
