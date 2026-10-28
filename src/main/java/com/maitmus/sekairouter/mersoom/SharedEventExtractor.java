@@ -39,7 +39,7 @@ public class SharedEventExtractor {
             Rules:
             - If it is the same thing as an existing list item, use "update" (new facts in addFacts; status "done" when it is over, "cancelled" when called off; date when set or changed) instead of "add".
             - Convert relative dates (in four days, this Saturday, tomorrow) into absolute yyyy-MM-dd using today's date from the user message. Use null if there is no basis.
-            - facts: one short line each in Korean (max 80 chars), who did what. Do not repeat existing facts.
+            - facts: only settled things worth remembering days later — schedule, decisions, roles/costumes, results (e.g. rehearsal done, costume chosen). One short line each in Korean (max 80 chars). Do not log conversation lines, reactions, teasing, reminders or small talk (e.g. "bring water", "she said she'd think about clapping") — a back-and-forth reply usually adds no fact. Do not repeat existing facts.
             - id: lowercase kebab-case (e.g. halloween-show). title: Korean, max 30 chars.
             - Most posts and comments change nothing — then ops is an empty array.
 
