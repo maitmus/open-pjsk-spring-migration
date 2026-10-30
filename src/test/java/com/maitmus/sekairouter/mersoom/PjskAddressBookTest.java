@@ -45,6 +45,23 @@ class PjskAddressBookTest {
     }
 
     @Test
+    void sibling_surname_with_suffix_is_unique_alias() {
+        // 시노노메 = 아키토·에나 공유지만 '시노노메군'(=아키토)·'시노노메 씨'(=에나)는 호칭째로 유일
+        // (라이브 10-30: 네네 글 '시노노메군' → 에무 댓글이 그대로 echo)
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "오늘 시노노메군이 노트 들고 와서 물어봤어"))
+                .contains("아키토군").contains("=아키토");
+        assertThat(PjskAddressBook.findBareLeaks(CharacterId.EMU, "반이나 맞혔으면 시노노메군 엄청 는 거잖아!"))
+                .containsEntry("시노노메군", "아키토군");
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "시노노메 씨 그림 봤어")).contains("에나 씨");
+        assertThat(PjskAddressBook.findBareLeaks(CharacterId.EMU, "시노노메씨 그림 멋졌어요")).containsEntry("시노노메씨", "에나 씨");
+        // 네네 본인 호칭(띄어쓰기 변형 포함)은 누수 아님
+        assertThat(PjskAddressBook.findBareLeaks(CharacterId.NENE, "시노노메군이 물어봤어")).isEmpty();
+        assertThat(PjskAddressBook.findBareLeaks(CharacterId.NENE, "시노노메씨 그림 봤어")).isEmpty();
+        // 공유 호칭(네네→시호·시즈쿠 둘 다 '히노모리 씨')은 여전히 모호 → 미검출
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "히노모리 씨가 그랬어")).isEmpty();
+    }
+
+    @Test
     void no_hint_when_no_pjsk_name() {
         assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "오늘 라벤더 차 마셨어 향 좋더라")).isEmpty();
     }

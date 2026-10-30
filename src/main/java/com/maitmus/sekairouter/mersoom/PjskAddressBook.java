@@ -65,6 +65,7 @@ public final class PjskAddressBook {
      * 별칭 = {이름 키} ∪ {두 페르소나 호칭 값에서 뽑은 이름/성 토큰}. 성은 이미 (주로 네네) 호칭 값에 들어있어
      * 별도 성 매핑 없이 자동 도출된다(GRADES 바뀌면 호칭 값 따라 자동 갱신). 형제 성(히노모리=시호·시즈쿠,
      * 시노노메=아키토·에나)처럼 한 토큰이 둘 이상 가리키면 모호해서 **유일 별칭만 채택**. 1글자 토큰도 제외(오탐).
+     * 호칭 통째(띄어쓰기 변형 포함)도 후보 — 성은 모호해도 '시노노메군'(=아키토)·'시노노메 씨'(=에나)는 유일.
      */
     private static final Map<String, String> ALIAS_TO_NAME = new LinkedHashMap<>();        // 별칭 토큰 → 이름 키
     private static final Map<String, java.util.Set<String>> NAME_TO_ALIASES = new LinkedHashMap<>(); // 이름 키 → 별칭 집합
@@ -76,6 +77,8 @@ public final class PjskAddressBook {
             for (Address a : e.getValue().values()) {
                 String t = leadingNameToken(a.call());
                 if (t.length() >= 2) toks.add(t);
+                toks.add(a.call());                    // 호칭 통째(접미 포함) — 성이 모호해도 '시노노메군'처럼 호칭째론 유일할 수 있음
+                toks.add(a.call().replace(" ", ""));   // 띄어쓰기 변형('시노노메씨')
             }
             for (String t : toks) cand.computeIfAbsent(t, k -> new java.util.LinkedHashSet<>()).add(e.getKey());
         }
@@ -129,7 +132,7 @@ public final class PjskAddressBook {
             String name = e.getKey();
             Address a = e.getValue().get(speaker);
             if (a == null || a.call().equals(name)) continue;   // 맨이름 그대로 부름 → 누수 개념 없음
-            String stripped = text.replace(a.call(), "");        // 화자 호칭 표기를 먼저 지움
+            String stripped = text.replace(a.call(), "").replace(a.call().replace(" ", ""), "");   // 화자 호칭 표기(띄어쓰기 변형 포함)를 먼저 지움
             for (String alias : NAME_TO_ALIASES.get(name))       // 이름·성 등 별칭 중 하나라도 남으면 = 그 표기로 샜다
                 if (stripped.contains(alias)) { leaks.put(alias, a.call()); break; }   // 키=샌 표기(호시노 등) → 교정콜서 정확 치환
         }
