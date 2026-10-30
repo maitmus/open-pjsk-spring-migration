@@ -62,6 +62,20 @@ class PjskAddressBookTest {
     }
 
     @Test
+    void sibling_surname_ambiguous_even_when_one_sibling_is_called_by_first_name() {
+        // 텐마 = 사키·츠카사 공유. 두 봇 다 츠카사를 이름으로 불러 호칭엔 '텐마'가 사키 쪽에만 있지만
+        // 실제 성 기준으로 모호 → '텐마 선배'(=츠카사)를 사키로 오매핑·오교정하면 안 됨
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "텐마 선배가 복도에서 큰 소리로 웃었어")).isEmpty();
+        assertThat(PjskAddressBook.findBareLeaks(CharacterId.EMU, "텐마 선배가 복도에서 웃었어요")).isEmpty();
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "텐마 츠카사 선배 쇼 봤어"))
+                .contains("츠카사군").doesNotContain("사키쨩");
+        // 호칭째 유일한 '텐마 씨'(네네→사키)는 계속 사키로
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "텐마 씨가 쿠키 구워 왔대")).contains("사키쨩");
+        // 형제 없는 성은 실제 성 데이터로 새로 인식(카미시로=루이)
+        assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "카미시로 선배 연출 대단하더라")).contains("루이군");
+    }
+
+    @Test
     void no_hint_when_no_pjsk_name() {
         assertThat(PjskAddressBook.hintFor(CharacterId.EMU, "오늘 라벤더 차 마셨어 향 좋더라")).isEmpty();
     }

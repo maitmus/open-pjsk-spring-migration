@@ -61,11 +61,24 @@ public final class PjskAddressBook {
     }
 
     /**
+     * 실제 성(GRADES 학교·소속 표 기준). 별칭 모호성 판정용 — 호칭 값만 보면 두 봇이 이름으로 부르는 형제의 성이
+     * 빠져(텐마: 츠카사는 둘 다 이름 호칭) 그 성이 다른 형제(사키)로 '유일'하게 오판된다. 버추얼 싱어는 성 없음.
+     */
+    private static final Map<String, String> SURNAME = Map.ofEntries(
+            Map.entry("이치카", "호시노"), Map.entry("사키", "텐마"), Map.entry("호나미", "모치즈키"),
+            Map.entry("시호", "히노모리"), Map.entry("미노리", "하나사토"), Map.entry("하루카", "키리타니"),
+            Map.entry("아이리", "모모이"), Map.entry("시즈쿠", "히노모리"), Map.entry("코하네", "아즈사와"),
+            Map.entry("아키토", "시노노메"), Map.entry("토우야", "아오야기"), Map.entry("카나데", "요이사키"),
+            Map.entry("마후유", "아사히나"), Map.entry("에나", "시노노메"), Map.entry("미즈키", "아키야마"),
+            Map.entry("츠카사", "텐마"), Map.entry("루이", "카미시로"));
+
+    /**
      * 인물 참조 별칭 인덱스 — 원글이 인물을 *성(姓)*으로 불러도(예 '호시노 씨'=이치카) 스캔이 잡게 한다.
      * 별칭 = {이름 키} ∪ {두 페르소나 호칭 값에서 뽑은 이름/성 토큰}. 성은 이미 (주로 네네) 호칭 값에 들어있어
      * 별도 성 매핑 없이 자동 도출된다(GRADES 바뀌면 호칭 값 따라 자동 갱신). 형제 성(히노모리=시호·시즈쿠,
      * 시노노메=아키토·에나)처럼 한 토큰이 둘 이상 가리키면 모호해서 **유일 별칭만 채택**. 1글자 토큰도 제외(오탐).
      * 호칭 통째(띄어쓰기 변형 포함)도 후보 — 성은 모호해도 '시노노메군'(=아키토)·'시노노메 씨'(=에나)는 유일.
+     * 성은 호칭 값 외에 실제 성({@link #SURNAME})도 후보에 넣어, 이름으로만 불리는 형제(츠카사)까지 모호성에 반영.
      */
     private static final Map<String, String> ALIAS_TO_NAME = new LinkedHashMap<>();        // 별칭 토큰 → 이름 키
     private static final Map<String, java.util.Set<String>> NAME_TO_ALIASES = new LinkedHashMap<>(); // 이름 키 → 별칭 집합
@@ -74,6 +87,8 @@ public final class PjskAddressBook {
         for (var e : BOOK.entrySet()) {
             java.util.Set<String> toks = new java.util.LinkedHashSet<>();
             toks.add(e.getKey());
+            String surname = SURNAME.get(e.getKey());
+            if (surname != null) toks.add(surname);   // 실제 성 — 형제 성이 호칭에 안 드러나도 모호로 판정되게
             for (Address a : e.getValue().values()) {
                 String t = leadingNameToken(a.call());
                 if (t.length() >= 2) toks.add(t);
