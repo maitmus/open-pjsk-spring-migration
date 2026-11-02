@@ -47,7 +47,7 @@ public final class PjskAddressBook {
         BOOK.put("코하네", row("코하네쨩", false, "아즈사와 씨", false));
         BOOK.put("아키토", row("아키토군", false, "시노노메군", false));
         BOOK.put("토우야", row("토우야군", false, "아오야기군", false));
-        BOOK.put("카나데", row("카나데쨩", false, "요이사키 언니", true));
+        BOOK.put("카나데", row("카나데쨩", false, "요이사키 씨", true));
         BOOK.put("마후유", row("아사히나 선배", true, "아사히나 씨", false));
         BOOK.put("에나",   row("에나 씨", false, "시노노메 씨", false));
         BOOK.put("미즈키", row("미즈키쨩", false, "아키야마 씨", false));

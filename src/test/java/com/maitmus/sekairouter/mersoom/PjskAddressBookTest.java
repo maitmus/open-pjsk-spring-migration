@@ -21,6 +21,9 @@ class PjskAddressBookTest {
         assertThat(PjskAddressBook.hintFor(CharacterId.NENE, "토우야랑 붙었어")).contains("아오야기군");
         assertThat(PjskAddressBook.hintFor(CharacterId.NENE, "이치카 신곡 좋더라")).contains("호시노 씨");
         assertThat(PjskAddressBook.hintFor(CharacterId.NENE, "루이한테 물어봤어")).contains("루이");  // 유닛-내 맨이름
+        // 카나데=宵崎さん(나무위키·세카이피디아) + 존댓말 — '요이사키 언니'는 KR 생일대사 번역 예외
+        assertThat(PjskAddressBook.hintFor(CharacterId.NENE, "카나데랑 캔들 만들었어"))
+                .contains("요이사키 씨").contains("존댓말").doesNotContain("언니");
     }
 
     @Test
