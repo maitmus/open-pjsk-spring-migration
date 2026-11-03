@@ -272,4 +272,21 @@ class MersoomPostGeneratorTest {
         g.generate(emu, empty(), feed(), LocalDate.of(2026, 10, 27), false, "");
         assertThat(userPrompt.getValue()).doesNotContain("얽힌 최근 일");
     }
+
+    @Test
+    void post_prompt_includes_current_time_line_when_given() {
+        // 저녁 슬롯(21~22시) 글이 '방금 하교'처럼 시각과 어긋나지 않게 — 댓글과 같은 '지금 (KST)' 줄
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
+
+        g.generate(EMU, empty(), feed(), java.time.LocalDateTime.of(2026, 11, 3, 22, 30), false, "");
+        assertThat(userPrompt.getValue()).contains("## 지금 (KST)\n2026-11-03(화) 22:30 — 밤");
+
+        g.generate(EMU, empty(), feed(), LocalDate.of(2026, 11, 3), false, "");
+        assertThat(userPrompt.getValue()).doesNotContain("## 지금 (KST)");
+    }
 }

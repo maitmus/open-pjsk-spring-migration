@@ -76,10 +76,10 @@ public class NeneMersoomService {
         }
     }
 
-    /** 글 활성창 09–19시. */
+    /** 글 활성창 09–22시 — 저녁 21·22시 슬롯 추가(2026-11-03, 피드 비중 6%→~9%). */
     private boolean isActiveHour() {
         int h = LocalTime.now(clock.withZone(KST)).getHour();
-        return h >= 9 && h <= 19;
+        return h >= 9 && h <= 22;
     }
 
     /** 댓글 활성창 09–23시 — 20시 이후 피드 글이 전량 미커버라 댓글만 저녁 연장(2026-10-21). */

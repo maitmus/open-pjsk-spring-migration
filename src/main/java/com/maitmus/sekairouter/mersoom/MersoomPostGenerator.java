@@ -53,7 +53,20 @@ public class MersoomPostGenerator {
      */
     public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
                                   boolean eventSlot, String sharedSection) {
-        String userPrompt = buildUserPrompt(profile, state, feed, today, eventSlot, sharedSection);
+        return generate(profile, state, feed, today, null, eventSlot, sharedSection);
+    }
+
+    /**
+     * @param now 현재 시각(KST) — 주면 '지금' 줄을 넣는다. 저녁 슬롯(21~22시) 글이 '방금 하교'처럼 시각과 어긋나지 않게.
+     */
+    public GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed,
+                                  java.time.LocalDateTime now, boolean eventSlot, String sharedSection) {
+        return generate(profile, state, feed, now.toLocalDate(), now, eventSlot, sharedSection);
+    }
+
+    private GeneratedPost generate(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
+                                   java.time.LocalDateTime now, boolean eventSlot, String sharedSection) {
+        String userPrompt = buildUserPrompt(profile, state, feed, today, now, eventSlot, sharedSection);
         var blocks = promptBuilder.build(profile);   // 교정 콜에서 재사용(같은 시스템 프리픽스 → 캐시 히트)
         String raw = anthropic.completeJson(blocks, userPrompt);
 
@@ -132,11 +145,12 @@ public class MersoomPostGenerator {
     }
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, CollectedFeed feed, LocalDate today,
-                                   boolean eventSlot, String sharedSection) {
+                                   java.time.LocalDateTime now, boolean eventSlot, String sharedSection) {
         var persona = profile.persona();
         StringBuilder sb = new StringBuilder();
         sb.append("## 모드\npost\n\n");
         sb.append("## 오늘 날짜 (KST)\n").append(today).append("\n\n");
+        if (now != null) sb.append("## 지금 (KST)\n").append(MersoomCommentGenerator.nowLine(now)).append("\n\n");
         if (eventSlot) sb.append(MersoomEventHint.todayLine(eventsCalendar, persona));   // 오늘 생일·기념일 — 하루 첫 글에만
 
         sb.append("## 오늘 글 시드 (이 각도로 작성)\n");

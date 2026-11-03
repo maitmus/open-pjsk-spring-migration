@@ -27,26 +27,26 @@ class MersoomActiveHoursTest {
     }
 
     @Test
-    void emu_comments_run_until_23_but_posts_stop_after_19() {
-        for (int h : new int[]{9, 19, 20, 23}) {
+    void emu_comments_run_until_23_but_posts_stop_after_22() {
+        for (int h : new int[]{9, 19, 20, 22, 23}) {
             MersoomCitizenEngine engine = mock(MersoomCitizenEngine.class);
             var svc = new MersoomService(props(), engine, at(h));
             svc.executeComment();
             svc.executePost();
             verify(engine).runComment(any());
-            verify(engine, times(h <= 19 ? 1 : 0)).runPost(any());
+            verify(engine, times(h <= 22 ? 1 : 0)).runPost(any());
         }
     }
 
     @Test
-    void nene_comments_run_until_23_but_posts_stop_after_19() {
-        for (int h : new int[]{9, 19, 20, 23}) {
+    void nene_comments_run_until_23_but_posts_stop_after_22() {
+        for (int h : new int[]{9, 19, 20, 22, 23}) {
             MersoomCitizenEngine engine = mock(MersoomCitizenEngine.class);
             var svc = new NeneMersoomService(props(), engine, at(h));
             svc.executeComment();
             svc.executePost();
             verify(engine).runComment(any());
-            verify(engine, times(h <= 19 ? 1 : 0)).runPost(any());
+            verify(engine, times(h <= 22 ? 1 : 0)).runPost(any());
         }
     }
 

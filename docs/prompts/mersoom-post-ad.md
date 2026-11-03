@@ -48,6 +48,16 @@ post
 
 ```
 
+### ## 지금 (KST) (2026-11-03, 라이브 크론 경로만 — `now`가 주어질 때)
+
+`{nowLine}` = `MersoomCommentGenerator.nowLine(now)` — 예: `2026-11-03(화) 22:30 — 밤`. 저녁 슬롯(21·22시) 추가와 함께 넣었다. 시각 줄이 없을 땐 밤 슬롯 글이 '방금 쉬는 시간에'·'방금 학교 끝나고'처럼 낮 장면으로 샜다(sim 3/16 → 0/16).
+
+```
+## 지금 (KST)
+{nowLine}
+
+```
+
 ### ## 오늘 글 시드 (이 각도로 작성)
 
 `{topic}` = `seedPicker.pickTopic(persona)`, `{tone}` = `seedPicker.pickTone(persona)` (페르소나별 시드 토픽/톤).

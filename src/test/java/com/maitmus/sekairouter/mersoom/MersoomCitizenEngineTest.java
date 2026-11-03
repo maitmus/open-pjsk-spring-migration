@@ -257,7 +257,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any())).thenReturn(null);
+        when(postGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any())).thenReturn(null);
         MersoomApiClient api = mock(MersoomApiClient.class);
 
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
@@ -273,7 +273,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
+        when(postGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("title", "content"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
@@ -291,7 +291,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
+        when(postGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("title", "content"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
@@ -403,7 +403,7 @@ class MersoomCitizenEngineTest {
                 List.of(new CommentRef("pOld", OffsetDateTime.now(), "낙엽 최고예요!")), List.of(), Map.of(), 8,
                 List.of(), null, null, List.of(), List.of()));
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), eq(List.of(cand)), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(List.of(cand)), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pOld", "좋아요~ 내일 같이 해요!", "r1")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -445,7 +445,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator pg = mock(MersoomPostGenerator.class);
-        when(pg.generate(any(), any(), any(), any(), anyBoolean(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
+        when(pg.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any())).thenReturn(null);   // 글은 보류, 광고만 검증
         return new MersoomCitizenEngine(p, store, collector, api, pg, adGen, mock(MersoomCommentGenerator.class),
                 new ContextNoteManager(clock, 1024), new MersoomReputationTracker(),
                 new CommentTopicGate(), mock(com.maitmus.sekairouter.activity.ActivityRecorder.class), memory, rephraser, clock);
@@ -484,7 +484,7 @@ class MersoomCitizenEngineTest {
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
         when(memory.postSection(EMU)).thenReturn("## 네네와 얽힌 최근 일\n");
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
+        when(postGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("의상 고민", "할로윈 쇼까지 나흘"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), any(), any())).thenReturn(new MersoomDtos.CreateResponse(true, "new-id"));
@@ -505,11 +505,11 @@ class MersoomCitizenEngineTest {
         when(memory.postSection(EMU)).thenReturn("## 네네와 얽힌 최근 일\n");
 
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);   // 13:30
-        verify(postGen).generate(any(), any(), any(), any(), eq(false), eq(""));
+        verify(postGen).generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(false), eq(""));
 
         clock = Clock.fixed(Instant.parse("2026-05-08T01:00:00Z"), ZoneId.of("Asia/Seoul"));   // 10:00
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);
-        verify(postGen).generate(any(), any(), any(), any(), eq(true), eq("## 네네와 얽힌 최근 일\n"));
+        verify(postGen).generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(true), eq("## 네네와 얽힌 최근 일\n"));
     }
 
     @Test
@@ -595,7 +595,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomPostGenerator postGen = mock(MersoomPostGenerator.class);
-        when(postGen.generate(any(), any(), any(), any(), anyBoolean(), any()))
+        when(postGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), anyBoolean(), any()))
                 .thenReturn(new MersoomPostGenerator.GeneratedPost("산책했어요", "혼자지만 즐거웠어요"));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createPost(any(), any(), eq("산책했어요"), eq("혼자지만 즐거웠어요"))).thenThrow(MersoomFilterRephraserTest.badword("자지"));
