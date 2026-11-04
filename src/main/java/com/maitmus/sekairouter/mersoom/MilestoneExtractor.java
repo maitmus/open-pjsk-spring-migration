@@ -26,8 +26,10 @@ public class MilestoneExtractor {
     static final String SYSTEM = """
             You read a short fictional post written by a game character on a community board. Find things in it that can only happen ONCE for this character in a season or year, so later posts do not repeat them as if new. Reply with JSON only.
 
-            What counts: the post says the character did or saw something for the first time this season/year, or started/brought out something seasonal (e.g. took out the kotatsu, first breath fog this year, first snow, first time wearing a winter coat this year, opened a new game on release day).
-            What does not count: ordinary repeatable activities (playing a game, eating, practice, napping, walking), things that only happened to other people, plans for the future, memories of the past years. Do not invent anything not in the text.
+            What counts — only these two kinds:
+            1) A seasonal item brought out or switched on for the season (e.g. took out the kotatsu, brought out a winter blanket, first time wearing a winter coat or scarf this season).
+            2) A seasonal first experience explicitly framed as the first of this season/year (e.g. first breath fog this year, first snow, first autumn leaves this year).
+            What does not count: one-off events (a show day, receiving something, finishing a task, decorating, buying something, tasting a new snack), meeting or seeing someone or an animal, discovering a place or shop, ordinary repeatable activities (playing a game, eating, practice, napping, walking), things that happened to other people, plans, memories of past years. Do not invent anything not in the text.
 
             Rules:
             - Skip anything already in the existing list (same meaning, even if worded differently).
