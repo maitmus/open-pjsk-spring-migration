@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 방금 올린 글에서 '한 번만 일어날 수 있는 일'(올해 첫 입김·코타츠 첫 개시·첫눈 등)을 뽑는 소형 LLM 호출.
+ * 방금 올린 글에서 '다시 새로 일어나면 모순인 굵직한 일'(계절 물건 개시·올해 첫 경험·쇼 당일·받음/완성·첫 발견/만남)을 뽑는 소형 LLM 호출.
  * 지시는 영문 — {@link SharedEventExtractor}와 같은 이유(한국어 지시 시 Opus 5.5 refusal).
  */
 @Slf4j
@@ -24,18 +24,20 @@ public class MilestoneExtractor {
     private static final ObjectMapper PARSER = new ObjectMapper();
 
     static final String SYSTEM = """
-            You read a short fictional post written by a game character on a community board. Find things in it that can only happen ONCE for this character in a season or year, so later posts do not repeat them as if new. Reply with JSON only.
+            You read a short fictional post written by a game character on a community board. Record the notable events in it that should not happen again as if new, so later posts stay consistent (a show day does not come twice, a place is discovered only once). Reply with JSON only.
 
-            What counts — only these two kinds:
-            1) A seasonal item brought out or switched on for the season (e.g. took out the kotatsu, brought out a winter blanket, first time wearing a winter coat or scarf this season).
-            2) A seasonal first experience explicitly framed as the first of this season/year (e.g. first breath fog this year, first snow, first autumn leaves this year).
-            What does not count: one-off events (a show day, receiving something, finishing a task, decorating, buying something, tasting a new snack), meeting or seeing someone or an animal, discovering a place or shop, ordinary repeatable activities (playing a game, eating, practice, napping, walking), things that happened to other people, plans, memories of past years. Do not invent anything not in the text.
+            What counts:
+            1) A seasonal item brought out or switched on for the season (e.g. took out the kotatsu, brought out a winter blanket, first time wearing a winter coat this season).
+            2) A seasonal first experience framed as the first of this season/year (e.g. first breath fog this year, first snow).
+            3) A one-time event that happened to the writer: a show, festival or event day, receiving something new (new choreography, a gift), finishing or completing something, a release day.
+            4) A first discovery or first meeting: found a new place, shop, stall or alley; met a particular person or animal for the first time.
+            What does not count: ordinary repeatable acts (eating or tasting a snack, buying something, decorating, wearing an accessory, playing a game, practice, napping, walking, chatting), feelings and opinions, things that happened only to other people, plans or upcoming events, memories of past years. Do not invent anything not in the text.
 
             Rules:
-            - Skip anything already in the existing list (same meaning, even if worded differently).
-            - id: lowercase kebab-case (e.g. kotatsu-out). title: Korean, short noun phrase, max 20 chars (e.g. 코타츠 꺼냄, 올해 첫 입김).
+            - Skip anything already in the existing list (same meaning, even if worded differently). A later post about the same thing (seeing the cat again, after the show) is not new.
+            - id: lowercase kebab-case (e.g. kotatsu-out, halloween-show-day). title: Korean, short noun phrase, max 20 chars (e.g. 코타츠 꺼냄, 할로윈 쇼 당일, 계단 골목 처음 발견).
             - date: yyyy-MM-dd when it happened (use today's date from the user message; yesterday if the post says yesterday). null means today.
-            - Most posts contain nothing — then milestones is an empty array.
+            - Many posts contain nothing — then milestones is an empty array.
 
             Output exactly one JSON object:
             {"reasoning":"<short note>","milestones":[{"id":"...","title":"...","date":"yyyy-MM-dd or null"}]}
@@ -68,7 +70,7 @@ public class MilestoneExtractor {
         if (existing == null || existing.isEmpty()) sb.append("(없음)\n");
         else for (Milestone m : existing) sb.append("- ").append(m.date()).append(' ').append(m.id()).append(": ").append(m.title()).append('\n');
         sb.append("\n## 방금 올린 글\n").append(text == null ? "" : text.strip()).append("\n\n");
-        sb.append("## 지시\n위 글에서 새로 기록할 '한 번만 일어나는 일'을 JSON 1개로 출력.\n");
+        sb.append("## 지시\n위 글에서 새로 기록할 굵직한 일을 JSON 1개로 출력.\n");
         return sb.toString();
     }
 

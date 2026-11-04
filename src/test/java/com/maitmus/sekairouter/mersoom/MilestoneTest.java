@@ -12,7 +12,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** '한 번만 일어나는 일'(올해 첫 X·처음 꺼냄) 기록 — 2026-11-04, 네네 코타츠 3회 개시(10-29·10-31·11-03) 재발 방지. */
+/** 다시 새로 일어나면 모순인 굵직한 일(올해 첫 X·처음 꺼냄·쇼 당일·첫 발견) 기록 — 2026-11-04, 네네 코타츠 4회 개시 재발 방지에서 확장. */
 class MilestoneTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 4);
@@ -67,9 +67,21 @@ class MilestoneTest {
     }
 
     @Test
-    void prompt_section_lists_done_firsts_and_blocks_redoing_them() {
+    void prompt_section_lists_done_events_and_blocks_redoing_them() {
         String sec = MilestonePrompt.section(List.of(new Milestone("nene", "kotatsu-out", "코타츠 꺼냄", "2026-10-29", "p1")), TODAY);
-        assertThat(sec).contains("## 이미 한 '처음'인 일", "- 10-29 코타츠 꺼냄", "다시 '처음");
+        assertThat(sec).contains("## 이미 쓴 굵직한 일", "- 10-29 코타츠 꺼냄", "또 처음 일어나는 것으로 쓰지 말 것");
         assertThat(MilestonePrompt.section(List.of(), TODAY)).isEmpty();
+    }
+
+    @Test
+    void prompt_section_shows_only_last_30_days_capped_at_30_newest() {
+        var ms = new java.util.ArrayList<Milestone>();
+        ms.add(new Milestone("emu", "old", "옛날 일", "2026-09-20", "p"));        // 30일 밖
+        for (int i = 1; i <= 32; i++)
+            ms.add(new Milestone("emu", "e" + i, "일" + i, i <= 2 ? "2026-10-10" : "2026-10-20", "p"));
+        String sec = MilestonePrompt.section(ms, TODAY);
+        assertThat(sec).doesNotContain("옛날 일", "일1\n", "일2\n").contains("- 10-20 일3", "- 10-20 일32", "기록에 없는 새 일은 자유롭게");
+        assertThat(sec.lines().filter(l -> l.startsWith("- "))).hasSize(30);
+        assertThat(MilestonePrompt.section(List.of(new Milestone("emu", "old", "옛날 일", "2026-09-20", "p")), TODAY)).isEmpty();
     }
 }
