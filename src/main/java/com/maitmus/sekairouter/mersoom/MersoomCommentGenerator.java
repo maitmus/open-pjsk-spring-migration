@@ -106,9 +106,19 @@ public class MersoomCommentGenerator {
     public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
                                  java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies,
                                  String sharedSection) {
+        return generate(profile, state, commentable, now, replies, sharedSection, "");
+    }
+
+    /**
+     * @param milestoneSection 내 '이미 한 처음인 일' 섹션({@link MilestonePrompt#section}) — 형제 맥락과 무관하게 항상 넣는다
+     *                         (일반 유저 글 댓글에서도 '오늘 코타츠 처음 꺼냈어'로 또 새지 않게).
+     */
+    public FeedJudgment generate(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
+                                 java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies,
+                                 String sharedSection, String milestoneSection) {
         if (commentable.isEmpty()) return new FeedJudgment(Map.of(), Map.of(), List.of(), Map.of());
 
-        String userPrompt = buildUserPrompt(profile, state, commentable, now, replies, sharedSection);
+        String userPrompt = buildUserPrompt(profile, state, commentable, now, replies, sharedSection, milestoneSection);
         PromptBlocks blocks = promptBuilder.build(profile);   // 호칭 교정 콜은 이 base 재사용(댓글 판정 규칙 없이 — 출력 형식 충돌 방지)
         List<PromptBlocks.Block> judgeBlocks = new ArrayList<>(blocks.blocks());
         judgeBlocks.add(new PromptBlocks.Block(buildRules(profile), true));   // 봇별 고정 → 캐시
@@ -294,7 +304,7 @@ public class MersoomCommentGenerator {
 
     private String buildUserPrompt(CitizenProfile profile, MersoomState state, List<Commentable> commentable,
                                    java.time.LocalDateTime now, List<MersoomReplyThreads.ReplyCandidate> replies,
-                                   String sharedSection) {
+                                   String sharedSection, String milestoneSection) {
         Set<String> fixedNames = state.fixedAvoid().stream().map(fa -> fa.name()).collect(Collectors.toSet());
         String actor = profile.actorName();
         boolean nene = profile.persona() == com.maitmus.sekairouter.persona.CharacterId.NENE;
@@ -394,6 +404,7 @@ public class MersoomCommentGenerator {
         if (siblingContext && sharedSection != null && !sharedSection.isBlank()) {
             sb.append('\n').append(sharedSection);
         }
+        if (milestoneSection != null && !milestoneSection.isBlank()) sb.append('\n').append(milestoneSection);
 
         // 최근 내 댓글 — 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재를 반복 픽하던 것을 막는다.
         // 작성자별 note가 아니라 '이미 쓴 것' 목록으로 분리(note에 본문을 넣었을 땐 그 작성자 댓글을 복붙하는 echo가 났음).

@@ -930,4 +930,20 @@ class MersoomCommentGeneratorTest {
                 "r1", "emu_wonder", "에무", OffsetDateTime.now());
         assertThat(sharedPrompt(List.of(post("p1", "산책", "한강")), List.of(reply))).contains("## 에무와 얽힌 최근 일");
     }
+
+    @Test
+    void milestone_section_goes_in_even_without_sibling_context() {
+        // 일반 유저 글뿐인 피드에서도 '이미 한 처음인 일'은 넣는다 — 공유 이벤트(형제 맥락 한정)와 달리 내 사실 정합이라.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        Commentable general = new Commentable(new Post("g1", "코타츠 샀어요", "하늘", "드디어 코타츠 개시", 0, 0, 0, 0, 0,
+                OffsetDateTime.now(), "user_sky", null), List.of());
+        new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
+                .generate(NENE, empty(), List.of(general), java.time.LocalDateTime.of(2026, 11, 4, 11, 45), List.of(), SHARED,
+                        "## 이미 한 '처음'인 일 (네 기록)\n- 10-29 코타츠 꺼냄\n");
+        assertThat(user.getValue()).contains("- 10-29 코타츠 꺼냄").doesNotContain("할로윈 쇼");
+    }
 }

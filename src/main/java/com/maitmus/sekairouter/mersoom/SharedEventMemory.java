@@ -26,6 +26,7 @@ public class SharedEventMemory {
 
     private final SharedEventStore store;
     private final SharedEventExtractor extractor;
+    private final MilestoneExtractor milestoneExtractor;
     private final Clock clock;
 
     /** 형제 이름 — 에무 시민이면 네네, 네네 시민이면 에무. */
@@ -78,6 +79,31 @@ public class SharedEventMemory {
             }
         } catch (Exception e) {
             log.warn("[{}] Shared event 기록 실패(게시 영향 없음): {}", profile.key(), e.toString());
+        }
+    }
+
+    /** 내 '이미 한 처음인 일' 섹션 — 글·댓글 USER에 항상. 비거나 실패면 빈 문자열. */
+    public String milestoneSection(CitizenProfile profile) {
+        try {
+            LocalDate today = LocalDate.now(clock.withZone(KST));
+            return MilestonePrompt.section(store.milestones(profile.key(), today), today);
+        } catch (Exception e) {
+            log.warn("[{}] Milestone 섹션 생성 실패(생략): {}", profile.key(), e.toString());
+            return "";
+        }
+    }
+
+    /** 방금 게시한 내 글에서 '한 번만 일어나는 일'을 뽑아 기록한다. */
+    public void observeMilestones(CitizenProfile profile, String sourceId, String text) {
+        try {
+            LocalDate today = LocalDate.now(clock.withZone(KST));
+            var existing = store.milestones(profile.key(), today);
+            var found = milestoneExtractor.extract(profile.key(), profile.actorName(), today, sourceId, text, existing);
+            for (Milestone m : store.addMilestones(profile.key(), found, today)) {
+                log.info("[{}] Milestone added: id={} title='{}' date={}", profile.key(), m.id(), m.title(), m.date());
+            }
+        } catch (Exception e) {
+            log.warn("[{}] Milestone 기록 실패(게시 영향 없음): {}", profile.key(), e.toString());
         }
     }
 }

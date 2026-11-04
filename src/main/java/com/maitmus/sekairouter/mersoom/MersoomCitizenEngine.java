@@ -71,7 +71,7 @@ public class MersoomCitizenEngine {
             // (공유 일정을 매 글에 주자 10-28 sim에서 에무 글 8/8 끝에 '할로윈 쇼 사흘 뒤'가 붙었다).
             boolean eventSlot = java.time.LocalTime.now(clock.withZone(KST)).getHour() < 12;
             var generated = postGenerator.generate(profile, state, feed, java.time.LocalDateTime.now(clock.withZone(KST)), eventSlot,
-                    eventSlot ? sharedEvents.postSection(profile) : "");
+                    (eventSlot ? orEmpty(sharedEvents.postSection(profile)) : "") + orEmpty(sharedEvents.milestoneSection(profile)));
             if (generated == null) {
                 log.info("[{}] Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)", profile.key());
                 state = withContextNotes(state, ticked);
@@ -104,6 +104,7 @@ public class MersoomCitizenEngine {
                     upvoteBySibling(profile, resp.id());
                     sharedEvents.observe(profile, resp.id(), "글", "",
                             "제목: " + title + "\n본문: " + content);
+                    sharedEvents.observeMilestones(profile, resp.id(), "제목: " + title + "\n본문: " + content);
                 }
             }
         } catch (Exception e) {
@@ -185,7 +186,8 @@ public class MersoomCitizenEngine {
         FeedJudgment judgment = feed.commentable().isEmpty()
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable(),
-                        java.time.LocalDateTime.now(clock.withZone(KST)), replies, sharedEvents.commentSection(profile));
+                        java.time.LocalDateTime.now(clock.withZone(KST)), replies, sharedEvents.commentSection(profile),
+                        orEmpty(sharedEvents.milestoneSection(profile)));
         // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
@@ -520,5 +522,9 @@ public class MersoomCitizenEngine {
 
     private static String safeNick(String s) {
         return s.length() > 20 ? s.substring(0, 20) : s;
+    }
+
+    private static String orEmpty(String s) {
+        return s == null ? "" : s;
     }
 }

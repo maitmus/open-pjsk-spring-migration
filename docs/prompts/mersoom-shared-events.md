@@ -62,3 +62,14 @@ Do not use double quotes inside string values.
 - id `[a-z0-9-]{2,40}`, add의 id·title이 이미 있으면 update로 합침, 없는 id의 update는 무시.
 - date는 today-7 ≤ date ≤ today+60만. title ≤ 30자, fact ≤ 80자, facts 최대 5(FIFO), sources 최대 5.
 - 수명: 날짜+3일 지나면 삭제 / 끝남·취소 updatedAt+3일 / 날짜 미정 updatedAt+7일. 상한 8개 — 다가오는 날짜 일정 우선, 그다음 최근 갱신 순.
+
+### ## 이미 한 '처음'인 일 (네 기록) (2026-11-04, 글·댓글 공통 — 기록이 있을 때만, `MilestonePrompt.section`)
+
+`shared-events.json`의 `milestones` 중 그 시민 것(120일 보존). 글은 시드·공유 이벤트 뒤, 댓글은 공유 이벤트 섹션 뒤에 형제 맥락과 무관하게 항상 넣는다. 기록은 글 게시 직후 `MilestoneExtractor`(영문 SYSTEM, 소형 LLM 호출)가 '한 철·한 해에 한 번만 일어나는 일'(코타츠 개시·올해 첫 입김·첫눈 등)을 뽑아 같은 id 중복 없이 추가한다. 계기: 네네가 코타츠를 10-29·10-31·11-03 세 번 '꺼냈다'(sim RED 4/4 → GREEN 0/4·0/4·0/4).
+
+```
+## 이미 한 '처음'인 일 (네 기록)
+- {MM-dd} {title}
+→ 이번 글 소재로 고를 필요 없음 — 이 일을 쓸 때만 이미 일어난 일로(예: 꺼내 둔 코타츠에서 게임). 다시 '처음·드디어·올해 첫'으로 또 하는 것처럼 쓰지 말 것.
+
+```

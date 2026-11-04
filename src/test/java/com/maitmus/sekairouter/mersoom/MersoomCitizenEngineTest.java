@@ -50,7 +50,7 @@ class MersoomCitizenEngineTest {
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), mock(MersoomApiClient.class))
                 .runComment(EMU);
 
-        verify(commentGen, never()).generate(any(), any(), any(), any(), any(), any());        verify(collector, never()).collectReplies(any(), any(), any(), any());   // 빈 피드면 답글 GET도 안 함
+        verify(commentGen, never()).generate(any(), any(), any(), any(), any(), any(), any());        verify(collector, never()).collectReplies(any(), any(), any(), any());   // 빈 피드면 답글 GET도 안 함
     }
 
     @Test
@@ -62,7 +62,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any()))
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN), Map.of(), List.of(), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -87,7 +87,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p1", VoteType.DOWN, "p2", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 산책 좋았겠어요!")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -111,7 +111,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 풀냄새 맞아요 아침에만 나는 거!")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -140,7 +140,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP, "p3", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("p2", "산책 좋았겠어요!"),
                         new MersoomCommentGenerator.CommentItem("p3", "노을 예뻐요!")), Map.of()));
@@ -163,7 +163,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(null);
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(null);
         MersoomApiClient api = mock(MersoomApiClient.class);
 
         engine(collector, store, commentGen, mock(MersoomPostGenerator.class), api).runComment(EMU);
@@ -183,7 +183,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any()))
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new FeedJudgment(Map.of("p1", VoteType.DOWN),
                         Map.of("p1", "형제 봇 저격(테스트)"), List.of(), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -211,7 +211,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of("p2", "밝은 글"), List.of(), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -236,7 +236,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of("p2", "밝은 글"), List.of(), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -325,7 +325,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(seeded);
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("p2", "원더호~이 산책 좋았겠어요!")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -403,7 +403,7 @@ class MersoomCitizenEngineTest {
                 List.of(new CommentRef("pOld", OffsetDateTime.now(), "낙엽 최고예요!")), List.of(), Map.of(), 8,
                 List.of(), null, null, List.of(), List.of()));
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(List.of(cand)), any())).thenReturn(new FeedJudgment(
+        when(commentGen.generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(List.of(cand)), any(), any())).thenReturn(new FeedJudgment(
                 Map.of("p2", VoteType.UP), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pOld", "좋아요~ 내일 같이 해요!", "r1")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
@@ -430,7 +430,7 @@ class MersoomCitizenEngineTest {
         when(store.load(any())).thenReturn(new MersoomState(List.of(), List.of(),
                 List.of(new MersoomState.FixedAvoid("w8agi", "비하", java.time.LocalDate.now())), Map.of(), 8, List.of(), null, null, List.of(), List.of()));
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pOld", "x", "r1")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
 
@@ -510,6 +510,7 @@ class MersoomCitizenEngineTest {
         clock = Clock.fixed(Instant.parse("2026-05-08T01:00:00Z"), ZoneId.of("Asia/Seoul"));   // 10:00
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);
         verify(postGen).generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(true), eq("## 네네와 얽힌 최근 일\n"));
+        verify(memory, atLeastOnce()).milestoneSection(EMU);
     }
 
     @Test
@@ -526,7 +527,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pn", "망토 조심해~!"),
                         new MersoomCommentGenerator.CommentItem("pu", "산책 좋아요~!"),
                         new MersoomCommentGenerator.CommentItem("px", "호박으로 할게!", "r1")), Map.of()));
@@ -550,7 +551,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pu", "혼자지만 좋아요~!")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createComment(any(), eq("pu"), any(), any(), eq("혼자지만 좋아요~!")))
@@ -576,7 +577,7 @@ class MersoomCitizenEngineTest {
         MersoomStateStore store = mock(MersoomStateStore.class);
         when(store.load(any())).thenReturn(empty());
         MersoomCommentGenerator commentGen = mock(MersoomCommentGenerator.class);
-        when(commentGen.generate(any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
+        when(commentGen.generate(any(), any(), any(), any(), any(), any(), any())).thenReturn(new FeedJudgment(Map.of(), Map.of(),
                 List.of(new MersoomCommentGenerator.CommentItem("pu", "혼자지만 좋아요~!")), Map.of()));
         MersoomApiClient api = mock(MersoomApiClient.class);
         when(api.createComment(any(), any(), any(), any(), any())).thenThrow(MersoomFilterRephraserTest.badword("자지"));
