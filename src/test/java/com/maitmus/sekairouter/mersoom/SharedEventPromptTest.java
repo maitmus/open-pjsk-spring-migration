@@ -44,7 +44,8 @@ class SharedEventPromptTest {
     void sections_carry_their_guards() {
         var events = List.of(ev("쇼", "2026-10-31", "upcoming"));
         assertThat(SharedEventPrompt.postSection(events, TODAY, "에무")).contains("## 에무와 얽힌 최근 일", "이번 글 소재로 고를 필요 없음");
-        assertThat(SharedEventPrompt.commentSection(events, TODAY, "에무")).contains("일반 유저 글 댓글엔 꺼내지 말 것");
+        assertThat(SharedEventPrompt.commentSection(events, TODAY, "에무")).contains("일반 유저 글 댓글엔 꺼내지 말 것")
+                .contains("이 일을 끝에 덧붙이지 말 것");   // 11-05 라이브: 형제 댓글마다 '이따 데리러 갈 때' 꼬리
     }
 
     @Test

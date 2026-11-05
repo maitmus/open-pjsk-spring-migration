@@ -56,7 +56,8 @@ final class SharedEventPrompt {
     static String commentSection(List<SharedEvent> events, LocalDate today, String siblingName) {
         String body = render(events, today, siblingName);
         if (body.isEmpty()) return "";
-        return body + "→ " + siblingName + "의 글·답글이 이 일을 다룰 때만 날짜·사실을 맞춰 받을 것. 일반 유저 글 댓글엔 꺼내지 말 것.\n";
+        return body + "→ " + siblingName + "의 글·답글이 이 일을 직접 다룰 때만 날짜·사실을 맞춰 받을 것. "
+                + "다른 얘기 글엔 '이따 ~할 때 ~하자'처럼 이 일을 끝에 덧붙이지 말 것. 일반 유저 글 댓글엔 꺼내지 말 것.\n";
     }
 
     private static String when(String date, LocalDate today) {
