@@ -57,6 +57,19 @@ class SharedEventExtractorTest {
     }
 
     @Test
+    void actor_line_frames_sibling_as_friend_not_family() {
+        // '형제:' 라벨이면 에무 글의 '언니'를 네네로 기록했다(11-04 별 머리핀)
+        var anthropic = mock(AnthropicClientWrapper.class);
+        when(anthropic.completeJson(any(), any())).thenReturn("{\"ops\":[]}");
+        new SharedEventExtractor(anthropic, new ObjectMapper()).extract(new SharedEventExtractor.Input(
+                LocalDate.of(2026, 11, 4), "에무", "네네", "글", "", "언니가 머리핀을 빌려줬어요"), List.of());
+        ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+        verify(anthropic).completeJson(any(PromptBlocks.class), user.capture());
+        assertThat(user.getValue()).contains("에무 (같은 극단 친구: 네네)").doesNotContain("형제");
+        assertThat(SharedEventExtractor.SYSTEM).contains("not siblings or family", "never the other character");
+    }
+
+    @Test
     void extract_swallows_client_errors() {
         var anthropic = mock(AnthropicClientWrapper.class);
         when(anthropic.completeJson(any(), any())).thenThrow(new RuntimeException("429"));

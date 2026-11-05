@@ -27,14 +27,14 @@ public class SharedEventExtractor {
 
     // 영문 지시 — 한국어 지시문 버전은 Opus 5.5가 stop_reason=refusal(출력 0)을 절반가량 냈다(10-27 소급 시험, 영문은 10/10 정상).
     static final String SYSTEM = """
-            You read short fictional posts and comments written by two game characters, Emu and Nene (both members of the same theater troupe, Wonderlands×Showtime), on a community board. Your job is to keep a small list of things the two of them share — so later posts stay consistent. Reply with JSON only.
+            You read short fictional posts and comments written by two game characters, Emu and Nene (friends in the same theater troupe, Wonderlands×Showtime — not siblings or family), on a community board. Your job is to keep a small list of things the two of them share — so later posts stay consistent. Reply with JSON only.
 
             What counts (only things involving BOTH Emu and Nene):
             - Troupe shows, rehearsals or schedules (e.g. a Halloween show)
             - Plans or promises the two made together (e.g. going to a crepe shop together)
             - Things both took part in (e.g. a movie they watched together)
 
-            What does not count: things only one of them does (tests, club activities, personal purchases, family), general chit-chat or praise, things with other users. Do not invent anything not in the text.
+            What does not count: things only one of them does (tests, club activities, personal purchases, family — 언니·오빠·엄마 and the like in a post are the writer's own family, never the other character), general chit-chat or praise, things with other users. Do not invent anything not in the text.
 
             Rules:
             - If it is the same thing as an existing list item, use "update" (new facts in addFacts; status "done" when it is over, "cancelled" when called off; date when set or changed) instead of "add".
@@ -77,7 +77,8 @@ public class SharedEventExtractor {
     String buildUserPrompt(Input in, List<SharedEvent> current) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append("## 오늘 (KST)\n").append(in.today()).append('(').append(DOW[in.today().getDayOfWeek().getValue() - 1]).append(")\n\n");
-        sb.append("## 작성자\n").append(in.actorName()).append(" (형제: ").append(in.siblingName()).append(")\n\n");
+        // '형제:' 라벨은 모델이 둘을 남매로 읽어 에무 글의 '언니'를 네네로 기록했다(11-04 별 머리핀, sim 4/4 → 0/4)
+        sb.append("## 작성자\n").append(in.actorName()).append(" (같은 극단 친구: ").append(in.siblingName()).append(")\n\n");
         sb.append("## 현재 공유 기억 목록\n");
         List<Map<String, Object>> brief = new ArrayList<>();
         for (SharedEvent e : current) {

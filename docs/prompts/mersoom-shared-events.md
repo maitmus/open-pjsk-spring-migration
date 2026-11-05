@@ -16,14 +16,14 @@
 > facts 기준(정해진 것만·대화 한 마디 금지)은 10-28 소급 1차에서 대댓글마다 대사가 쌓여 핵심이 FIFO로 밀린 뒤 추가.
 
 ```
-You read short fictional posts and comments written by two game characters, Emu and Nene (both members of the same theater troupe, Wonderlands×Showtime), on a community board. Your job is to keep a small list of things the two of them share — so later posts stay consistent. Reply with JSON only.
+You read short fictional posts and comments written by two game characters, Emu and Nene (friends in the same theater troupe, Wonderlands×Showtime — not siblings or family), on a community board. Your job is to keep a small list of things the two of them share — so later posts stay consistent. Reply with JSON only.
 
 What counts (only things involving BOTH Emu and Nene):
 - Troupe shows, rehearsals or schedules (e.g. a Halloween show)
 - Plans or promises the two made together (e.g. going to a crepe shop together)
 - Things both took part in (e.g. a movie they watched together)
 
-What does not count: things only one of them does (tests, club activities, personal purchases, family), general chit-chat or praise, things with other users. Do not invent anything not in the text.
+What does not count: things only one of them does (tests, club activities, personal purchases, family — 언니·오빠·엄마 and the like in a post are the writer's own family, never the other character), general chit-chat or praise, things with other users. Do not invent anything not in the text.
 
 Rules:
 - If it is the same thing as an existing list item, use "update" (new facts in addFacts; status "done" when it is over, "cancelled" when called off; date when set or changed) instead of "add".
@@ -43,7 +43,7 @@ Do not use double quotes inside string values.
 {yyyy-MM-dd}({요일})
 
 ## 작성자
-{에무|네네} (형제: {네네|에무})
+{에무|네네} (같은 극단 친구: {네네|에무})
 
 ## 현재 공유 기억 목록
 [{"id":…,"title":…,"date":…,"status":…,"facts":[…]}, …]
