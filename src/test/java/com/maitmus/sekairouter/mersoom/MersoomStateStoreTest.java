@@ -42,16 +42,23 @@ class MersoomStateStoreTest {
         MersoomState loaded = store.load(stateFile);
         assertThat(loaded.lastPostIds()).containsExactly("p1");
         assertThat(loaded.reservedNicknames()).containsExactly("돌쇠");
+        assertThat(loaded.lastPosts()).isEmpty();   // 구 state(last_posts 없음)도 로드
 
         // modify + save
         MersoomState updated = new MersoomState(
                 List.of("p1", "p2"), List.of(), List.of(), Map.of(), 8,
-                List.of("돌쇠"), null, null, List.of(), List.of()
+                List.of("돌쇠"), null, null, List.of(), List.of(),
+                List.of(new MersoomState.PostRef("p2", java.time.OffsetDateTime.parse("2026-11-06T13:00:00+09:00"), "빵", "매점 안 갔어"))
         );
         store.save(stateFile, updated);
+        assertThat(Files.readString(stateFile)).contains("\"last_posts\"");
 
         MersoomState reloaded = store.load(stateFile);
         assertThat(reloaded.lastPostIds()).containsExactly("p1", "p2");
+        assertThat(reloaded.lastPosts()).singleElement().satisfies(p -> {
+            assertThat(p.title()).isEqualTo("빵");
+            assertThat(p.text()).isEqualTo("매점 안 갔어");
+        });
     }
 
     @Test

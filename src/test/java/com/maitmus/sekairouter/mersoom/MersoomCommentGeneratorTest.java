@@ -679,28 +679,29 @@ class MersoomCommentGeneratorTest {
     }
 
     @Test
-    void recent_own_comments_are_shown_newest_first_capped_and_old_refs_without_text_skipped() {
-        // 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재(붕어빵·노래 연습)를 반복 — 최근 본문을 보여 막는다.
+    void own_comments_section_is_in_user_prompt_before_directive() {
+        // 매 크론이 백지라 같은 소재 반복 + 같은 날 사실(점심 메뉴)이 크론마다 바뀌던 것 — 내 글·댓글을 기억으로 보인다.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
         when(anthropic.completeJson(any(PromptBlocks.class), user.capture())).thenReturn("{\"votes\":[],\"comments\":[]}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
-        List<MersoomState.CommentRef> refs = new ArrayList<>();
-        for (int i = 1; i <= 8; i++) refs.add(new MersoomState.CommentRef("c" + i, OffsetDateTime.now(), "댓글" + i + "\n줄바꿈"));
-        refs.add(2, new MersoomState.CommentRef("old", OffsetDateTime.now()));   // 구 state 항목(본문 없음)
-        MersoomState st = new MersoomState(List.of(), refs, List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+        var at = OffsetDateTime.of(2026, 11, 6, 3, 45, 0, 0, java.time.ZoneOffset.UTC);   // KST 12:45
+        MersoomState st = new MersoomState(List.of(), List.of(new MersoomState.CommentRef("c1", at, "난 매점 야키소바빵.")),
+                List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
 
         new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
-                .generate(EMU, st, List.of(post("p9", "라벤더 차", "향이 좋아요")));
+                .generate(EMU, st, List.of(post("p9", "라벤더 차", "향이 좋아요")),
+                        java.time.LocalDateTime.of(2026, 11, 6, 13, 15), List.of());
 
         String u = user.getValue();
-        assertThat(u).contains("## 최근 네가 단 댓글 (이미 쓴 것 — 따라 쓰지 말 것)")
+        assertThat(u).contains("## 네가 쓴 글·댓글 (네 기억 — 시간순)")
+                .contains("- 오늘 12:45 댓글: 난 매점 야키소바빵.")
+                .contains("한 끼는 한 메뉴")
                 .contains("시그니처 구호는 예외")
                 .contains("댓글 달 글 고르기와는 무관")
-                .contains("  - 댓글1 줄바꿈\n  - 댓글2 줄바꿈\n  - 댓글3 줄바꿈")   // 최신순·한 줄로 접음·본문 없는 건 건너뜀
-                .contains("댓글6 줄바꿈").doesNotContain("댓글7");               // 최대 6개
-        assertThat(u.indexOf("## 최근 네가 단 댓글")).isLessThan(u.indexOf("## 지시"));
+                .doesNotContain("다른 일상 소재로 바꾼다");
+        assertThat(u.indexOf("## 네가 쓴 글·댓글")).isLessThan(u.indexOf("## 지시"));
     }
 
     @Test
@@ -714,7 +715,7 @@ class MersoomCommentGeneratorTest {
                 List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
         new MersoomCommentGenerator(anthropic, pb, new OutputSanityGate(), noEvents())
                 .generate(EMU, st, List.of(post("p9", "라벤더 차", "향이 좋아요")));
-        assertThat(user.getValue()).doesNotContain("최근 네가 단 댓글");
+        assertThat(user.getValue()).doesNotContain("## 네가 쓴 글·댓글");
     }
 
     @Test

@@ -96,7 +96,7 @@ public class MersoomCitizenEngine {
                             : retryFiltered(profile, "글", word, () -> api.createPost(profile.auth(), profile.actorName(), t, c));
                 }
                 if (resp != null && resp.success()) {
-                    state = recordPost(state, resp.id(), ticked);
+                    state = recordPost(state, resp.id(), title, content, ticked);
                     log.info("[{}] Mersoom post created: id={} title='{}' content_len={}",
                             profile.key(), resp.id(), title, content.length());
                     log.info("[{}] Mersoom post content: \"{}\"", profile.key(), content);
@@ -410,7 +410,7 @@ public class MersoomCitizenEngine {
                 state.lastPostIds(), state.lastCommentIds(), fixedAvoid,
                 notes, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), state.votedPostIds());
+                state.pendingReports(), state.votedPostIds(), state.lastPosts());
     }
 
     /**
@@ -436,18 +436,22 @@ public class MersoomCitizenEngine {
                 state.lastPostIds(), state.lastCommentIds(), state.fixedAvoid(),
                 state.contextNotes(), state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), voted);
+                state.pendingReports(), voted, state.lastPosts());
     }
 
-    private MersoomState recordPost(MersoomState state, String newPostId, Map<String, ContextNote> tickedNotes) {
+    private MersoomState recordPost(MersoomState state, String newPostId, String title, String content,
+                                    Map<String, ContextNote> tickedNotes) {
         var newPostIds = new ArrayList<>(state.lastPostIds());
         newPostIds.add(0, newPostId);
         if (newPostIds.size() > 10) newPostIds.subList(10, newPostIds.size()).clear();
+        var newPosts = new ArrayList<>(state.lastPosts());
+        newPosts.add(0, new MersoomState.PostRef(newPostId, OffsetDateTime.now(clock.withZone(KST)), title, content));
+        if (newPosts.size() > 10) newPosts.subList(10, newPosts.size()).clear();
         return new MersoomState(
                 newPostIds, state.lastCommentIds(), state.fixedAvoid(),
                 tickedNotes, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), state.votedPostIds());
+                state.pendingReports(), state.votedPostIds(), newPosts);
     }
 
     /** 게시 사이 레이트리밋 간격. 인터럽트되면 false(호출측이 루프를 끊는다). */
@@ -479,7 +483,7 @@ public class MersoomCitizenEngine {
                 state.lastPostIds(), newCommentIds, state.fixedAvoid(),
                 updated, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), state.votedPostIds());
+                state.pendingReports(), state.votedPostIds(), state.lastPosts());
     }
 
     private MersoomState recordComment(CitizenProfile profile, MersoomState state, Commentable target, String content,
@@ -509,7 +513,7 @@ public class MersoomCitizenEngine {
                 state.lastPostIds(), newCommentIds, state.fixedAvoid(),
                 updated, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), state.votedPostIds());
+                state.pendingReports(), state.votedPostIds(), state.lastPosts());
     }
 
     private MersoomState withContextNotes(MersoomState state, Map<String, ContextNote> tickedNotes) {
@@ -517,7 +521,7 @@ public class MersoomCitizenEngine {
                 state.lastPostIds(), state.lastCommentIds(), state.fixedAvoid(),
                 tickedNotes, state.contextNotesCapacity(),
                 state.reservedNicknames(), state.summary(), state.summaryPrev(),
-                state.pendingReports(), state.votedPostIds());
+                state.pendingReports(), state.votedPostIds(), state.lastPosts());
     }
 
     private static String safeNick(String s) {

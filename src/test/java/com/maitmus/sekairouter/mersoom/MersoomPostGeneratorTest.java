@@ -76,6 +76,24 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
+    void post_prompt_includes_todays_own_comments_as_facts() {
+        // 11-06 네네 대댓글 '매점 야키소바빵' 15분 뒤 글 '매점 안 갔어' — 글 프롬프트에 내 오늘 댓글이 없었다.
+        AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
+        org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
+        when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
+        MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
+        when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
+        var at = java.time.OffsetDateTime.of(2026, 11, 6, 12, 45, 0, 0, java.time.ZoneOffset.ofHours(9));
+        MersoomState st = new MersoomState(List.of(), List.of(new MersoomState.CommentRef("c", at, "난 매점 야키소바빵.")),
+                List.of(), Map.of(), 8, List.of(), null, null, List.of(), List.of());
+
+        new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents())
+                .generate(EMU, st, feed(), java.time.LocalDateTime.of(2026, 11, 6, 13, 0), false, "");
+
+        assertThat(userPrompt.getValue()).contains("## 오늘 네가 쓴 글·댓글").contains("오늘 12:45 댓글: 난 매점 야키소바빵.");
+    }
+
+    @Test
     void post_prompt_forbids_double_quotes_in_content() {
         // content 안 비이스케이프 큰따옴표로 본문이 절단됐던 사례 → 큰따옴표 회피 룰이 글 프롬프트에 있어야 함.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);

@@ -26,7 +26,8 @@ public record MersoomState(
         String summary,
         String summaryPrev,
         List<String> pendingReports,
-        List<String> votedPostIds
+        List<String> votedPostIds,
+        List<PostRef> lastPosts
 ) {
     /**
      * 관계는 contextNotes.reputation 기반 — friends/avoid/fixed_friends는 폐지(평판 파생).
@@ -40,6 +41,15 @@ public record MersoomState(
         if (reservedNicknames == null) reservedNicknames = List.of();
         if (pendingReports == null) pendingReports = List.of();
         if (votedPostIds == null) votedPostIds = List.of();
+        if (lastPosts == null) lastPosts = List.of();
+    }
+
+    /** lastPosts 없는 구 시그니처(테스트·구 호출부) — 빈 목록. */
+    public MersoomState(List<String> lastPostIds, List<CommentRef> lastCommentIds, List<FixedAvoid> fixedAvoid,
+                        Map<String, ContextNote> contextNotes, int contextNotesCapacity, List<String> reservedNicknames,
+                        String summary, String summaryPrev, List<String> pendingReports, List<String> votedPostIds) {
+        this(lastPostIds, lastCommentIds, fixedAvoid, contextNotes, contextNotesCapacity, reservedNicknames,
+                summary, summaryPrev, pendingReports, votedPostIds, List.of());
     }
 
     /**
@@ -52,6 +62,13 @@ public record MersoomState(
             this(postId, timestamp, null);
         }
     }
+
+    /**
+     * 게시한 글 기록(2026-11-06~). lastPostIds는 id뿐이라 댓글 크론이 내 오늘 글 내용을 몰랐다 — 글·댓글 USER의
+     * '오늘 네가 쓴 글·댓글'로 보여 같은 날 사실(점심 메뉴 등)이 글↔댓글 사이에서 어긋나지 않게 한다.
+     */
+    @JsonNaming(SnakeCaseStrategy.class)
+    public record PostRef(String postId, OffsetDateTime timestamp, String title, String text) {}
 
     @JsonNaming(SnakeCaseStrategy.class)
     public record FixedAvoid(String name, String reason, LocalDate added) {}

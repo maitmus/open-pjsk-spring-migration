@@ -406,31 +406,15 @@ public class MersoomCommentGenerator {
         }
         if (milestoneSection != null && !milestoneSection.isBlank()) sb.append('\n').append(milestoneSection);
 
-        // 최근 내 댓글 — 매 크론이 백지라 비슷한 피드(매일 오는 낙엽·배고픔 글)에 같은 소재를 반복 픽하던 것을 막는다.
-        // 작성자별 note가 아니라 '이미 쓴 것' 목록으로 분리(note에 본문을 넣었을 땐 그 작성자 댓글을 복붙하는 echo가 났음).
-        List<String> recent = recentOwnComments(state);
-        if (!recent.isEmpty()) {
-            sb.append("\n## 최근 네가 단 댓글 (이미 쓴 것 — 따라 쓰지 말 것)\n");
-            sb.append("- 이번 댓글은 여기 나온 **소재(네 경험·음식·놀이 얘기)·구절·오프닝을 되풀이하지 않는다**(시그니처 구호는 예외 — 평소대로). 같은 얘기가 또 떠오르면 페르소나의 다른 일상 소재로 바꾼다. (댓글 달 글 고르기와는 무관 — 비슷한 글·같은 작성자여도 평소대로 고르고, 말만 새로 한다.)\n");
-            for (String t : recent) sb.append("  - ").append(t).append('\n');
-        }
+        // 내가 쓴 글·댓글 — 매 크론이 백지라 ①비슷한 피드에 같은 소재·구절을 반복 픽하고 ②같은 날 사실(점심 메뉴)이 크론마다 바뀌던 것을 막는다.
+        // 작성자별 note가 아니라 별도 목록(note에 본문을 넣었을 땐 그 작성자 댓글을 복붙하는 echo가 났음).
+        // 예전 문구 '소재(음식…) 되풀이 금지 → 다른 소재로 바꾼다'는 11-06 에무 점심을 카레→계란말이→주먹밥으로 바꾸게 했다.
+        String own = OwnActivityPrompt.commentSection(state,
+                now != null ? now.toLocalDate() : java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
+        if (!own.isEmpty()) sb.append('\n').append(own);
 
         sb.append("\n## 지시\n위 피드를 system의 **댓글 판정 규칙**(투표 기준·댓글 기준·별명·절대 금지·출력 형식)대로 판정해 JSON 1개로 출력.\n");
         return sb.toString();
-    }
-
-    static final int RECENT_COMMENTS_SHOWN = 6;
-
-    /** state의 최근 댓글 본문(최신순, 본문 있는 것만) — 한 줄로 접고 길면 자른다. */
-    static List<String> recentOwnComments(MersoomState state) {
-        List<String> out = new ArrayList<>();
-        for (MersoomState.CommentRef ref : state.lastCommentIds()) {
-            if (ref.text() == null || ref.text().isBlank()) continue;
-            String t = ref.text().replaceAll("\\s+", " ").strip();
-            out.add(t.length() > 160 ? t.substring(0, 160) + "…" : t);
-            if (out.size() >= RECENT_COMMENTS_SHOWN) break;
-        }
-        return out;
     }
 
     /**

@@ -180,6 +180,8 @@ public class MersoomPostGenerator {
             }
             sb.append("→ 위 최근 글들과 **토픽·소재·제목 시작 패턴이 겹치지 않도록** 위 시드 각도로 작성.\n\n");
         }
+        // 오늘 내가 쓴 글·댓글 — 글 프롬프트엔 내 댓글이 전혀 없어 11-06 네네가 대댓글 '매점 야키소바빵' 15분 뒤 '매점 안 갔어' 글을 썼다.
+        sb.append(OwnActivityPrompt.postSection(state, today));
 
         if (!feed.commentable().isEmpty()) {
             sb.append("## 최근 다른 사용자 글 (분위기 참고용)\n");

@@ -281,7 +281,14 @@ class MersoomCitizenEngineTest {
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
 
         verify(api).createPost(any(), any(), any(), any());
-        verify(store).save(any(), any());
+        ArgumentCaptor<MersoomState> saved = ArgumentCaptor.forClass(MersoomState.class);
+        verify(store).save(any(), saved.capture());
+        // 글 본문도 기억(lastPosts) — 다음 댓글·글 크론의 '오늘 네가 쓴 글·댓글'
+        assertThat(saved.getValue().lastPosts()).singleElement().satisfies(p -> {
+            assertThat(p.postId()).isEqualTo("new-id");
+            assertThat(p.title()).isEqualTo("title");
+            assertThat(p.text()).isEqualTo("content");
+        });
     }
 
     @Test
