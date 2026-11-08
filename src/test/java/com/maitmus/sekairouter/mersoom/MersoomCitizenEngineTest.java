@@ -499,6 +499,8 @@ class MersoomCitizenEngineTest {
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, api).runPost(EMU);
 
         verify(memory).observe(eq(EMU), eq("new-id"), eq("글"), eq(""), contains("할로윈 쇼까지 나흘"));
+        verify(memory).observeActivities(eq(EMU), eq(List.of(new ActivityExtractor.Item("글", "new-id", "",
+                "제목: 의상 고민\n본문: 할로윈 쇼까지 나흘"))));
     }
 
     @Test
@@ -518,6 +520,7 @@ class MersoomCitizenEngineTest {
         engine(collector, store, mock(MersoomCommentGenerator.class), postGen, mock(MersoomApiClient.class)).runPost(EMU);
         verify(postGen).generate(any(), any(), any(), any(java.time.LocalDateTime.class), eq(true), eq("## 네네와 얽힌 최근 일\n"));
         verify(memory, atLeastOnce()).milestoneSection(EMU);
+        verify(memory, atLeastOnce()).activitySection(EMU);
     }
 
     @Test
@@ -546,6 +549,12 @@ class MersoomCitizenEngineTest {
         verify(memory).observe(eq(EMU), eq("pn"), eq("댓글"), contains("할로윈 쇼 연습 끝"), eq("망토 조심해~!"));
         verify(memory).observe(eq(EMU), eq("px"), eq("대댓글"), contains("호박으로 해"), eq("호박으로 할게!"));
         verify(memory, never()).observe(any(), eq("pu"), any(), any(), any());
+        // '한 일' 추출은 형제 여부와 무관하게 이번 크론 댓글·대댓글 전부를 한 콜로
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ActivityExtractor.Item>> acts = ArgumentCaptor.forClass(List.class);
+        verify(memory).observeActivities(eq(EMU), acts.capture());
+        assertThat(acts.getValue()).extracting(ActivityExtractor.Item::sourceId).containsExactly("pn", "pu", "px");
+        assertThat(acts.getValue().get(1).context()).contains("한강 걸었어요");
     }
 
     @Test

@@ -61,8 +61,52 @@ public class SharedEventStore {
             all.add(owned);
             added.add(owned);
         }
-        if (!added.isEmpty()) save(new SharedEvent.File(SharedEventLog.prune(f.events(), today), all));
+        if (!added.isEmpty()) save(new SharedEvent.File(SharedEventLog.prune(f.events(), today), all, f.activities()));
         return added;
+    }
+
+    /** '최근 한 일' 보존 기간 — 프롬프트엔 그저께까지만 쓰지만 자정 직후 크론도 사흘 전을 볼 수 있게 하루 여유. */
+    static final int ACTIVITY_KEEP_DAYS = 3;
+    static final int ACTIVITY_MAX = 160;
+
+    /** 보존 기간 내 activities(기록 순). */
+    public synchronized List<Activity> activities(LocalDate today) {
+        return pruneActivities(load().activities(), today);
+    }
+
+    /** activities 추가 — 같은 날·같은 사람·같은 문구는 건너뛴다. 추가분이 없으면 파일을 건드리지 않는다. */
+    public synchronized List<Activity> addActivities(List<Activity> add, LocalDate today) {
+        if (add == null || add.isEmpty()) return List.of();
+        SharedEvent.File f = load();
+        List<Activity> all = new ArrayList<>(pruneActivities(f.activities(), today));
+        List<Activity> added = new ArrayList<>();
+        for (Activity a : add) {
+            if (a == null || a.text() == null || a.text().isBlank() || a.actor() == null || a.date() == null) continue;
+            boolean dup = all.stream().anyMatch(x -> a.date().equals(x.date()) && a.actor().equals(x.actor())
+                    && norm(a.text()).equals(norm(x.text())));
+            if (dup) continue;
+            all.add(a);
+            added.add(a);
+        }
+        if (added.isEmpty()) return added;
+        if (all.size() > ACTIVITY_MAX) all = new ArrayList<>(all.subList(all.size() - ACTIVITY_MAX, all.size()));
+        save(new SharedEvent.File(SharedEventLog.prune(f.events(), today), f.milestones(), all));
+        return added;
+    }
+
+    private static String norm(String s) {
+        return s.replaceAll("[\\s.,!?~…·]", "");
+    }
+
+    private static List<Activity> pruneActivities(List<Activity> as, LocalDate today) {
+        if (as == null) return List.of();
+        return as.stream().filter(a -> {
+            try {
+                return a.date() != null && !LocalDate.parse(a.date()).isBefore(today.minusDays(ACTIVITY_KEEP_DAYS));
+            } catch (DateTimeParseException e) {
+                return false;
+            }
+        }).toList();
     }
 
     private static List<Milestone> pruneMilestones(List<Milestone> ms, LocalDate today) {
@@ -84,12 +128,12 @@ public class SharedEventStore {
         if (ops == null || ops.isEmpty()) return new SharedEventLog.ApplyResult(current, List.of(), List.of());
         var result = SharedEventLog.apply(current, ops, today, actor, sourceId, nowTs);
         List<SharedEvent> pruned = SharedEventLog.prune(result.events(), today);
-        save(new SharedEvent.File(pruned, f.milestones() == null ? List.of() : f.milestones()));
+        save(new SharedEvent.File(pruned, f.milestones(), f.activities()));
         return new SharedEventLog.ApplyResult(pruned, result.added(), result.updated());
     }
 
     private SharedEvent.File load() {
-        SharedEvent.File empty = new SharedEvent.File(List.of(), List.of());
+        SharedEvent.File empty = new SharedEvent.File(List.of(), List.of(), List.of());
         if (!Files.isRegularFile(file)) return empty;
         try {
             String json = Files.readString(file, StandardCharsets.UTF_8);
@@ -97,7 +141,8 @@ public class SharedEventStore {
             var parsed = objectMapper.readValue(json, SharedEvent.File.class);
             if (parsed == null) return empty;
             return new SharedEvent.File(parsed.events() == null ? List.of() : parsed.events(),
-                    parsed.milestones() == null ? List.of() : parsed.milestones());
+                    parsed.milestones() == null ? List.of() : parsed.milestones(),
+                    parsed.activities() == null ? List.of() : parsed.activities());
         } catch (IOException e) {
             log.warn("shared-events 파싱 실패 — 빈 목록으로 진행: {}", e.getMessage());
             return empty;

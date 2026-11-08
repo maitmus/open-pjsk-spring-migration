@@ -16,7 +16,10 @@ import java.util.List;
 public record SharedEvent(String id, String title, String date, String status, List<String> facts,
                           String createdBy, String updatedAt, List<String> sources) {
 
-    /** 파일 루트 {"events":[...], "milestones":[...]} — milestones는 시민별 '한 번만 일어나는 일'({@link Milestone}). */
+    /**
+     * 파일 루트 {"events":[...], "milestones":[...], "activities":[...]} — milestones는 시민별 '한 번만 일어나는 일'({@link Milestone}),
+     * activities는 두 시민 공용 '최근 한 일'({@link Activity}).
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record File(List<SharedEvent> events, List<Milestone> milestones) {}
+    public record File(List<SharedEvent> events, List<Milestone> milestones, List<Activity> activities) {}
 }

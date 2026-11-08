@@ -71,7 +71,8 @@ public class MersoomCitizenEngine {
             // (공유 일정을 매 글에 주자 10-28 sim에서 에무 글 8/8 끝에 '할로윈 쇼 사흘 뒤'가 붙었다).
             boolean eventSlot = java.time.LocalTime.now(clock.withZone(KST)).getHour() < 12;
             var generated = postGenerator.generate(profile, state, feed, java.time.LocalDateTime.now(clock.withZone(KST)), eventSlot,
-                    (eventSlot ? orEmpty(sharedEvents.postSection(profile)) : "") + orEmpty(sharedEvents.milestoneSection(profile)));
+                    (eventSlot ? orEmpty(sharedEvents.postSection(profile)) : "") + orEmpty(sharedEvents.milestoneSection(profile))
+                            + orEmpty(sharedEvents.activitySection(profile)));
             if (generated == null) {
                 log.info("[{}] Mersoom post skip — 생성기 게시 보류 (shouldPost=false 또는 백스톱)", profile.key());
                 state = withContextNotes(state, ticked);
@@ -105,6 +106,8 @@ public class MersoomCitizenEngine {
                     sharedEvents.observe(profile, resp.id(), "글", "",
                             "제목: " + title + "\n본문: " + content);
                     sharedEvents.observeMilestones(profile, resp.id(), "제목: " + title + "\n본문: " + content);
+                    sharedEvents.observeActivities(profile, List.of(new ActivityExtractor.Item("글", resp.id(), "",
+                            "제목: " + title + "\n본문: " + content)));
                 }
             }
         } catch (Exception e) {
@@ -187,7 +190,7 @@ public class MersoomCitizenEngine {
                 ? null
                 : commentGenerator.generate(profile, state, feed.commentable(),
                         java.time.LocalDateTime.now(clock.withZone(KST)), replies, sharedEvents.commentSection(profile),
-                        orEmpty(sharedEvents.milestoneSection(profile)));
+                        orEmpty(sharedEvents.milestoneSection(profile)) + orEmpty(sharedEvents.activitySection(profile)));
         // 형제 봇 대상 DOWN은 LLM 투표 맵에서 제거 → 평판에서 무마(buildVoteOutcomes가 이 맵 사용).
         Map<String, VoteType> llmVotes = (judgment != null)
                 ? filterSiblingDowns(profile, judgment.votes(), feed.commentable())
@@ -218,6 +221,7 @@ public class MersoomCitizenEngine {
 
         List<CommentItem> items = (judgment != null) ? judgment.comments() : List.of();
         int posted = 0;
+        List<ActivityExtractor.Item> postedForActivity = new ArrayList<>();   // 크론 끝에 한 콜로 '한 일' 추출
         for (CommentItem item : items) {
             if (item.isReply()) {
                 var cand = replies.stream().filter(r -> r.replyToId().equals(item.parentId())).findFirst().orElse(null);
@@ -242,6 +246,7 @@ public class MersoomCitizenEngine {
                         log.info("[{}] Mersoom reply target: @{} \"{}\"", profile.key(), cand.replyAuthorNick(), lastText.replace("\n", " "));
                         log.info("[{}] Mersoom reply content: \"{}\"", profile.key(), text);
                         activityRecorder.recordComment(profile.actorName(), cand.replyAuthorNick(), text);
+                        postedForActivity.add(new ActivityExtractor.Item("대댓글", cand.postId(), threadText(profile, cand), text));
                         if (isSibling(profile, cand.replyAuthorKey())) {
                             sharedEvents.observe(profile, cand.postId(), "대댓글", threadText(profile, cand), text);
                         }
@@ -282,6 +287,9 @@ public class MersoomCitizenEngine {
                             target.post().content() == null ? "" : target.post().content().replace("\n", " "));
                     log.info("[{}] Mersoom comment content: \"{}\"", profile.key(), content);
                     activityRecorder.recordComment(profile.actorName(), target.post().nickname(), content);
+                    postedForActivity.add(new ActivityExtractor.Item("댓글", target.post().id(),
+                            "(원글) @" + target.post().nickname() + " \"" + target.post().title() + "\": "
+                                    + (target.post().content() == null ? "" : target.post().content()), content));
                     if (isSibling(profile, target.post().identityKey())) {
                         sharedEvents.observe(profile, target.post().id(), "댓글",
                                 "(원글) @" + target.post().nickname() + " \"" + target.post().title() + "\": "
@@ -293,6 +301,7 @@ public class MersoomCitizenEngine {
                 log.error("[{}] Mersoom comment execution failed", profile.key(), e);
             }
         }
+        sharedEvents.observeActivities(profile, postedForActivity);
         if (posted == 0) {
             log.info("[{}] Mersoom comment — 게시 0건 (보류/중복/부적합 또는 commentable 없음)", profile.key());
         }

@@ -27,6 +27,7 @@ public class SharedEventMemory {
     private final SharedEventStore store;
     private final SharedEventExtractor extractor;
     private final MilestoneExtractor milestoneExtractor;
+    private final ActivityExtractor activityExtractor;
     private final Clock clock;
 
     /** 형제 이름 — 에무 시민이면 네네, 네네 시민이면 에무. */
@@ -104,6 +105,33 @@ public class SharedEventMemory {
             }
         } catch (Exception e) {
             log.warn("[{}] Milestone 기록 실패(게시 영향 없음): {}", profile.key(), e.toString());
+        }
+    }
+
+    /** 나와 형제의 '최근 한 일' 섹션 — 글·댓글 USER에 항상. 비거나 실패면 빈 문자열. */
+    public String activitySection(CitizenProfile profile) {
+        try {
+            LocalDate today = LocalDate.now(clock.withZone(KST));
+            return ActivityPrompt.section(store.activities(today), today, profile.actorName(), siblingName(profile));
+        } catch (Exception e) {
+            log.warn("[{}] Activity 섹션 생성 실패(생략): {}", profile.key(), e.toString());
+            return "";
+        }
+    }
+
+    /** 방금 게시한 글 또는 한 크론분 댓글·대댓글에서 에무·네네가 한 일을 뽑아 기록한다(한 콜). */
+    public void observeActivities(CitizenProfile profile, List<ActivityExtractor.Item> items) {
+        if (items == null || items.isEmpty()) return;
+        try {
+            LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
+            LocalDate today = now.toLocalDate();
+            var found = activityExtractor.extract(profile.key(), profile.actorName(), siblingName(profile), today,
+                    now.toLocalTime(), items, store.activities(today));
+            for (Activity a : store.addActivities(found, today)) {
+                log.info("[{}] Activity added: {} {} {}: {}", profile.key(), a.date(), a.part(), a.actor(), a.text());
+            }
+        } catch (Exception e) {
+            log.warn("[{}] Activity 기록 실패(게시 영향 없음): {}", profile.key(), e.toString());
         }
     }
 }
