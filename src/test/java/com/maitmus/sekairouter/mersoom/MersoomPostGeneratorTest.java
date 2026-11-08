@@ -124,30 +124,26 @@ class MersoomPostGeneratorTest {
     }
 
     @Test
-    void seed_pjsk_name_injects_address_hint() {
-        // 시드가 PJSK 인물을 맨이름으로 언급하면(예: 네네 '토우야와의 라이벌' 시드) 페르소나 호칭 힌트가 프롬프트에 주입돼야 함.
-        // 시드는 랜덤이라 여러 번 돌려: (a) 힌트 불변식 — 시드에 토우야 있으면 반드시 '아오야기군' 힌트 동반, (b) 배선 검증 — 힌트가 실제로 뜸.
+    void topic_is_self_generated_candidates_with_code_picked_index() {
+        // 고정 토픽 시드 풀 제거(11-09) — 모델이 후보 8개를 떠올리고 쓸 번호는 코드가 무작위로 정한다.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
         MersoomPromptBuilder pb = mock(MersoomPromptBuilder.class);
         when(pb.build(any())).thenReturn(new PromptBlocks("s", "s"));
         MersoomPostGenerator g = new MersoomPostGenerator(anthropic, pb, new MersoomSeedPicker(), new OutputSanityGate(), noEvents());
-        CitizenProfile nene = new CitizenProfile("nene", "네네",
-                new MersoomProperties.Auth("nene_wonder", "x"), java.nio.file.Path.of("/tmp/n.json"),
-                com.maitmus.sekairouter.persona.CharacterId.NENE, java.util.Set.of("emu_wonder"));
 
-        boolean sawHint = false;
-        for (int i = 0; i < 400; i++) {
-            g.generate(nene, empty(), feed(), LocalDate.of(2026, 6, 19));
+        java.util.Set<String> picks = new java.util.HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 19));
             String p = userPrompt.getValue();
-            String seedBlock = p.substring(p.indexOf("## 오늘 글 시드"), p.indexOf("## 지시"));
-            if (seedBlock.contains("토우야")) {
-                assertThat(seedBlock).contains("아오야기군");   // 불변식: 이름 있으면 호칭 힌트 동반
-                sawHint = true;
-            }
+            assertThat(p).contains("## 이번 글 소재 (네가 떠올린다)").contains("후보 8개").contains("- 톤·도입 패턴: ")
+                    .doesNotContain("## 오늘 글 시드").doesNotContain("시드 각도");
+            var m = java.util.regex.Pattern.compile("그중 \\*\\*(\\d)번\\*\\*").matcher(p);
+            assertThat(m.find()).isTrue();
+            picks.add(m.group(1));
         }
-        assertThat(sawHint).isTrue();   // 배선 검증: 400회 중 토우야 시드가 최소 1회는 뜸
+        assertThat(picks).containsExactlyInAnyOrder("1", "2", "3", "4", "5", "6", "7", "8");
     }
 
     @Test

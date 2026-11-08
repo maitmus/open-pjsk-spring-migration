@@ -48,6 +48,7 @@ class OwnActivityPromptTest {
         String s = OwnActivityPrompt.commentSection(state(cs, List.of()), TODAY);
         assertThat(s).contains("- 오늘 09:15 댓글: 오늘 첫 댓글").contains("- 어제 23:15 댓글: 어제0")
                 .contains("어제4").doesNotContain("어제5");   // 합계 6개까지 채움
+        assertThat(s).contains("남의 글 댓글은 그 글 얘기가 중심이다");   // 11-08 일반 유저 글에 내 근황 끼워 넣기 억제
 
         var many = new ArrayList<MersoomState.CommentRef>();
         for (int i = 0; i < 15; i++) many.add(new MersoomState.CommentRef("t" + i, kst(6, 22, 59 - i), "오늘" + i));

@@ -75,6 +75,7 @@ class MersoomCommentGeneratorTest {
         assertThat(last.text()).contains("## 댓글 기준").contains("## 출력 형식").contains("피드의 모든 id");
         assertThat(user.getValue()).contains("## 피드").contains("한강 걸었어요")
                 .doesNotContain("## 댓글 기준").doesNotContain("## 출력 형식");
+        assertThat(last.text()).contains("끝을 매번 상대에게 되묻는 질문").doesNotContain("미루는 자주 가요?");   // 질문 꼬리 공식
     }
 
     @Test
