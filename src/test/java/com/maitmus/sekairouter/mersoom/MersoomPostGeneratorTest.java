@@ -125,7 +125,8 @@ class MersoomPostGeneratorTest {
 
     @Test
     void topic_is_self_generated_candidates_with_code_picked_index() {
-        // 고정 토픽 시드 풀 제거(11-09) — 모델이 후보 8개를 떠올리고 쓸 번호는 코드가 무작위로 정한다.
+        // 고정 토픽 시드 풀 제거(11-09) — 모델이 후보를 떠올리고 쓸 번호는 코드가 무작위로 정한다.
+        // 11-11~ 생활 영역마다 후보 하나 → 영역 비중 균등.
         AnthropicClientWrapper anthropic = mock(AnthropicClientWrapper.class);
         org.mockito.ArgumentCaptor<String> userPrompt = org.mockito.ArgumentCaptor.forClass(String.class);
         when(anthropic.completeJson(any(PromptBlocks.class), userPrompt.capture())).thenReturn("{\"shouldPost\":false}");
@@ -137,13 +138,14 @@ class MersoomPostGeneratorTest {
         for (int i = 0; i < 200; i++) {
             g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 19));
             String p = userPrompt.getValue();
-            assertThat(p).contains("## 이번 글 소재 (네가 떠올린다)").contains("후보 8개").contains("- 톤·도입 패턴: ")
+            assertThat(p).contains("## 이번 글 소재 (네가 떠올린다)").contains("영역마다 하나씩 후보").contains("  1. 학교").contains("  6. 사람")
+                    .contains("기분도 서로 다르게").contains("- 톤·도입 패턴: ").doesNotContain("평범한 고등학생")
                     .doesNotContain("## 오늘 글 시드").doesNotContain("시드 각도");
             var m = java.util.regex.Pattern.compile("그중 \\*\\*(\\d)번\\*\\*").matcher(p);
             assertThat(m.find()).isTrue();
             picks.add(m.group(1));
         }
-        assertThat(picks).containsExactlyInAnyOrder("1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(picks).containsExactlyInAnyOrder("1", "2", "3", "4", "5", "6");
     }
 
     @Test

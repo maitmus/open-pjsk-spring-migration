@@ -21,10 +21,21 @@ class MersoomSeedPickerTest {
     }
 
     @Test
-    void candidate_index_covers_one_to_eight() {
+    void candidate_index_covers_every_area() {
         var picker = new MersoomSeedPicker();
+        assertThat(MersoomSeedPicker.CANDIDATES).isEqualTo(MersoomSeedPicker.AREAS.size());
         Set<Integer> seen = new HashSet<>();
         for (int i = 0; i < 300; i++) seen.add(picker.pickCandidate());
-        assertThat(seen).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6, 7, 8);
+        assertThat(seen).containsExactlyInAnyOrder(1, 2, 3, 4, 5, 6);
+    }
+
+    @Test
+    void tone_seeds_carry_no_quoted_phrases_to_copy() {
+        // 11-11: 따옴표 예시 구절('...별로 대단한 건 아닌데'·'지금 막')이 글 도입에 그대로 복사됐다.
+        var picker = new MersoomSeedPicker();
+        for (int i = 0; i < 200; i++) {
+            assertThat(picker.pickTone(CharacterId.EMU)).doesNotContain("\"");
+            assertThat(picker.pickTone(CharacterId.NENE)).doesNotContain("\"");
+        }
     }
 }
