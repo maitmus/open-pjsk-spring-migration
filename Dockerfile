@@ -1,6 +1,6 @@
 # Stage 1: Builder
-# eclipse-temurin:24-jdk is available for linux/arm64
-FROM eclipse-temurin:24-jdk AS builder
+# eclipse-temurin:25-jdk is available for linux/arm64
+FROM eclipse-temurin:25-jdk AS builder
 
 WORKDIR /build
 
@@ -22,8 +22,8 @@ COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
 
 # Stage 2: Runtime
-# eclipse-temurin:24-jre is available for linux/arm64
-FROM eclipse-temurin:24-jre AS runtime
+# eclipse-temurin:25-jre is available for linux/arm64
+FROM eclipse-temurin:25-jre AS runtime
 
 WORKDIR /app
 
