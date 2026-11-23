@@ -6,6 +6,7 @@ import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
+import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.ThinkingConfigAdaptive;
@@ -13,7 +14,14 @@ import com.anthropic.models.messages.ThinkingConfigDisabled;
 import com.anthropic.models.messages.ToolUnion;
 import com.anthropic.models.messages.WebSearchTool20250305;
 import com.maitmus.sekairouter.config.AnthropicProperties;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +39,9 @@ public class AnthropicClientWrapper {
     private static final ToolUnion WEB_SEARCH_TOOL = ToolUnion.ofWebSearchTool20250305(
             WebSearchTool20250305.builder().build()
     );
+
+    /** 거부 원문 덤프 위치 — /app/logs는 호스트 /home/maitmus/sekai-router-logs 볼륨. */
+    private static final Path REFUSAL_DUMP_DIR = Path.of("/app/logs/refusals");
 
     private final AnthropicProperties properties;
     private AnthropicClient client;
@@ -57,8 +68,26 @@ public class AnthropicClientWrapper {
 
     private String completeJson(PromptBlocks prompt, String userPrompt, boolean webSearch) {
         MessageCreateParams params = buildParams(properties.model(), properties.maxTokens(), properties.effort(), prompt, userPrompt, webSearch);
+        // 거부(stop_reason=refusal)·빈 응답이면 USER 원문을 남기고 1회 재생성 — 11-21·22 네네 글이 refusal로 2회 누락,
+        // 원문이 로그에 없어 원인 특정 불가였다.
+        String[] stopReason = {null};
+        String text = retryOnceIfEmpty(
+                () -> {
+                    Message response = client.messages().create(params);
+                    stopReason[0] = response.stopReason().map(Object::toString).orElse(null);
+                    return lastText(response);
+                },
+                () -> {
+                    Path dumped = dumpRefusal(REFUSAL_DUMP_DIR, stopReason[0], userPrompt);
+                    log.warn("Anthropic 응답 텍스트 없음(stop_reason={}) — 1회 재생성, USER 원문 {}", stopReason[0], dumped);
+                },
+                "No text content in response");
+        log.debug("Anthropic response: {}", text);
+        return text;
+    }
 
-        Message response = client.messages().create(params);
+    /** 응답 1건의 마지막 text 블록. refusal이면 부분 텍스트가 있어도 빈 값으로 본다. */
+    private Optional<String> lastText(Message response) {
         log.debug("Anthropic stop_reason: {}", response.stopReason());
         // INFO — 모델 전환(Sonnet 5) 후 비용 추적용(콜당 1줄).
         log.info("Anthropic usage: model={} cache_creation={}, cache_read={}, input={}, output={}",
@@ -68,16 +97,42 @@ public class AnthropicClientWrapper {
                 response.usage().inputTokens(),
                 response.usage().outputTokens());
 
+        if (response.stopReason().filter(StopReason.REFUSAL::equals).isPresent()) {
+            return Optional.empty();
+        }
         // web_search responses contain multiple text blocks (intent → search results → final answer).
         // The final text block holds the JSON routing decision; earlier blocks are search prelude.
         // Take the last text block.
-        String text = response.content().stream()
+        return response.content().stream()
                 .filter(block -> block.text().isPresent())
                 .map(block -> block.text().get().text())
-                .reduce((first, second) -> second)
-                .orElseThrow(() -> new IllegalStateException("No text content in response"));
-        log.debug("Anthropic response: {}", text);
-        return text;
+                .reduce((first, second) -> second);
+    }
+
+    /**
+     * 첫 응답이 비면 onFirstEmpty(원문 덤프·경고) 후 1회만 다시 부른다. 두 번 다 비면 예외.
+     * package-private static — 테스트용.
+     */
+    static String retryOnceIfEmpty(Supplier<Optional<String>> call, Runnable onFirstEmpty, String errorMessage) {
+        Optional<String> first = call.get();
+        if (first.isPresent()) return first.get();
+        onFirstEmpty.run();
+        return call.get().orElseThrow(() -> new IllegalStateException(errorMessage));
+    }
+
+    /**
+     * 거부된 USER 프롬프트를 로그 볼륨에 파일 1개로 남긴다(시스템 블록은 정적이라 제외). 실패해도 예외 없이 null.
+     * package-private static — 테스트용.
+     */
+    static Path dumpRefusal(Path dir, String stopReason, String userPrompt) {
+        try {
+            Files.createDirectories(dir);
+            String name = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")) + ".txt";
+            return Files.writeString(dir.resolve(name), "stop_reason=" + stopReason + "\n\n" + userPrompt);
+        } catch (IOException | RuntimeException e) {
+            log.warn("거부 원문 덤프 실패: {}", e.toString());
+            return null;
+        }
     }
 
     /**
