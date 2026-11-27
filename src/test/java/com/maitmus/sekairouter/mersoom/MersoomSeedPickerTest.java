@@ -36,6 +36,9 @@ class MersoomSeedPickerTest {
         for (int i = 0; i < 200; i++) {
             assertThat(picker.pickTone(CharacterId.EMU)).doesNotContain("\"");
             assertThat(picker.pickTone(CharacterId.NENE)).doesNotContain("\"");
+            // 톤은 말투만 — 무슨 일이 일어나는지(잘된 일·알게 된 것·잘 아는 화제)를 정하면 줄거리가 굳는다(11-27)
+            for (CharacterId c : new CharacterId[]{CharacterId.EMU, CharacterId.NENE})
+                assertThat(picker.pickTone(c)).doesNotContain("잘 된").doesNotContain("잘된").doesNotContain("알게 된").doesNotContain("잘 아는");
         }
     }
 }

@@ -139,7 +139,7 @@ class MersoomPostGeneratorTest {
             g.generate(EMU, empty(), feed(), LocalDate.of(2026, 6, 19));
             String p = userPrompt.getValue();
             assertThat(p).contains("## 이번 글 소재 (네가 떠올린다)").contains("영역마다 하나씩 후보").contains("  1. 학교").contains("  6. 사람")
-                    .contains("기분도 서로 다르게").contains("같은 줄거리(예: 누가 못 하던 걸 내가 해결해 줌)를 대상만 바꿔 되풀이하면").contains("앞 글 일을 이어받아").contains("- 톤·도입 패턴: ").doesNotContain("평범한 고등학생")
+                    .contains("기분도 서로 다르게").contains("같은 줄거리(예: 누가 못 하던 걸 내가 해결해 줌 / 처음엔 안 되다가 요령을 알아 해냄 / 몰랐던 걸 알게 돼 알려 줌)를 대상만 바꿔 되풀이하거나, 앞 글에서 편 주장을 또 펴면").contains("앞 글 일을 이어받아").contains("- 톤·도입 패턴: ").doesNotContain("평범한 고등학생")
                     .doesNotContain("## 오늘 글 시드").doesNotContain("시드 각도");
             var m = java.util.regex.Pattern.compile("그중 \\*\\*(\\d)번\\*\\*").matcher(p);
             assertThat(m.find()).isTrue();
